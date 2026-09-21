@@ -317,6 +317,14 @@ fn resize_to_fill(image: &RgbaImage, width: u32, height: u32) -> RgbaImage {
     imageops::crop_imm(&resized, x, y, width, height).to_image()
 }
 
+fn background_overscan(width: u32, height: u32, blur: f32) -> u32 {
+    let short_edge = width.min(height) as f32;
+    (short_edge * 0.08)
+        .max(blur * 3.0)
+        .min(short_edge * 0.25)
+        .ceil() as u32
+}
+
 fn make_blurred_background(
     source: &RgbaImage,
     width: u32,
@@ -327,13 +335,23 @@ fn make_blurred_background(
     let preview_scale = (1800.0 / width.max(height) as f32).min(1.0);
     let small_width = (width as f32 * preview_scale).max(1.0).round() as u32;
     let small_height = (height as f32 * preview_scale).max(1.0).round() as u32;
-    let filled = resize_to_fill(source, small_width, small_height);
-    let mut blurred = imageops::blur(&filled, (blur * preview_scale).max(0.1));
+    let small_blur = blur * preview_scale;
+    let overscan = background_overscan(small_width, small_height, small_blur);
+    let filled = resize_to_fill(
+        source,
+        small_width.saturating_add(overscan * 2),
+        small_height.saturating_add(overscan * 2),
+    );
+    let blurred = imageops::blur(&filled, small_blur.max(0.1));
+    let mut blurred =
+        imageops::crop_imm(&blurred, overscan, overscan, small_width, small_height).to_image();
     let brightness = brightness / 100.0;
     for pixel in blurred.pixels_mut() {
-        pixel.0[0] = (pixel.0[0] as f32 * brightness).clamp(0.0, 255.0) as u8;
-        pixel.0[1] = (pixel.0[1] as f32 * brightness).clamp(0.0, 255.0) as u8;
-        pixel.0[2] = (pixel.0[2] as f32 * brightness).clamp(0.0, 255.0) as u8;
+        let overlay = [16.0, 19.0, 18.0];
+        for (channel, overlay_value) in overlay.into_iter().enumerate() {
+            let adjusted = (pixel.0[channel] as f32 * brightness).clamp(0.0, 255.0);
+            pixel.0[channel] = (adjusted * 0.92 + overlay_value * 0.08).round() as u8;
+        }
     }
     imageops::resize(&blurred, width, height, FilterType::Triangle)
 }
@@ -979,6 +997,22 @@ mod tests {
     }
 
     #[test]
+    fn blurred_background_uses_safe_overscan_and_preview_tone() {
+        assert_eq!(background_overscan(1580, 1210, 32.0), 97);
+        assert_eq!(background_overscan(1580, 1210, 70.0), 210);
+
+        let source = RgbaImage::from_pixel(32, 24, Rgba([200, 100, 50, 255]));
+        let background = make_blurred_background(&source, 120, 90, 10.0, 75.0);
+        assert_eq!(background.dimensions(), (120, 90));
+        for point in [(0, 0), (119, 0), (0, 89), (119, 89), (60, 45)] {
+            assert_eq!(
+                *background.get_pixel(point.0, point.1),
+                Rgba([139, 71, 36, 255])
+            );
+        }
+    }
+
+    #[test]
     fn renders_small_png_with_real_frame_dimensions() {
         let root =
             std::env::temp_dir().join(format!("yingkuang-export-test-{}", std::process::id()));
@@ -1018,6 +1052,9 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("create test directory");
         let mut document = test_document();
+        document.frame.frame_type = "blur".to_owned();
+        document.frame.blur = 32.0;
+        document.frame.brightness = 75.0;
         document.layers.push(WatermarkLayer {
             name: "焦距".to_owned(),
             source: "focalLength".to_owned(),
@@ -1065,6 +1102,10 @@ mod tests {
         let metadata = read_exif(&output);
         assert_eq!(metadata.orientation, 1);
         assert_eq!(metadata.focal_length.as_deref(), Some("60mm"));
-        let _ = fs::remove_dir_all(root);
+        if std::env::var_os("YINGKUANG_KEEP_TEST_OUTPUT").is_some() {
+            eprintln!("kept blurred export at {}", output.display());
+        } else {
+            let _ = fs::remove_dir_all(root);
+        }
     }
 }

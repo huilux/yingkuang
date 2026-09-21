@@ -210,6 +210,7 @@ function initialDocuments() {
 
 function App() {
   const fileInput = useRef<HTMLInputElement>(null);
+  const canvasViewport = useRef<HTMLDivElement>(null);
   const transactionStart = useRef<EditorDocument | null>(null);
   const currentDocument = useRef<EditorDocument | undefined>(undefined);
   const undoStack = useRef<EditorDocument[]>([]);
@@ -589,6 +590,28 @@ function App() {
     if (isNative) await invoke("cancel_export");
   }
 
+  function openExport(range: ExportSettings["range"]) {
+    setExportSettings((current) => ({ ...current, range }));
+    setShowExport(true);
+  }
+
+  function fitCanvas() {
+    if (!activePhoto || !activeDocument || !canvasViewport.current) return;
+    const geometry = calculateGeometry(activePhoto, activeDocument);
+    const baseWidth = Math.max(420, Math.min(860, geometry.width * 0.48));
+    const baseHeight = baseWidth * geometry.height / geometry.width;
+    const availableWidth = Math.max(1, canvasViewport.current.clientWidth - 80);
+    const availableHeight = Math.max(1, canvasViewport.current.clientHeight - 80);
+    const nextZoom = Math.floor(Math.min(availableWidth / baseWidth, availableHeight / baseHeight) * 100);
+    setZoom(Math.max(20, Math.min(300, nextZoom)));
+  }
+
+  useEffect(() => {
+    if (!activeId) return;
+    const frame = requestAnimationFrame(fitCanvas);
+    return () => cancelAnimationFrame(frame);
+  }, [activeId]);
+
   const exportCount = useMemo(() => {
     if (exportSettings.range === "current") return activePhoto ? 1 : 0;
     if (exportSettings.range === "all") return photos.length;
@@ -618,7 +641,8 @@ function App() {
           <button className="icon-button" type="button" aria-label="重做" disabled={!canRedo} onClick={redo}><ArrowClockwise /></button>
           <span className="header-divider" />
           <button className="button secondary" type="button" onClick={handleImport}><UploadSimple /> 导入照片</button>
-          <button className="button primary" type="button" onClick={() => setShowExport(true)} disabled={!photos.length}><DownloadSimple /> 导出</button>
+          <button className="button secondary" type="button" onClick={() => openExport("current")} disabled={!activePhoto}><ImageSquare /> 导出当前</button>
+          <button className="button primary" type="button" onClick={() => openExport(exportSettings.range === "current" ? "selected" : exportSettings.range)} disabled={!photos.length}><DownloadSimple /> 批量导出</button>
         </div>
       </header>
 
@@ -660,16 +684,16 @@ function App() {
           <div className="canvas-toolbar">
             <div className="toolbar-group"><button className="tool-button selected" type="button"><SlidersHorizontal /> 编辑</button><button className={`tool-button ${snapEnabled ? "selected" : ""}`} type="button" aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}><Magnet /> 吸附</button></div>
             <div className="zoom-control">
-              <button type="button" aria-label="缩小" onClick={() => setZoom((value) => Math.max(20, value - 10))}><Minus /></button><input aria-label="画布缩放" type="range" min="20" max="300" value={zoom} onChange={(event) => setZoom(Number(event.currentTarget.value))} /><output>{zoom}%</output><button type="button" aria-label="放大" onClick={() => setZoom((value) => Math.min(300, value + 10))}><Plus /></button><button className="fit-button" type="button" onClick={() => setZoom(68)}>适应</button>
+              <button type="button" aria-label="缩小" onClick={() => setZoom((value) => Math.max(20, value - 10))}><Minus /></button><input aria-label="画布缩放" type="range" min="20" max="300" value={zoom} onChange={(event) => setZoom(Number(event.currentTarget.value))} /><output>{zoom}%</output><button type="button" aria-label="放大" onClick={() => setZoom((value) => Math.min(300, value + 10))}><Plus /></button><button className="fit-button" type="button" onClick={fitCanvas}>适应</button>
             </div>
           </div>
 
           {loadState === "loading" ? (
-            <div className="canvas-viewport"><div className="canvas-loading" aria-live="polite"><span className="skeleton canvas-skeleton" /><strong>正在读取照片</strong><span>生成缩略图并读取拍摄信息</span></div></div>
+            <div className="canvas-viewport" ref={canvasViewport}><div className="canvas-loading" aria-live="polite"><span className="skeleton canvas-skeleton" /><strong>正在读取照片</strong><span>生成缩略图并读取拍摄信息</span></div></div>
           ) : activePhoto && activeDocument ? (
-            <EditorCanvas photo={activePhoto} document={activeDocument} zoom={zoom} selectedLayerId={selectedLayerId} snapEnabled={snapEnabled} onZoomChange={setZoom} onSelectLayer={(id) => { setSelectedLayerId(id); if (id) setInspectorTab("watermark"); }} onLayerPreview={(id, patch) => updateLayer(id, patch, false)} onDragStart={beginTransaction} onDragEnd={commitTransaction} />
+            <EditorCanvas photo={activePhoto} document={activeDocument} zoom={zoom} selectedLayerId={selectedLayerId} snapEnabled={snapEnabled} onZoomChange={setZoom} onSelectLayer={(id) => { setSelectedLayerId(id); if (id) setInspectorTab("watermark"); }} onLayerPreview={(id, patch) => updateLayer(id, patch, false)} onDragStart={beginTransaction} onDragEnd={commitTransaction} viewportRef={canvasViewport} />
           ) : (
-            <div className="canvas-viewport"><div className="canvas-empty"><span className="empty-icon"><FileImage /></span><strong>从一张照片开始</strong><p>导入 JPEG 或 PNG，在本机读取参数并实时设计相框。</p><button className="button primary" type="button" onClick={handleImport}><UploadSimple /> 导入照片</button></div></div>
+            <div className="canvas-viewport" ref={canvasViewport}><div className="canvas-empty"><span className="empty-icon"><FileImage /></span><strong>从一张照片开始</strong><p>导入 JPEG 或 PNG，在本机读取参数并实时设计相框。</p><button className="button primary" type="button" onClick={handleImport}><UploadSimple /> 导入照片</button></div></div>
           )}
 
           <div className={`status-bar ${loadState === "error" ? "error" : ""}`}><span>{message || (selectedLayer ? `已选：${selectedLayer.name}` : activePhoto ? `${activePhoto.fileName}  ${activePhoto.megapixels.toFixed(1)} MP` : "准备就绪")}</span><span>{activePhoto ? `${formatPixels(activePhoto)}  sRGB  预览` : "完全本地处理"}</span></div>
@@ -722,7 +746,7 @@ function App() {
       {showExport && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowExport(false); }}>
           <section className="export-dialog" role="dialog" aria-modal="true" aria-labelledby="export-title">
-            <header><div><span>批量导出</span><h2 id="export-title">导出 {exportCount} 张照片</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setShowExport(false)}><X /></button></header>
+            <header><div><span>{exportSettings.range === "current" ? "单张导出" : "批量导出"}</span><h2 id="export-title">导出 {exportCount} 张照片</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setShowExport(false)}><X /></button></header>
             <div className="export-body">
               <Segmented label="导出范围" value={exportSettings.range} options={[{ value: "current", label: "当前" }, { value: "selected", label: `已选 ${selectedCount}` }, { value: "all", label: `全部 ${photos.length}` }]} onChange={(range) => setExportSettings((value) => ({ ...value, range }))} />
               <label className="field"><span>输出文件夹</span><button className="directory-picker" type="button" aria-label="输出文件夹" onClick={() => void selectOutputDirectory()}><FolderOpen /><span>{exportSettings.directory || "选择本地文件夹"}</span><CaretDown /></button></label>

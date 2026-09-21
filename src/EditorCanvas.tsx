@@ -1,4 +1,14 @@
-import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+  type RefObject,
+  type WheelEvent,
+} from "react";
 import {
   calculateGeometry,
   globalToRegion,
@@ -52,6 +62,7 @@ export function EditorCanvas({
   onLayerPreview,
   onDragStart,
   onDragEnd,
+  viewportRef,
 }: {
   photo: PhotoAsset;
   document: EditorDocument;
@@ -63,14 +74,32 @@ export function EditorCanvas({
   onLayerPreview: (id: string, patch: Partial<WatermarkLayer>) => void;
   onDragStart: () => void;
   onDragEnd: () => void;
+  viewportRef: RefObject<HTMLDivElement | null>;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<DragState | null>(null);
+  const zoomFrameRef = useRef<number | null>(null);
+  const queuedZoomRef = useRef(zoom);
   const [guides, setGuides] = useState<Guide[]>([]);
   const geometry = useMemo(() => calculateGeometry(photo, document), [document, photo]);
+  const previewBaseWidth = Math.max(420, Math.min(860, geometry.width * 0.48));
+  const previewBaseHeight = previewBaseWidth * geometry.height / geometry.width;
+  const zoomScale = zoom / 100;
+  const blurOverscan = Math.min(
+    Math.min(geometry.width, geometry.height) * 0.25,
+    Math.max(Math.min(geometry.width, geometry.height) * 0.08, document.frame.blur * 3),
+  );
   const selectedLayer = document.layers.find((item) => item.id === selectedLayerId);
   const selectedRegion = selectedLayer?.region ?? "canvas";
   const selectedBounds = geometry.regions[selectedRegion];
+
+  useEffect(() => {
+    queuedZoomRef.current = zoom;
+  }, [zoom]);
+
+  useEffect(() => () => {
+    if (zoomFrameRef.current !== null) cancelAnimationFrame(zoomFrameRef.current);
+  }, []);
 
   function clientPoint(event: PointerEvent<SVGSVGElement>) {
     const svg = svgRef.current;
@@ -155,7 +184,12 @@ export function EditorCanvas({
     if (!event.ctrlKey) return;
     event.preventDefault();
     const delta = event.deltaY > 0 ? -5 : 5;
-    onZoomChange(Math.max(20, Math.min(300, zoom + delta)));
+    queuedZoomRef.current = Math.max(20, Math.min(300, queuedZoomRef.current + delta));
+    if (zoomFrameRef.current !== null) return;
+    zoomFrameRef.current = requestAnimationFrame(() => {
+      zoomFrameRef.current = null;
+      onZoomChange(queuedZoomRef.current);
+    });
   }
 
   function nudgeLayer(event: KeyboardEvent<SVGGElement>, layer: WatermarkLayer) {
@@ -181,13 +215,17 @@ export function EditorCanvas({
   const selectedRegionVisible = selectedLayer && selectedLayer.region !== "canvas";
 
   return (
-    <div className="canvas-viewport" onWheel={handleWheel}>
-      <div
-        className="preview-scale svg-preview"
-        style={{
-          width: `${Math.max(420, Math.min(860, geometry.width * 0.48)) * zoom / 100}px`,
-        }}
-      >
+    <div className="canvas-viewport" onWheel={handleWheel} ref={viewportRef}>
+      <div className="canvas-stage">
+        <div
+          className="preview-scale svg-preview"
+          style={{
+            "--preview-base-width": `${previewBaseWidth}px`,
+            "--preview-zoom": zoomScale,
+            width: `${previewBaseWidth * zoomScale}px`,
+            height: `${previewBaseHeight * zoomScale}px`,
+          } as CSSProperties}
+        >
         <svg
           ref={svgRef}
           className="design-canvas"
@@ -222,22 +260,25 @@ export function EditorCanvas({
             <clipPath id="photo-clip">
               <rect {...geometry.photo} rx={document.frame.radius * 2} />
             </clipPath>
+            <clipPath id="canvas-clip">
+              <rect width={geometry.width} height={geometry.height} />
+            </clipPath>
           </defs>
 
           <rect width={geometry.width} height={geometry.height} fill={document.frame.color} />
           {document.frame.type === "blur" && (
-            <>
+            <g clipPath="url(#canvas-clip)">
               <image
                 href={photo.thumbnailDataUrl}
-                x={-geometry.width * 0.08}
-                y={-geometry.height * 0.08}
-                width={geometry.width * 1.16}
-                height={geometry.height * 1.16}
+                x={-blurOverscan}
+                y={-blurOverscan}
+                width={geometry.width + blurOverscan * 2}
+                height={geometry.height + blurOverscan * 2}
                 preserveAspectRatio="xMidYMid slice"
                 filter="url(#background-blur)"
               />
               <rect width={geometry.width} height={geometry.height} fill="#101312" opacity="0.08" />
-            </>
+            </g>
           )}
           <g filter={document.frame.shadow ? "url(#photo-shadow)" : undefined}>
             <image
@@ -316,6 +357,7 @@ export function EditorCanvas({
             </g>
           ))}
         </svg>
+        </div>
       </div>
     </div>
   );
