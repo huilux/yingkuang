@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.vite/
+target/
+src-tauri/target/
+*.log
+.DS_Store
+
+# Local editor and runtime state
+.idea/
+.vscode/
+*.swp
+
+# Generated export fixtures
+test-output/
+
