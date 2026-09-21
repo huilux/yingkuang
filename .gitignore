@@ -14,3 +14,6 @@ src-tauri/target/
 # Generated export fixtures
 test-output/
 
+# Local photography references and full-resolution test fixtures
+assets/image/
+assets/origin/
