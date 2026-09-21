@@ -10,6 +10,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod export;
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PhotoMetadata {
@@ -35,16 +37,30 @@ struct PhotoAsset {
     metadata: PhotoMetadata,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InspectFailure {
+    path: String,
+    reason: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InspectReport {
+    items: Vec<PhotoAsset>,
+    failures: Vec<InspectFailure>,
+}
+
 #[derive(Default)]
-struct ExifSnapshot {
-    orientation: u32,
-    camera: Option<String>,
-    lens: Option<String>,
-    focal_length: Option<String>,
-    aperture: Option<String>,
-    shutter: Option<String>,
-    iso: Option<String>,
-    captured_at: Option<String>,
+pub(crate) struct ExifSnapshot {
+    pub(crate) orientation: u32,
+    pub(crate) camera: Option<String>,
+    pub(crate) lens: Option<String>,
+    pub(crate) focal_length: Option<String>,
+    pub(crate) aperture: Option<String>,
+    pub(crate) shutter: Option<String>,
+    pub(crate) iso: Option<String>,
+    pub(crate) captured_at: Option<String>,
 }
 
 fn display_field(exif: &exif::Exif, tag: Tag) -> Option<String> {
@@ -62,7 +78,7 @@ fn rational_number(exif: &exif::Exif, tag: Tag) -> Option<f64> {
     }
 }
 
-fn read_exif(path: &Path) -> ExifSnapshot {
+pub(crate) fn read_exif(path: &Path) -> ExifSnapshot {
     let Ok(file) = File::open(path) else {
         return ExifSnapshot::default();
     };
@@ -106,7 +122,7 @@ fn read_exif(path: &Path) -> ExifSnapshot {
     }
 }
 
-fn apply_orientation(image: DynamicImage, orientation: u32) -> DynamicImage {
+pub(crate) fn apply_orientation(image: DynamicImage, orientation: u32) -> DynamicImage {
     match orientation {
         2 => image.fliph(),
         3 => image.rotate180(),
@@ -176,12 +192,34 @@ async fn inspect_images(paths: Vec<String>) -> Result<Vec<PhotoAsset>, String> {
     .map_err(|error| format!("图片任务异常结束：{error}"))?
 }
 
+#[tauri::command]
+async fn inspect_images_resilient(paths: Vec<String>) -> Result<InspectReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut items = Vec::new();
+        let mut failures = Vec::new();
+        for path in paths {
+            match inspect_image(PathBuf::from(&path)) {
+                Ok(photo) => items.push(photo),
+                Err(reason) => failures.push(InspectFailure { path, reason }),
+            }
+        }
+        InspectReport { items, failures }
+    })
+    .await
+    .map_err(|error| format!("图片任务异常结束：{error}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![inspect_images])
+        .invoke_handler(tauri::generate_handler![
+            inspect_images,
+            inspect_images_resilient,
+            export::export_images,
+            export::cancel_export
+        ])
         .run(tauri::generate_context!())
         .expect("failed to run Yingkuang");
 }

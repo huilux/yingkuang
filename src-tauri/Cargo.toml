@@ -26,6 +26,10 @@ tauri-plugin-dialog = "2.7.3"
 base64 = "0.23.1"
 kamadak-exif = "0.6.1"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+imageproc = { version = "0.27.0", default-features = false, features = ["text"] }
+ab_glyph = "0.2.32"
+little_exif = "0.6.23"
+lcms2 = "6.1.1"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
