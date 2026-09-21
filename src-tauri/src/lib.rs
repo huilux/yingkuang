@@ -229,6 +229,20 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore = "local photo performance check; run explicitly with --ignored --nocapture"]
+    fn import_latency_budget() {
+        let start = std::time::Instant::now();
+        let photo = inspect_image(PathBuf::from("../assets/origin/PANA9432.JPG")).unwrap();
+        let elapsed = start.elapsed();
+        eprintln!("24 MP import: {elapsed:?}");
+        assert_eq!((photo.width, photo.height), (6000, 4000));
+        assert!(
+            elapsed.as_secs_f64() < 2.0,
+            "single-photo import exceeded 2s: {elapsed:?}"
+        );
+    }
+
+    #[test]
     fn imports_real_jpeg_and_extracts_exif() {
         let photo = inspect_image(PathBuf::from("../assets/origin/PANA9432.JPG"))
             .expect("fixture should import");

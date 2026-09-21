@@ -12,23 +12,19 @@ import {
   DownloadSimple,
   Eye,
   EyeSlash,
-  FileImage,
   FloppyDisk,
   FolderSimple,
   FolderOpen,
   FrameCorners,
   ImageSquare,
-  Magnet,
-  Minus,
   Plus,
-  SlidersHorizontal,
   TextT,
   Trash,
   UploadSimple,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { EditorCanvas } from "./EditorCanvas";
+import { EditorWorkspace } from "./EditorWorkspace";
 import {
   builtInTemplates,
   calculateGeometry,
@@ -210,7 +206,6 @@ function initialDocuments() {
 
 function App() {
   const fileInput = useRef<HTMLInputElement>(null);
-  const canvasViewport = useRef<HTMLDivElement>(null);
   const transactionStart = useRef<EditorDocument | null>(null);
   const currentDocument = useRef<EditorDocument | undefined>(undefined);
   const undoStack = useRef<EditorDocument[]>([]);
@@ -223,7 +218,6 @@ function App() {
   const [templates, setTemplates] = useState<TemplateRecord[]>(readTemplates);
   const [activeTemplate, setActiveTemplate] = useState("blur-bottom");
   const [selectedLayerId, setSelectedLayerId] = useState("");
-  const [zoom, setZoom] = useState(68);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [message, setMessage] = useState("");
@@ -237,6 +231,7 @@ function App() {
   const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
   const [exportResult, setExportResult] = useState<ExportSummary | null>(null);
   const [sessionReady, setSessionReady] = useState(!isNative);
+  const importBusy = useRef(false);
 
   const activePhoto = photos.find((photo) => photo.id === activeId) ?? photos[0];
   const activeDocument = activeId ? documents[activeId] : undefined;
@@ -261,6 +256,9 @@ function App() {
     if (!isNative) return;
     let cancelled = false;
     async function restoreSession() {
+      // StrictMode can tear down the first effect before any IPC work starts.
+      await Promise.resolve();
+      if (cancelled) return;
       setLoadState("loading");
       try {
         const saved = JSON.parse(localStorage.getItem(sessionKey) ?? "{}") as {
@@ -275,21 +273,30 @@ function App() {
         if (saved.exportSettings) setExportSettings({ ...defaultExport, ...saved.exportSettings });
         if (saved.activeTemplate) setActiveTemplate(saved.activeTemplate);
         if (saved.paths?.length) {
-          const report = await invoke<InspectReport>("inspect_images_resilient", { paths: saved.paths });
-          const restored = report.items;
-          if (cancelled) return;
-          const restoredWithOverrides = restored.map((photo) => ({ ...photo, overrides: saved.overridesByPath?.[photo.path] }));
-          const nextDocuments: Record<string, EditorDocument> = {};
-          for (const photo of restoredWithOverrides) nextDocuments[photo.id] = saved.documentsByPath?.[photo.path] ?? createDefaultDocument();
-          setDocuments(nextDocuments);
-          setPhotos(restoredWithOverrides);
-          const active = restoredWithOverrides.find((photo) => photo.path === saved.activePath) ?? restoredWithOverrides[0];
-          setActiveId(active?.id ?? "");
+          const paths = [...new Set(saved.paths)];
+          const order = new Map(paths.map((path, index) => [path, index]));
+          // Restore the active photo first so the editor is available immediately.
+          paths.sort((a, b) => Number(b === saved.activePath) - Number(a === saved.activePath));
           const checkedPaths = new Set(saved.checkedPaths ?? []);
-          setCheckedIds(restoredWithOverrides.filter((photo) => checkedPaths.has(photo.path)).map((photo) => photo.id));
-          setMessage(report.failures.length
-            ? `已恢复 ${restoredWithOverrides.length} 张照片，${report.failures.length} 张原图已移动或不可读取，请重新导入`
-            : restoredWithOverrides.length ? `已恢复上次的 ${restoredWithOverrides.length} 张照片` : "");
+          let restored = 0;
+          let failed = 0;
+          for (const [index, path] of paths.entries()) {
+            const report = await invoke<InspectReport>("inspect_images_resilient", { paths: [path] });
+            if (cancelled) return;
+            for (const item of report.items) {
+              const photo = { ...item, overrides: saved.overridesByPath?.[item.path] };
+              setDocuments(current => ({ ...current, [photo.id]: saved.documentsByPath?.[photo.path] ?? createDefaultDocument() }));
+              setPhotos(current => [...current, photo].sort((a, b) => (order.get(a.path) ?? 0) - (order.get(b.path) ?? 0)));
+              if (restored === 0) setActiveId(photo.id);
+              if (checkedPaths.has(photo.path)) setCheckedIds(current => [...current, photo.id]);
+              restored++;
+            }
+            failed += report.failures.length;
+            setMessage(`正在恢复 ${index + 1}/${paths.length} 张照片`);
+          }
+          setMessage(failed
+            ? `已恢复 ${restored} 张照片，${failed} 张原图已移动或不可读取，请重新导入`
+            : restored ? `已恢复上次的 ${restored} 张照片` : "");
         }
         setLoadState("idle");
       } catch (error) {
@@ -306,7 +313,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!isNative || !sessionReady) return;
+    if (!isNative || !sessionReady || loadState === "loading") return;
     const checked = new Set(checkedIds);
     const documentsByPath: Record<string, EditorDocument> = {};
     const overridesByPath: Record<string, PhotoAsset["overrides"]> = {};
@@ -324,7 +331,7 @@ function App() {
       exportSettings,
       activeTemplate,
     }));
-  }, [activePhoto?.path, activeTemplate, checkedIds, documents, exportSettings, photos, sessionReady]);
+  }, [activePhoto?.path, activeTemplate, checkedIds, documents, exportSettings, photos, sessionReady, loadState]);
 
   function clearHistory() {
     undoStack.current = [];
@@ -340,13 +347,16 @@ function App() {
       if (undoStack.current.length > 80) undoStack.current.shift();
       redoStack.current = [];
     }
+    // A pointerup can follow pointermove before React paints the new document.
+    // Transaction commits must already see that final drag position.
+    currentDocument.current = next;
     setDocuments((current) => ({ ...current, [activeId]: next }));
     setHistoryRevision((value) => value + 1);
   }
 
   function updateDocument(mutator: (draft: EditorDocument) => void, record = true) {
-    if (!activeDocument) return;
-    const next = cloneDocument(activeDocument);
+    if (!currentDocument.current) return;
+    const next = cloneDocument(currentDocument.current);
     mutator(next);
     replaceActiveDocument(next, record);
   }
@@ -390,7 +400,7 @@ function App() {
     }, record);
   }
 
-  function addPhotos(next: PhotoAsset[]) {
+  function addPhotos(next: PhotoAsset[], activate = true) {
     if (!next.length) return;
     setPhotos((current) => {
       const known = new Set(current.map((photo) => photo.path || photo.id));
@@ -401,64 +411,107 @@ function App() {
       for (const photo of next) if (!result[photo.id]) result[photo.id] = createDefaultDocument();
       return result;
     });
-    setActiveId(next[0].id);
     setCheckedIds((current) => [...new Set([...current, ...next.map((photo) => photo.id)])]);
-    setSelectedLayerId("");
-    clearHistory();
+    if (activate) {
+      setActiveId(next[0].id);
+      setSelectedLayerId("");
+      clearHistory();
+    }
   }
 
   async function importNativePhotos() {
+    if (importBusy.current || loadState === "loading") return;
+    importBusy.current = true;
     setMessage("");
-    const selection = await open({ multiple: true, directory: false, filters: [{ name: "摄影图片", extensions: ["jpg", "jpeg", "png"] }] });
-    const paths = selection ? (Array.isArray(selection) ? selection : [selection]) : [];
-    if (!paths.length) return;
-    setLoadState("loading");
     try {
-      const report = await invoke<InspectReport>("inspect_images_resilient", { paths });
-      addPhotos(report.items);
+      const selection = await open({ multiple: true, directory: false, filters: [{ name: "摄影图片", extensions: ["jpg", "jpeg", "png"] }] });
+      const selectedPaths = selection ? (Array.isArray(selection) ? selection : [selection]) : [];
+      if (!selectedPaths.length) return;
+      const known = new Set(photos.map(photo => photo.path));
+      const paths = [...new Set(selectedPaths)].filter(path => !known.has(path));
+      if (!paths.length) {
+        setMessage("所选照片已在当前批次中");
+        return;
+      }
+      setLoadState("loading");
+      let imported = 0;
+      let failed = 0;
+      for (const [index, path] of paths.entries()) {
+        setMessage(`正在导入 ${index + 1}/${paths.length} 张照片`);
+        const report = await invoke<InspectReport>("inspect_images_resilient", { paths: [path] });
+        addPhotos(report.items, imported === 0);
+        imported += report.items.length;
+        failed += report.failures.length;
+      }
       setLoadState("idle");
-      setMessage(report.failures.length
-        ? `已导入 ${report.items.length} 张，${report.failures.length} 张无法读取`
-        : `已导入 ${report.items.length} 张照片`);
+      setMessage(failed
+        ? `已导入 ${imported} 张，${failed} 张无法读取`
+        : `已导入 ${imported} 张照片`);
     } catch (error) {
       setLoadState("error");
       setMessage(String(error));
+    } finally {
+      importBusy.current = false;
     }
   }
 
   async function importBrowserPhotos(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
     const files = [...(input.files ?? [])];
-    if (!files.length) return;
+    if (!files.length || importBusy.current) return;
+    importBusy.current = true;
     setLoadState("loading");
     try {
-      const imported = await Promise.all(files.map(async (file, index): Promise<PhotoAsset> => {
-        const bitmap = await createImageBitmap(file);
-        const result: PhotoAsset = {
-          id: `browser-${file.name}-${file.lastModified}-${index}`,
-          path: file.name,
-          fileName: file.name,
-          width: bitmap.width,
-          height: bitmap.height,
-          megapixels: (bitmap.width * bitmap.height) / 1_000_000,
-          thumbnailDataUrl: URL.createObjectURL(file),
-          metadata: {},
-        };
-        bitmap.close();
-        return result;
-      }));
-      addPhotos(imported);
+      let imported = 0;
+      let failed = 0;
+      const known = new Set(photos.map(photo => photo.id));
+      for (const [index, file] of files.entries()) {
+        const id = `browser-${file.name}-${file.size}-${file.lastModified}`;
+        if (known.has(id)) continue;
+        setMessage(`正在导入 ${index + 1}/${files.length} 张照片`);
+        try {
+          // Decode one original at a time, and retain only a bounded preview.
+          const bitmap = await createImageBitmap(file);
+          try {
+            const scale = Math.min(1, 720 / Math.max(bitmap.width, bitmap.height));
+            const preview = document.createElement("canvas");
+            preview.width = Math.max(1, Math.round(bitmap.width * scale));
+            preview.height = Math.max(1, Math.round(bitmap.height * scale));
+            const context = preview.getContext("2d");
+            if (!context) throw new Error("无法生成缩略图");
+            context.drawImage(bitmap, 0, 0, preview.width, preview.height);
+            addPhotos([{
+              id,
+              path: "",
+              fileName: file.name,
+              width: bitmap.width,
+              height: bitmap.height,
+              megapixels: (bitmap.width * bitmap.height) / 1_000_000,
+              thumbnailDataUrl: preview.toDataURL(file.type === "image/png" ? "image/png" : "image/jpeg", 0.84),
+              metadata: {},
+            }], imported === 0);
+            imported++;
+            known.add(id);
+          } finally {
+            bitmap.close();
+          }
+        } catch {
+          failed++;
+        }
+      }
       setLoadState("idle");
-      setMessage(`已导入 ${imported.length} 张照片，浏览器预览不读取 EXIF`);
+      setMessage(`已导入 ${imported} 张照片${failed ? `，${failed} 张无法读取` : ""}，浏览器预览不读取 EXIF`);
     } catch (error) {
       setLoadState("error");
       setMessage(`读取图片失败：${String(error)}`);
     } finally {
+      importBusy.current = false;
       input.value = "";
     }
   }
 
   function handleImport() {
+    if (loadState === "loading") return;
     if (isNative) void importNativePhotos();
     else fileInput.current?.click();
   }
@@ -595,23 +648,6 @@ function App() {
     setShowExport(true);
   }
 
-  function fitCanvas() {
-    if (!activePhoto || !activeDocument || !canvasViewport.current) return;
-    const geometry = calculateGeometry(activePhoto, activeDocument);
-    const baseWidth = Math.max(420, Math.min(860, geometry.width * 0.48));
-    const baseHeight = baseWidth * geometry.height / geometry.width;
-    const availableWidth = Math.max(1, canvasViewport.current.clientWidth - 80);
-    const availableHeight = Math.max(1, canvasViewport.current.clientHeight - 80);
-    const nextZoom = Math.floor(Math.min(availableWidth / baseWidth, availableHeight / baseHeight) * 100);
-    setZoom(Math.max(20, Math.min(300, nextZoom)));
-  }
-
-  useEffect(() => {
-    if (!activeId) return;
-    const frame = requestAnimationFrame(fitCanvas);
-    return () => cancelAnimationFrame(frame);
-  }, [activeId]);
-
   const exportCount = useMemo(() => {
     if (exportSettings.range === "current") return activePhoto ? 1 : 0;
     if (exportSettings.range === "all") return photos.length;
@@ -681,20 +717,7 @@ function App() {
         </aside>
 
         <section className="editor-panel">
-          <div className="canvas-toolbar">
-            <div className="toolbar-group"><button className="tool-button selected" type="button"><SlidersHorizontal /> 编辑</button><button className={`tool-button ${snapEnabled ? "selected" : ""}`} type="button" aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)}><Magnet /> 吸附</button></div>
-            <div className="zoom-control">
-              <button type="button" aria-label="缩小" onClick={() => setZoom((value) => Math.max(20, value - 10))}><Minus /></button><input aria-label="画布缩放" type="range" min="20" max="300" value={zoom} onChange={(event) => setZoom(Number(event.currentTarget.value))} /><output>{zoom}%</output><button type="button" aria-label="放大" onClick={() => setZoom((value) => Math.min(300, value + 10))}><Plus /></button><button className="fit-button" type="button" onClick={fitCanvas}>适应</button>
-            </div>
-          </div>
-
-          {loadState === "loading" ? (
-            <div className="canvas-viewport" ref={canvasViewport}><div className="canvas-loading" aria-live="polite"><span className="skeleton canvas-skeleton" /><strong>正在读取照片</strong><span>生成缩略图并读取拍摄信息</span></div></div>
-          ) : activePhoto && activeDocument ? (
-            <EditorCanvas photo={activePhoto} document={activeDocument} zoom={zoom} selectedLayerId={selectedLayerId} snapEnabled={snapEnabled} onZoomChange={setZoom} onSelectLayer={(id) => { setSelectedLayerId(id); if (id) setInspectorTab("watermark"); }} onLayerPreview={(id, patch) => updateLayer(id, patch, false)} onDragStart={beginTransaction} onDragEnd={commitTransaction} viewportRef={canvasViewport} />
-          ) : (
-            <div className="canvas-viewport" ref={canvasViewport}><div className="canvas-empty"><span className="empty-icon"><FileImage /></span><strong>从一张照片开始</strong><p>导入 JPEG 或 PNG，在本机读取参数并实时设计相框。</p><button className="button primary" type="button" onClick={handleImport}><UploadSimple /> 导入照片</button></div></div>
-          )}
+          <EditorWorkspace photo={activePhoto} document={activeDocument} loading={loadState === "loading"} onImport={handleImport} onToggleSnap={() => setSnapEnabled(value => !value)} selectedLayerId={selectedLayerId} snapEnabled={snapEnabled} onSelectLayer={(id) => { setSelectedLayerId(id); if (id) setInspectorTab("watermark"); }} onLayerPreview={(id, patch) => updateLayer(id, patch, false)} onDragStart={beginTransaction} onDragEnd={commitTransaction} />
 
           <div className={`status-bar ${loadState === "error" ? "error" : ""}`}><span>{message || (selectedLayer ? `已选：${selectedLayer.name}` : activePhoto ? `${activePhoto.fileName}  ${activePhoto.megapixels.toFixed(1)} MP` : "准备就绪")}</span><span>{activePhoto ? `${formatPixels(activePhoto)}  sRGB  预览` : "完全本地处理"}</span></div>
           <div className="filmstrip"><div className="filmstrip-heading"><span>{photos.length} 张照片</span><span>已选 {selectedCount} 张</span></div><div className="filmstrip-track">{photos.map((photo) => <button type="button" key={photo.id} className={`film-photo ${photo.id === activePhoto?.id ? "active" : ""}`} onClick={() => activatePhoto(photo.id)}><img src={photo.thumbnailDataUrl} alt={photo.fileName} /><span>{photo.fileName}</span></button>)}{!!photos.length && <button className="film-add" type="button" onClick={handleImport}><Plus /><span>添加</span></button>}</div></div>

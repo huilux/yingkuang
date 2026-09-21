@@ -31,6 +31,29 @@ ab_glyph = "0.2.32"
 little_exif = "0.6.23"
 lcms2 = "6.1.1"
 
+# Keep photo decoding and thumbnail generation interactive in `tauri dev`.
+# The application itself retains normal debug builds and debugging information.
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+
+[profile.dev.package.zune-core]
+opt-level = 3
+
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package.fdeflate]
+opt-level = 3
+
+[profile.dev.package.flate2]
+opt-level = 3
+
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
