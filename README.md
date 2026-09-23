@@ -32,6 +32,8 @@ npm run tauri dev
 
 ```bash
 npm run build
+npm run test:camera
+npm run test:selection
 cargo test --manifest-path src-tauri/Cargo.toml --lib
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
@@ -45,3 +47,9 @@ npm run tauri build -- --bundles appimage
 当前 Arch 开发机可生成并启动 release 二进制；AppImage 封装仍受本机 VMware 私有 GTK 库干扰，具体状态记录在 [开发状态](docs/development-status.md)。正式分发包应在隔离的构建环境中生成并复测。
 
 `assets/image/` 和 `assets/origin/` 是本地设计参考与原尺寸测试照片，不进入版本库。正式界面使用压缩后的 `public/demo.jpg` 提供无原图环境下的演示内容。
+
+画布采用 Konva，支持鼠标锚点缩放、滚轮平移和空格/中键拖动。重构说明与 WebKitGTK 回归命令见 [Konva 画布重构](docs/konva-refactor.md)。
+
+画布支持 Shift 多选、整组拖动、参照对齐、横纵等间距和批量样式；[原型功能对照](docs/prototype-parity.md)列出了已补齐与待补齐的功能。
+
+照片主体使用按需生成的高清编辑图；模糊相框与导出的颜色空间、阴影和文字字号规则已统一。原因和验证命令见 [渲染质量修复](docs/render-quality.md)。

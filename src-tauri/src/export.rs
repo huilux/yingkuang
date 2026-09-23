@@ -1,5 +1,5 @@
 use crate::{ExifSnapshot, apply_orientation, read_exif};
-use ab_glyph::{FontArc, FontVec, PxScale};
+use ab_glyph::{Font, FontArc, FontVec, PxScale};
 use image::{
     DynamicImage, ImageDecoder, ImageEncoder, ImageReader, Rgba, RgbaImage,
     codecs::{
@@ -325,12 +325,31 @@ fn background_overscan(width: u32, height: u32, blur: f32) -> u32 {
         .ceil() as u32
 }
 
+fn srgb_to_linear(value: u8) -> f32 {
+    let value = value as f32 / 255.0;
+    if value <= 0.04045 {
+        value / 12.92
+    } else {
+        ((value + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn linear_to_srgb(value: f32) -> f32 {
+    let value = value.clamp(0.0, 1.0);
+    (if value <= 0.0031308 {
+        value * 12.92
+    } else {
+        1.055 * value.powf(1.0 / 2.4) - 0.055
+    }) * 255.0
+}
+
 fn make_blurred_background(
     source: &RgbaImage,
     width: u32,
     height: u32,
     blur: f32,
     brightness: f32,
+    base: Rgba<u8>,
 ) -> RgbaImage {
     let preview_scale = (1800.0 / width.max(height) as f32).min(1.0);
     let small_width = (width as f32 * preview_scale).max(1.0).round() as u32;
@@ -342,17 +361,39 @@ fn make_blurred_background(
         small_width.saturating_add(overscan * 2),
         small_height.saturating_add(overscan * 2),
     );
-    let blurred = imageops::blur(&filled, small_blur.max(0.1));
-    let mut blurred =
-        imageops::crop_imm(&blurred, overscan, overscan, small_width, small_height).to_image();
+    // SVG filters run in linearRGB. Blur premultiplied linear light and apply
+    // brightness there, then return to sRGB before the dark overlay.
+    let linear = image::Rgba32FImage::from_fn(filled.width(), filled.height(), |x, y| {
+        let pixel = filled.get_pixel(x, y);
+        let alpha = pixel[3] as f32 / 255.0;
+        Rgba([
+            srgb_to_linear(pixel[0]) * alpha,
+            srgb_to_linear(pixel[1]) * alpha,
+            srgb_to_linear(pixel[2]) * alpha,
+            alpha,
+        ])
+    });
+    let filtered = if small_blur > 0.0 {
+        imageops::blur(&linear, small_blur)
+    } else {
+        linear
+    };
     let brightness = brightness / 100.0;
-    for pixel in blurred.pixels_mut() {
-        let overlay = [16.0, 19.0, 18.0];
-        for (channel, overlay_value) in overlay.into_iter().enumerate() {
-            let adjusted = (pixel.0[channel] as f32 * brightness).clamp(0.0, 255.0);
-            pixel.0[channel] = (adjusted * 0.92 + overlay_value * 0.08).round() as u8;
+    let blurred = RgbaImage::from_fn(small_width, small_height, |x, y| {
+        let pixel = filtered.get_pixel(x + overscan, y + overscan);
+        let alpha = pixel[3];
+        let mut result = [0, 0, 0, 255];
+        for (channel, overlay) in [16.0, 19.0, 18.0].into_iter().enumerate() {
+            let light = if alpha > 0.0 {
+                pixel[channel] / alpha * brightness
+            } else {
+                0.0
+            };
+            let composited = linear_to_srgb(light) * alpha + base[channel] as f32 * (1.0 - alpha);
+            result[channel] = (composited * 0.92 + overlay * 0.08).round() as u8;
         }
-    }
+        Rgba(result)
+    });
     imageops::resize(&blurred, width, height, FilterType::Triangle)
 }
 
@@ -394,81 +435,55 @@ fn apply_rounded_corners(image: &mut RgbaImage, radius: u32) {
     }
 }
 
-fn rounded_rect_distance(
-    x: f32,
-    y: f32,
-    left: f32,
-    top: f32,
-    width: f32,
-    height: f32,
-    radius: f32,
-) -> f32 {
-    let radius = radius.min(width / 2.0).min(height / 2.0).max(0.0);
-    let center_x = left + width / 2.0;
-    let center_y = top + height / 2.0;
-    let qx = (x - center_x).abs() - (width / 2.0 - radius);
-    let qy = (y - center_y).abs() - (height / 2.0 - radius);
-    let outside = qx.max(0.0).hypot(qy.max(0.0));
-    let inside = qx.max(qy).min(0.0);
-    outside + inside - radius
-}
-
-fn blend_shadow(pixel: &mut Rgba<u8>, opacity: f32) {
-    let keep = 1.0 - opacity.clamp(0.0, 0.62);
-    pixel.0[0] = (pixel.0[0] as f32 * keep) as u8;
-    pixel.0[1] = (pixel.0[1] as f32 * keep) as u8;
-    pixel.0[2] = (pixel.0[2] as f32 * keep) as u8;
-}
-
 fn draw_soft_shadow(canvas: &mut RgbaImage, rect: Rect, scale: f32, amount: f32, radius: f32) {
     if amount <= 0.0 {
         return;
     }
-    let left = rect.x * scale;
-    let top = rect.y * scale + amount * scale * 0.18;
-    let width = rect.width * scale;
-    let height = rect.height * scale;
-    let radius = radius * scale;
-    let sigma = (amount * scale * 0.38).max(1.0);
-    let pad = (sigma * 3.0).ceil();
-    let min_x = (left - pad).floor().max(0.0) as u32;
-    let max_x = (left + width + pad).ceil().min(canvas.width() as f32) as u32;
-    let min_y = (top - pad).floor().max(0.0) as u32;
-    let max_y = (top + height + pad).ceil().min(canvas.height() as f32) as u32;
-    let side = (radius + pad).ceil();
-
-    for y in min_y..max_y {
-        let y_center = y as f32 + 0.5;
-        let inside_vertical_span = y_center >= top && y_center <= top + height;
-        let ranges = if inside_vertical_span {
-            [
-                (min_x, (left + side).ceil().min(max_x as f32) as u32),
-                (
-                    (left + width - side).floor().max(min_x as f32) as u32,
-                    max_x,
-                ),
-            ]
-        } else {
-            [(min_x, max_x), (0, 0)]
-        };
-        for (start, end) in ranges {
-            for x in start..end {
-                let distance = rounded_rect_distance(
-                    x as f32 + 0.5,
-                    y_center,
-                    left,
-                    top,
-                    width,
-                    height,
-                    radius,
-                );
-                if distance <= 0.0 || distance > pad {
+    // Match the SVG alpha-mask Gaussian shadow. Bound the working mask instead
+    // of allocating an extra full-resolution RGBA image during large exports.
+    let work_scale = (1800.0 / canvas.width().max(canvas.height()) as f32).min(1.0);
+    let width = (canvas.width() as f32 * work_scale).round().max(1.0) as u32;
+    let height = (canvas.height() as f32 * work_scale).round().max(1.0) as u32;
+    let s = scale * work_scale;
+    let left = rect.x * s;
+    let top = (rect.y + amount * 0.28) * s;
+    let right = left + rect.width * s;
+    let bottom = top + rect.height * s;
+    let radius = (radius * s)
+        .min((right - left) / 2.0)
+        .min((bottom - top) / 2.0);
+    let mask = image::GrayImage::from_fn(width, height, |x, y| {
+        // Four subpixel samples keep rounded edges stable at preview sizes.
+        let mut coverage = 0;
+        for dy in [0.25, 0.75] {
+            for dx in [0.25, 0.75] {
+                let px = x as f32 + dx;
+                let py = y as f32 + dy;
+                if px < left || px > right || py < top || py > bottom {
                     continue;
                 }
-                let opacity = 0.34 * (-(distance * distance) / (2.0 * sigma * sigma)).exp();
-                blend_shadow(canvas.get_pixel_mut(x, y), opacity);
+                let cx = px.clamp(left + radius, right - radius);
+                let cy = py.clamp(top + radius, bottom - radius);
+                if (px - cx).powi(2) + (py - cy).powi(2) <= radius * radius {
+                    coverage += 1;
+                }
             }
         }
+        image::Luma([(coverage as f32 * 255.0 / 4.0).round() as u8])
+    });
+    let mask = imageops::blur(&mask, (amount * 0.42 * s).max(0.1));
+    let opacity = (amount / 100.0).min(0.4);
+    for (x, y, pixel) in canvas.enumerate_pixels_mut() {
+        let alpha = imageops::interpolate_bilinear(
+            &mask,
+            ((x as f32 + 0.5) * work_scale - 0.5).clamp(0.0, (width - 1) as f32),
+            ((y as f32 + 0.5) * work_scale - 0.5).clamp(0.0, (height - 1) as f32),
+        )
+        .unwrap()
+        .0[0] as f32
+            / 255.0
+            * opacity;
+        image::Pixel::blend(pixel, &Rgba([7, 9, 9, (alpha * 255.0).round() as u8]));
     }
 }
 
@@ -576,7 +591,7 @@ fn draw_layers(
         let center_y = (bounds.y + bounds.height * layer.y) * scale;
         let font = load_font(&layer.font_family, layer.font_weight, fonts)
             .map_err(|error| format!("{}：{error}", layer.name))?;
-        let font_scale = PxScale::from((layer.font_size * scale).max(1.0));
+        let font_scale = css_font_scale(&font, (layer.font_size * scale).max(1.0));
         let (text_width, text_height) = text_size(font_scale, &font, &text);
         let padding = (font_scale.y * 0.35).ceil() as u32 + 4;
         let mut text_image = RgbaImage::new(text_width + padding * 2, text_height + padding * 2);
@@ -602,6 +617,14 @@ fn draw_layers(
     Ok(())
 }
 
+fn css_font_scale(font: &impl Font, css_pixels: f32) -> PxScale {
+    let font_units = font
+        .units_per_em()
+        .filter(|units| units.is_finite() && *units > 0.0)
+        .unwrap_or_else(|| font.height_unscaled());
+    PxScale::from(css_pixels * font.height_unscaled() / font_units)
+}
+
 fn render_item(
     item: &ExportItem,
     settings: &ExportSettings,
@@ -625,6 +648,7 @@ fn render_item(
             canvas_height,
             item.document.frame.blur * scale,
             item.document.frame.brightness,
+            parse_color(&item.document.frame.color, 255),
         )
     } else {
         RgbaImage::from_pixel(
@@ -951,6 +975,149 @@ pub fn cancel_export() {
 mod tests {
     use super::*;
 
+    #[test]
+    #[ignore = "writes fixtures for scripts/render-parity.py"]
+    fn preview_parity_fixtures() {
+        let root = PathBuf::from(std::env::var("YINGKUANG_PARITY_DIR").expect("fixture directory"));
+        fs::create_dir_all(&root).unwrap();
+        let source = RgbaImage::from_fn(600, 400, |x, y| {
+            if x < 300 {
+                Rgba([20, 40, 80, 255])
+            } else if y < 200 {
+                Rgba([240, 220, 180, 255])
+            } else {
+                Rgba([70, 180, 100, 255])
+            }
+        });
+        source.save(root.join("source.png")).unwrap();
+        make_blurred_background(&source, 680, 580, 32.0, 75.0, Rgba([255, 255, 255, 255]))
+            .save(root.join("background.png"))
+            .unwrap();
+        make_blurred_background(&source, 1360, 1160, 64.0, 75.0, Rgba([255, 255, 255, 255]))
+            .save(root.join("scaled_background.png"))
+            .unwrap();
+        let mut shadow = RgbaImage::from_pixel(680, 580, Rgba([255, 255, 255, 255]));
+        draw_soft_shadow(
+            &mut shadow,
+            Rect {
+                x: 80.0,
+                y: 80.0,
+                width: 520.0,
+                height: 360.0,
+            },
+            1.0,
+            40.0,
+            24.0,
+        );
+        shadow.save(root.join("shadow.png")).unwrap();
+        let text_geometry = Geometry {
+            width: 600.0,
+            height: 400.0,
+            photo: Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 600.0,
+                height: 400.0,
+            },
+            regions: HashMap::from([(
+                "canvas",
+                Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 600.0,
+                    height: 400.0,
+                },
+            )]),
+        };
+        let mut text_document = test_document();
+        text_document.layers.push(WatermarkLayer {
+            name: "文字度量".to_owned(),
+            source: "custom".to_owned(),
+            custom_value: "映框 50mm f/2.8".to_owned(),
+            region: "canvas".to_owned(),
+            x: 0.5,
+            y: 0.5,
+            font_family: "Noto Sans CJK SC, sans-serif".to_owned(),
+            font_size: 32.0,
+            font_weight: 400,
+            color: "#000000".to_owned(),
+            opacity: 1.0,
+            rotation: 0,
+            visible: true,
+        });
+        let mut text_canvas = RgbaImage::new(600, 400);
+        let text_item = ExportItem {
+            path: String::new(),
+            document: text_document,
+            overrides: HashMap::new(),
+        };
+        draw_layers(
+            &mut text_canvas,
+            &text_item,
+            &ExifSnapshot::default(),
+            &text_geometry,
+            1.0,
+            &mut HashMap::new(),
+        )
+        .unwrap();
+        text_canvas.save(root.join("text.png")).unwrap();
+        let mut rotated_document = text_item.document.clone();
+        rotated_document.layers[0].rotation = 90;
+        let rotated_item = ExportItem {
+            path: String::new(),
+            document: rotated_document,
+            overrides: HashMap::new(),
+        };
+        let mut rotated_canvas = RgbaImage::new(600, 400);
+        draw_layers(
+            &mut rotated_canvas,
+            &rotated_item,
+            &ExifSnapshot::default(),
+            &text_geometry,
+            1.0,
+            &mut HashMap::new(),
+        )
+        .unwrap();
+        rotated_canvas.save(root.join("text_rotated.png")).unwrap();
+        if std::env::var_os("YINGKUANG_PARITY_REAL").is_some() {
+            let path = "../assets/origin/PANA9432.JPG";
+            let source =
+                decode_color_managed(Path::new(path), read_exif(Path::new(path)).orientation)
+                    .unwrap();
+            imageops::resize(&source, 1500, 1000, FilterType::Lanczos3)
+                .save(root.join("real_source.png"))
+                .unwrap();
+            let mut document = test_document();
+            document.frame.frame_type = "blur".into();
+            document.frame.blur = 32.0;
+            document.frame.brightness = 75.0;
+            document.frame.radius = 10.0;
+            document.frame.shadow = 32.0;
+            let item = ExportItem {
+                path: path.into(),
+                document,
+                overrides: HashMap::new(),
+            };
+            let settings = ExportSettings {
+                directory: root.to_string_lossy().into_owned(),
+                format: "png".into(),
+                quality: 92,
+                size: "long-edge".into(),
+                long_edge: 1580,
+                metadata: "none".into(),
+                include_gps: false,
+                suffix: "-frame".into(),
+                collision: "number".into(),
+                png_compression: "fast".into(),
+            };
+            render_item(&item, &settings)
+                .unwrap()
+                .0
+                .save(root.join("real_export.png"))
+                .unwrap();
+        }
+    }
+
     fn test_document() -> EditorDocument {
         EditorDocument {
             frame: FrameSettings {
@@ -1002,14 +1169,23 @@ mod tests {
         assert_eq!(background_overscan(1580, 1210, 70.0), 210);
 
         let source = RgbaImage::from_pixel(32, 24, Rgba([200, 100, 50, 255]));
-        let background = make_blurred_background(&source, 120, 90, 10.0, 75.0);
+        let background =
+            make_blurred_background(&source, 120, 90, 10.0, 75.0, Rgba([255, 255, 255, 255]));
         assert_eq!(background.dimensions(), (120, 90));
         for point in [(0, 0), (119, 0), (0, 89), (119, 89), (60, 45)] {
             assert_eq!(
                 *background.get_pixel(point.0, point.1),
-                Rgba([139, 71, 36, 255])
+                Rgba([163, 82, 41, 255])
             );
         }
+    }
+
+    #[test]
+    fn transparent_blur_composites_over_the_frame_color() {
+        let source = RgbaImage::from_pixel(8, 8, Rgba([255, 0, 0, 0]));
+        let output =
+            make_blurred_background(&source, 20, 20, 2.0, 75.0, Rgba([200, 200, 200, 255]));
+        assert_eq!(*output.get_pixel(10, 10), Rgba([185, 186, 185, 255]));
     }
 
     #[test]
