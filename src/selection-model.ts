@@ -1,0 +1,70 @@
+import type { CanvasGeometry, Rect, WatermarkLayer } from "./types";
+
+export type LayerPatch = { id: string; patch: Partial<WatermarkLayer> };
+export type Point = { x: number; y: number };
+export type MeasuredLayer = { id: string; position: Point; bounds: Rect };
+export type ArrangeAction = "left" | "center-x" | "right" | "top" | "center-y" | "bottom" | "third-1" | "third-2" | "distribute-x" | "distribute-y";
+export type AlignReference = keyof CanvasGeometry["regions"] | "photo" | "selection";
+
+export function selectLayer(current: string[], id: string, extend = false, preserveGroup = false): string[] {
+  if (!id) return [];
+  if (extend) return current.includes(id) ? current.filter(value => value !== id) : [...current, id];
+  return preserveGroup && current.includes(id) ? current : [id];
+}
+
+export function unionBounds(items: { bounds: Rect }[]): Rect | null {
+  if (!items.length) return null;
+  const x = Math.min(...items.map(item => item.bounds.x));
+  const y = Math.min(...items.map(item => item.bounds.y));
+  return { x, y, width: Math.max(...items.map(item => item.bounds.x + item.bounds.width)) - x,
+    height: Math.max(...items.map(item => item.bounds.y + item.bounds.height)) - y };
+}
+
+// Region coordinates are relative, not a clipping constraint. As in the
+// prototype, an element may cross its region while staying attached to it.
+// Clamping each element independently would deform a multi-selection.
+export function positionPatch(layer: WatermarkLayer, point: Point, geometry: CanvasGeometry): LayerPatch {
+  const rect = geometry.regions[layer.region];
+  return { id: layer.id, patch: { x: (point.x - rect.x) / Math.max(1, rect.width), y: (point.y - rect.y) / Math.max(1, rect.height) } };
+}
+
+export function moveSelection(layers: WatermarkLayer[], geometry: CanvasGeometry, delta: Point): LayerPatch[] {
+  return layers.map(layer => {
+    const rect = geometry.regions[layer.region];
+    return positionPatch(layer, { x: rect.x + layer.x * rect.width + delta.x, y: rect.y + layer.y * rect.height + delta.y }, geometry);
+  });
+}
+
+export function arrangeSelection(action: ArrangeAction, reference: AlignReference, measured: MeasuredLayer[], layers: WatermarkLayer[], geometry: CanvasGeometry): LayerPatch[] {
+  const group = unionBounds(measured);
+  if (!group) return [];
+  const selected = new Map(layers.map(layer => [layer.id, layer]));
+  const patch = (item: MeasuredLayer, dx: number, dy: number) => positionPatch(selected.get(item.id)!, { x: item.position.x + dx, y: item.position.y + dy }, geometry);
+  if (action === "distribute-x" || action === "distribute-y") {
+    if (measured.length < 3) return [];
+    const axis = action === "distribute-x" ? "x" : "y";
+    const dimension = axis === "x" ? "width" : "height";
+    const sorted = [...measured].sort((a, b) => a.bounds[axis] - b.bounds[axis]);
+    const start = sorted[0].bounds[axis];
+    const last = sorted[sorted.length - 1].bounds;
+    const gap = (last[axis] + last[dimension] - start - sorted.reduce((sum, item) => sum + item.bounds[dimension], 0)) / (sorted.length - 1);
+    let cursor = start;
+    return sorted.map(item => {
+      const delta = cursor - item.bounds[axis];
+      cursor += item.bounds[dimension] + gap;
+      return patch(item, axis === "x" ? delta : 0, axis === "y" ? delta : 0);
+    });
+  }
+  const rect = reference === "selection" ? group : reference === "photo" ? geometry.photo : geometry.regions[reference];
+  const thirds = action === "third-1" || action === "third-2";
+  const axis = thirds ? (reference === "left" || reference === "right" ? "x" : "y") : ["left", "center-x", "right"].includes(action) ? "x" : "y";
+  const dimension = axis === "x" ? "width" : "height";
+  const fraction = action === "third-1" ? 1 / 3 : action === "third-2" ? 2 / 3 : action === "left" || action === "top" ? 0 : action === "right" || action === "bottom" ? 1 : 0.5;
+  const anchor = thirds ? 0.5 : fraction;
+  const target = rect[axis] + rect[dimension] * fraction;
+  return measured.map(item => {
+    const origin = reference === "selection" ? item.bounds : group;
+    const delta = target - origin[axis] - origin[dimension] * anchor;
+    return patch(item, axis === "x" ? delta : 0, axis === "y" ? delta : 0);
+  });
+}

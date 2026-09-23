@@ -4,7 +4,6 @@ import type {
   MetadataKey,
   PhotoAsset,
   Rect,
-  RegionId,
   TemplateRecord,
   WatermarkLayer,
 } from "./types";
@@ -205,19 +204,6 @@ export function layerPosition(layer: WatermarkLayer, geometry: CanvasGeometry) {
   return {
     x: bounds.x + bounds.width * layer.x,
     y: bounds.y + bounds.height * layer.y,
-  };
-}
-
-export function globalToRegion(
-  x: number,
-  y: number,
-  regionId: RegionId,
-  geometry: CanvasGeometry,
-) {
-  const bounds = geometry.regions[regionId];
-  return {
-    x: Math.max(0, Math.min(1, (x - bounds.x) / Math.max(1, bounds.width))),
-    y: Math.max(0, Math.min(1, (y - bounds.y) / Math.max(1, bounds.height))),
   };
 }
 

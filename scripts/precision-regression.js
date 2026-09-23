@@ -1,0 +1,36 @@
+(async () => {
+  const t = await import('/scripts/konva-test-utils.js');
+  const ctx = await t.context();
+  const brand = ctx.world.findOne(node => node.id() === 'brand');
+  await t.zoom(ctx,100); await t.centerNode(ctx,brand);
+  let start = t.screen(ctx,brand);
+  t.mouse(ctx.content,'mousedown',start); t.mouse(window,'mouseup',start,0); await t.frame();
+  document.querySelector('button[aria-label="选择图层 品牌文字"]').click(); await t.frame();
+  const input = document.querySelector('input[aria-label="X 坐标"]');
+  const previous = brand.x();
+  input.focus(); t.change(input,42.5); await t.frame(); input.blur(); await t.frame();
+  t.near(brand.x(),ctx.world.clipWidth()*.425,'Exact coordinate commit');
+  input.focus(); t.change(input,55); await t.frame();
+  input.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await t.frame();
+  t.near(brand.x(),ctx.world.clipWidth()*.425,'Escape changed coordinate draft');
+  document.querySelector('button[aria-label="撤销"]').click(); await t.frame();
+  t.near(brand.x(),previous,'Coordinate undo');
+  const numericZoom = document.querySelector('input[aria-label="缩放比例"]');
+  numericZoom.focus();t.change(numericZoom,10);await t.frame();numericZoom.blur();await t.frame();
+  t.near(Number(ctx.slider.value),10,'Numeric zoom does not support 10%');
+  await t.zoom(ctx,100);await t.centerNode(ctx,brand);
+  const snap = document.querySelector('.canvas-toolbar button[aria-pressed]');
+  if(snap.getAttribute('aria-pressed')!=='true'){snap.click();await t.frame();}
+  const center=ctx.world.getAbsoluteTransform().point({x:ctx.world.clipWidth()/2,y:brand.y()});
+  const rect=ctx.viewport.getBoundingClientRect();
+  start=t.screen(ctx,brand);
+  t.mouse(ctx.content,'mousedown',start);
+  window.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:Math.round(rect.left+center.x+4),clientY:Math.round(start.y),buttons:1,ctrlKey:true,view:window}));await t.frame();
+  const offset=brand.getAbsolutePosition().x-center.x;
+  t.assert(offset>3&&offset<5,'Ctrl did not bypass snapping');
+  t.assert(!ctx.stage.findOne('.guide-x').visible(),'Bypass still displayed a snap guide');
+  t.mouse(window,'mouseup',{x:Math.round(rect.left+center.x+4),y:Math.round(start.y)},0);await t.frame();
+  document.querySelector('button[aria-label="撤销"]').click();await t.frame();
+  await t.fit(ctx);
+  return {coordinates:true,cancelDraft:true,numericZoom10:true,ctrlBypassesSnap:true};
+})();

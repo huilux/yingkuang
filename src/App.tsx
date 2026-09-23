@@ -10,8 +10,6 @@ import {
   Check,
   Copy,
   DownloadSimple,
-  Eye,
-  EyeSlash,
   FloppyDisk,
   FolderSimple,
   FolderOpen,
@@ -19,21 +17,24 @@ import {
   ImageSquare,
   Plus,
   TextT,
-  Trash,
   UploadSimple,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
 import { EditorWorkspace } from "./EditorWorkspace";
+import type { EditorCanvasHandle } from "./EditorCanvas";
+import { LayerInspector } from "./LayerInspector";
+import { SliderRow, Segmented } from "./EditorControls";
+import { selectLayer, moveSelection, type LayerPatch } from "./selection-model";
+import { isVisible } from "./canvas-camera";
+import { retainBrowserPhoto, releaseBrowserPhotos } from "./use-editor-photo";
 import {
   builtInTemplates,
   calculateGeometry,
   cloneDocument,
   createDefaultDocument,
-  metadataOptions,
   nextLayer,
   photoOrientation,
-  resolveLayerText,
 } from "./editor-model";
 import type {
   EditorDocument,
@@ -132,69 +133,6 @@ function readTemplates() {
   }
 }
 
-function SliderRow({
-  label,
-  value,
-  min,
-  max,
-  step = 1,
-  suffix = "",
-  onChange,
-  onStart,
-  onEnd,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step?: number;
-  suffix?: string;
-  onChange: (value: number) => void;
-  onStart?: () => void;
-  onEnd?: () => void;
-}) {
-  return (
-    <label className="field slider-field">
-      <span className="field-heading"><span>{label}</span><output>{value}{suffix}</output></span>
-      <input
-        aria-label={label}
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onPointerDown={onStart}
-        onPointerUp={onEnd}
-        onChange={(event) => onChange(Number(event.currentTarget.value))}
-      />
-    </label>
-  );
-}
-
-function Segmented<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: Array<{ value: T; label: string }>;
-  onChange: (value: T) => void;
-}) {
-  return (
-    <fieldset className="field segmented-field">
-      <legend>{label}</legend>
-      <div className="segmented">
-        {options.map((option) => (
-          <button className={value === option.value ? "selected" : ""} key={option.value} type="button" onClick={() => onChange(option.value)}>
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
 
 function formatPixels(photo: PhotoAsset) {
   return `${photo.width} × ${photo.height}`;
@@ -217,12 +155,12 @@ function App() {
   const [documents, setDocuments] = useState<Record<string, EditorDocument>>(initialDocuments);
   const [templates, setTemplates] = useState<TemplateRecord[]>(readTemplates);
   const [activeTemplate, setActiveTemplate] = useState("blur-bottom");
-  const [selectedLayerId, setSelectedLayerId] = useState("");
+  const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
+  const editorRef = useRef<EditorCanvasHandle>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [message, setMessage] = useState("");
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("frame");
-  const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [showExport, setShowExport] = useState(false);
@@ -233,10 +171,12 @@ function App() {
   const [sessionReady, setSessionReady] = useState(!isNative);
   const importBusy = useRef(false);
 
+  useEffect(() => () => releaseBrowserPhotos(), []);
+
   const activePhoto = photos.find((photo) => photo.id === activeId) ?? photos[0];
   const activeDocument = activeId ? documents[activeId] : undefined;
   currentDocument.current = activeDocument;
-  const selectedLayer = activeDocument?.layers.find((item) => item.id === selectedLayerId);
+  const selectedLayers = activeDocument?.layers.filter(item => selectedLayerIds.includes(item.id)) ?? [];
   const selectedCount = checkedIds.length;
   const canUndo = undoStack.current.length > 0 && historyRevision >= 0;
   const canRedo = redoStack.current.length > 0 && historyRevision >= 0;
@@ -343,7 +283,7 @@ function App() {
   function replaceActiveDocument(next: EditorDocument, record = true) {
     if (!activeId || !activeDocument) return;
     if (record) {
-      undoStack.current.push(cloneDocument(activeDocument));
+      undoStack.current.push(cloneDocument(currentDocument.current ?? activeDocument));
       if (undoStack.current.length > 80) undoStack.current.shift();
       redoStack.current = [];
     }
@@ -380,7 +320,8 @@ function App() {
   function undo() {
     const previous = undoStack.current.pop();
     if (!previous || !activeDocument || !activeId) return;
-    redoStack.current.push(cloneDocument(activeDocument));
+    redoStack.current.push(cloneDocument(currentDocument.current ?? activeDocument));
+    currentDocument.current = previous;
     setDocuments((current) => ({ ...current, [activeId]: previous }));
     setHistoryRevision((value) => value + 1);
   }
@@ -388,15 +329,27 @@ function App() {
   function redo() {
     const next = redoStack.current.pop();
     if (!next || !activeDocument || !activeId) return;
-    undoStack.current.push(cloneDocument(activeDocument));
+    undoStack.current.push(cloneDocument(currentDocument.current ?? activeDocument));
+    currentDocument.current = next;
     setDocuments((current) => ({ ...current, [activeId]: next }));
     setHistoryRevision((value) => value + 1);
   }
 
-  function updateLayer(id: string, patch: Partial<WatermarkLayer>, record = true) {
-    updateDocument((draft) => {
-      const layer = draft.layers.find((item) => item.id === id);
-      if (layer) Object.assign(layer, patch);
+  function updateLayers(patches: LayerPatch[], record = true) {
+    if (!currentDocument.current) return;
+    const changed = patches.filter(({ id, patch }) => {
+      const layer = currentDocument.current!.layers.find(item => item.id === id);
+      return layer && Object.entries(patch).some(([key, value]) => {
+        const previous = layer[key as keyof WatermarkLayer];
+        return typeof previous === "number" && typeof value === "number" ? Math.abs(previous - value) > 1e-9 : previous !== value;
+      });
+    });
+    if (!changed.length) return;
+    updateDocument(draft => {
+      for (const { id, patch } of changed) {
+        const layer = draft.layers.find(item => item.id === id);
+        if (layer) Object.assign(layer, patch);
+      }
     }, record);
   }
 
@@ -414,7 +367,7 @@ function App() {
     setCheckedIds((current) => [...new Set([...current, ...next.map((photo) => photo.id)])]);
     if (activate) {
       setActiveId(next[0].id);
-      setSelectedLayerId("");
+      setSelectedLayerIds([]);
       clearHistory();
     }
   }
@@ -470,7 +423,8 @@ function App() {
         if (known.has(id)) continue;
         setMessage(`正在导入 ${index + 1}/${files.length} 张照片`);
         try {
-          // Decode one original at a time, and retain only a bounded preview.
+          // Library thumbnails stay small; retain the compressed file so the
+          // active editor can decode original detail on demand.
           const bitmap = await createImageBitmap(file);
           try {
             const scale = Math.min(1, 720 / Math.max(bitmap.width, bitmap.height));
@@ -480,6 +434,7 @@ function App() {
             const context = preview.getContext("2d");
             if (!context) throw new Error("无法生成缩略图");
             context.drawImage(bitmap, 0, 0, preview.width, preview.height);
+            retainBrowserPhoto(id, file);
             addPhotos([{
               id,
               path: "",
@@ -518,7 +473,7 @@ function App() {
 
   function activatePhoto(id: string) {
     setActiveId(id);
-    setSelectedLayerId("");
+    setSelectedLayerIds([]);
     clearHistory();
   }
 
@@ -539,9 +494,26 @@ function App() {
       return next;
     });
     setActiveTemplate(template.id);
-    setSelectedLayerId("");
+    setSelectedLayerIds([]);
     clearHistory();
     setMessage(`已应用“${template.name}”到 ${targetIds.length} 张照片`);
+  }
+
+  function applyCurrentCanvas(targetIds: string[]) {
+    const source = currentDocument.current ?? activeDocument;
+    if (!source) return;
+    const validIds = new Set(photos.map((photo) => photo.id));
+    setDocuments((current) => {
+      const next = { ...current };
+      for (const id of targetIds) {
+        if (validIds.has(id)) next[id] = cloneDocument(source);
+      }
+      return next;
+    });
+    if (activeId && targetIds.includes(activeId)) currentDocument.current = cloneDocument(source);
+    setSelectedLayerIds([]);
+    clearHistory();
+    setMessage(`已将当前画布应用到 ${targetIds.length} 张照片`);
   }
 
   function updateCurrentTemplate() {
@@ -578,18 +550,17 @@ function App() {
   function addLayer(source: LayerSource) {
     const added = nextLayer(source, activeDocument?.layers.length ?? 0);
     updateDocument((draft) => { draft.layers.push(added); });
-    setSelectedLayerId(added.id);
+    setSelectedLayerIds([added.id]);
     setInspectorTab("watermark");
-    setShowLayerMenu(false);
   }
 
-  function deleteSelectedLayer() {
-    if (!selectedLayer) return;
-    updateDocument((draft) => { draft.layers = draft.layers.filter((item) => item.id !== selectedLayer.id); });
-    setSelectedLayerId("");
+  function deleteSelectedLayers() {
+    if (!selectedLayers.length) return;
+    updateDocument(draft => { draft.layers = draft.layers.filter(item => !selectedLayerIds.includes(item.id)); });
+    setSelectedLayerIds([]);
   }
 
-  function updatePhotoOverride(source: LayerSource, value: string) {
+  function updatePhotoOverride(source: LayerSource, value?: string) {
     if (!activePhoto || source === "custom") return;
     setPhotos((current) => current.map((photo) => photo.id === activePhoto.id ? { ...photo, overrides: { ...photo.overrides, [source]: value } } : photo));
   }
@@ -666,7 +637,26 @@ function App() {
   const activeTemplateRecord = templates.find((item) => item.id === activeTemplate);
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" onKeyDown={event => {
+      const target = event.target as HTMLElement;
+      if (showExport || showTemplateDialog || target.closest("input, textarea, select, [contenteditable=true]")) return;
+      if (editorRef.current?.isInteracting()) return;
+      const command = event.ctrlKey || event.metaKey;
+      if (command && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
+      if (command && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); return; }
+      if (command && event.key.toLowerCase() === "a" && activeDocument) {
+        event.preventDefault(); setSelectedLayerIds(activeDocument.layers.filter(layer => isVisible(layer, activeDocument.regions)).map(layer => layer.id)); setInspectorTab("watermark"); return;
+      }
+      if (event.key === "Escape") { setSelectedLayerIds([]); return; }
+      if (!selectedLayers.length || command || event.altKey) return;
+      if (event.key === "Delete" || event.key === "Backspace") { event.preventDefault(); deleteSelectedLayers(); return; }
+      const directions: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      const direction = directions[event.key];
+      if (direction && activePhoto && activeDocument) {
+        event.preventDefault(); const step = event.shiftKey ? 10 : 1;
+        updateLayers(moveSelection(selectedLayers.filter(layer => isVisible(layer, activeDocument.regions)), calculateGeometry(activePhoto, activeDocument), { x: direction[0] * step, y: direction[1] * step }));
+      }
+    }}>
       <input ref={fileInput} className="visually-hidden" type="file" accept="image/jpeg,image/png" multiple onChange={(event) => void importBrowserPhotos(event)} />
 
       <header className="app-header">
@@ -700,7 +690,7 @@ function App() {
               </button>
             ))}
           </div>
-          {!!activeDocument && !!checkedIds.length && <button className="apply-batch-button" type="button" onClick={() => activeTemplateRecord && applyTemplate(activeTemplateRecord, checkedIds)}>应用当前模板到已选 {checkedIds.length} 张</button>}
+          {!!activeDocument && !!checkedIds.length && <button className="apply-batch-button" type="button" onClick={() => applyCurrentCanvas(checkedIds)}>应用当前画布到已选 {checkedIds.length} 张</button>}
 
           <div className="library-section-title"><span>照片</span><small>{photos.length}</small></div>
           <div className="photo-list">
@@ -717,9 +707,9 @@ function App() {
         </aside>
 
         <section className="editor-panel">
-          <EditorWorkspace photo={activePhoto} document={activeDocument} loading={loadState === "loading"} onImport={handleImport} onToggleSnap={() => setSnapEnabled(value => !value)} selectedLayerId={selectedLayerId} snapEnabled={snapEnabled} onSelectLayer={(id) => { setSelectedLayerId(id); if (id) setInspectorTab("watermark"); }} onLayerPreview={(id, patch) => updateLayer(id, patch, false)} onDragStart={beginTransaction} onDragEnd={commitTransaction} />
+          <EditorWorkspace photo={activePhoto} document={activeDocument} loading={loadState === "loading"} onImport={handleImport} onToggleSnap={() => setSnapEnabled(value => !value)} editorRef={editorRef} selectedLayerIds={selectedLayerIds} snapEnabled={snapEnabled} onSelectionChange={(ids) => { setSelectedLayerIds(ids); if (ids.length) setInspectorTab("watermark"); }} onLayersCommit={updateLayers} />
 
-          <div className={`status-bar ${loadState === "error" ? "error" : ""}`}><span>{message || (selectedLayer ? `已选：${selectedLayer.name}` : activePhoto ? `${activePhoto.fileName}  ${activePhoto.megapixels.toFixed(1)} MP` : "准备就绪")}</span><span>{activePhoto ? `${formatPixels(activePhoto)}  sRGB  预览` : "完全本地处理"}</span></div>
+          <div className={`status-bar ${loadState === "error" ? "error" : ""}`}><span>{message || (selectedLayers.length ? `已选：${selectedLayers.length === 1 ? selectedLayers[0].name : `${selectedLayers.length} 个元素`}` : activePhoto ? `${activePhoto.fileName}  ${activePhoto.megapixels.toFixed(1)} MP` : "准备就绪")}</span><span>{activePhoto ? `${formatPixels(activePhoto)}  sRGB  预览` : "完全本地处理"}</span></div>
           <div className="filmstrip"><div className="filmstrip-heading"><span>{photos.length} 张照片</span><span>已选 {selectedCount} 张</span></div><div className="filmstrip-track">{photos.map((photo) => <button type="button" key={photo.id} className={`film-photo ${photo.id === activePhoto?.id ? "active" : ""}`} onClick={() => activatePhoto(photo.id)}><img src={photo.thumbnailDataUrl} alt={photo.fileName} /><span>{photo.fileName}</span></button>)}{!!photos.length && <button className="film-add" type="button" onClick={handleImport}><Plus /><span>添加</span></button>}</div></div>
         </section>
 
@@ -743,23 +733,11 @@ function App() {
               </section>
             </div>
           ) : activeDocument ? (
-            <div className="inspector-scroll">
-              <section className="inspector-section layer-section">
-                <div className="section-heading layer-heading"><strong>水印图层</strong><div className="layer-add-wrap"><button type="button" onClick={() => setShowLayerMenu((value) => !value)}><Plus /> 添加参数</button>{showLayerMenu && <div className="layer-add-menu">{metadataOptions.map((option) => <button type="button" key={option.source} onClick={() => addLayer(option.source)}>{option.label}</button>)}</div>}</div></div>
-                <div className="layer-list">{activeDocument.layers.map((item) => <div className={`layer-row ${item.id === selectedLayerId ? "selected" : ""}`} key={item.id}><button className="layer-main" type="button" onClick={() => setSelectedLayerId(item.id)}><TextT /><span><strong>{item.name}</strong><small>{activePhoto ? resolveLayerText(item, activePhoto) : ""}</small></span></button><button className="layer-visibility" type="button" aria-label={`${item.visible ? "隐藏" : "显示"}${item.name}`} onClick={() => updateLayer(item.id, { visible: !item.visible })}>{item.visible ? <Eye /> : <EyeSlash />}</button></div>)}</div>
-              </section>
-              {selectedLayer && activePhoto ? (
-                <section className="inspector-section selected-layer-panel">
-                  <div className="section-heading"><strong>{selectedLayer.name}</strong><button type="button" className="danger-action" onClick={deleteSelectedLayer}><Trash /> 删除</button></div>
-                  {selectedLayer.source === "custom" ? <label className="field"><span>文字内容</span><input className="text-input" value={selectedLayer.customValue} onChange={(event) => updateLayer(selectedLayer.id, { customValue: event.currentTarget.value })} /></label> : <label className="field"><span>当前照片显示值</span><input className="text-input" value={activePhoto.overrides?.[selectedLayer.source] ?? activePhoto.metadata[selectedLayer.source] ?? ""} placeholder="未读取到，可手动补充" onChange={(event) => updatePhotoOverride(selectedLayer.source, event.currentTarget.value)} /></label>}
-                  <label className="field"><span>所属区域</span><select value={selectedLayer.region} onChange={(event) => updateLayer(selectedLayer.id, { region: event.currentTarget.value as RegionId, x: 0.5, y: 0.5 })}><option value="canvas">整个画布</option><option value="top">上参数区</option><option value="bottom">下参数区</option><option value="left">左参数区</option><option value="right">右参数区</option></select></label>
-                  <div className="align-grid"><button type="button" onClick={() => updateLayer(selectedLayer.id, { x: 0.5 })}>水平居中</button><button type="button" onClick={() => updateLayer(selectedLayer.id, { y: 0.5 })}>垂直居中</button><button type="button" onClick={() => updateLayer(selectedLayer.id, { y: 1 / 3 })}>第 1 行</button><button type="button" onClick={() => updateLayer(selectedLayer.id, { y: 2 / 3 })}>第 2 行</button></div>
-                  <label className="field"><span>字体</span><select value={selectedLayer.fontFamily} onChange={(event) => updateLayer(selectedLayer.id, { fontFamily: event.currentTarget.value })}><option value="Noto Sans CJK SC, sans-serif">Noto Sans 思源黑体</option><option value="Noto Serif CJK SC, serif">Noto Serif 思源宋体</option><option value="DejaVu Sans, sans-serif">DejaVu Sans</option><option value="Liberation Sans, sans-serif">Liberation Sans</option><option value="monospace">等宽字体</option></select></label>
-                  <SliderRow label="字号" value={selectedLayer.fontSize} min={8} max={120} onStart={beginTransaction} onEnd={commitTransaction} onChange={(value) => updateLayer(selectedLayer.id, { fontSize: value }, false)} /><label className="field"><span>字重</span><select value={selectedLayer.fontWeight} onChange={(event) => updateLayer(selectedLayer.id, { fontWeight: Number(event.currentTarget.value) as WatermarkLayer["fontWeight"] })}><option value="400">常规</option><option value="500">中等</option><option value="600">半粗</option><option value="700">粗体</option></select></label><label className="field color-field"><span>文字颜色</span><span className="color-input-wrap"><input type="color" value={selectedLayer.color} onChange={(event) => updateLayer(selectedLayer.id, { color: event.currentTarget.value })} /><code>{selectedLayer.color.toUpperCase()}</code></span></label>
-                  <Segmented label="文字方向" value={String(selectedLayer.rotation)} options={[{ value: "0", label: "横排" }, { value: "-90", label: "左转" }, { value: "90", label: "右转" }]} onChange={(value) => updateLayer(selectedLayer.id, { rotation: Number(value) as WatermarkLayer["rotation"] })} /><div className="coordinate-readout"><span>X {(selectedLayer.x * 100).toFixed(1)}%</span><span>Y {(selectedLayer.y * 100).toFixed(1)}%</span></div>
-                </section>
-              ) : <section className="inspector-section muted-section"><strong>选择画布中的文字</strong><p>拖动可以自由定位。接近画布、照片或当前参数区的中心与三等分点时会显示名称并吸附。</p></section>}
-            </div>
+            <LayerInspector document={activeDocument} photo={activePhoto} selectedIds={selectedLayerIds}
+              onSelect={(id, extend) => setSelectedLayerIds(current => selectLayer(current, id, extend))}
+              onSelectionChange={setSelectedLayerIds} onPatch={updateLayers} onAdd={addLayer} onDelete={deleteSelectedLayers}
+              onStart={beginTransaction} onEnd={commitTransaction} onOverride={updatePhotoOverride}
+              onArrange={(action, reference) => editorRef.current?.arrange(action, reference)} />
           ) : <div className="inspector-empty">导入照片后开始设置</div>}
         </aside>
       </main>

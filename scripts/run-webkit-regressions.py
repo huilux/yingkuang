@@ -15,9 +15,10 @@ gi.require_version("WebKit2", "4.1")
 from gi.repository import GLib, Gtk, WebKit2  # noqa: E402
 
 scripts = Path(__file__).resolve().parent
-checks = ["backdrop-cache-regression.js", "canvas-regression.js", "zoom-regression.js", "zoom-range-regression.js", "slider-anchor-regression.js", "wheel-input-regression.js", "wheel-boundary-regression.js", "drag-regression.js", "browser-import-regression.js", "zoom-regression.js", "import-regression.js", "restore-regression.js"]
+checks = ["konva-canvas-regression.js", "multi-selection-regression.js", "precision-regression.js", "drag-persistence-regression.js", "current-canvas-batch-regression.js", "export-document-regression.js", "photo-detail-regression.js", "browser-import-regression.js", "editor-photo-loading-regression.js", "import-regression.js", "restore-regression.js"]
 if len(sys.argv) > 2:
     checks = sys.argv[2:]
+
 result = 1
 manager = WebKit2.UserContentManager()
 manager.register_script_message_handler("regression")
@@ -27,6 +28,8 @@ def received(_manager, message):
     global result
     report = json.loads(message.get_js_value().to_string())
     print(json.dumps(report, ensure_ascii=False), flush=True)
+    if report.get("running"):
+        return
     result = 0 if report.get("ok") else 1
     Gtk.main_quit()
 
@@ -48,6 +51,7 @@ def loaded(_view, event):
       while (!document.querySelector('.design-canvas')) await new Promise(r => setTimeout(r, 20));
       const reports = [];
       for (const check of CHECKS) {
+        window.webkit.messageHandlers.regression.postMessage(JSON.stringify({running: check.name}));
         try { reports.push({name: check.name, report: await (0, eval)(check.source)}); }
         catch (error) { throw new Error(check.name + ': ' + String(error)); }
       }
@@ -65,7 +69,14 @@ def timeout():
 
 
 view.connect("load-changed", loaded)
+def load_failed(_view, _event, uri, error):
+    print(f"Unable to load {uri}: {error.message}", file=sys.stderr, flush=True)
+    Gtk.main_quit()
+    return True
+
+
+view.connect("load-failed", load_failed)
 view.load_uri(sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:1422")
-GLib.timeout_add_seconds(45, timeout)
+GLib.timeout_add_seconds(max(45, len(checks) * 10), timeout)
 Gtk.main()
 sys.exit(result)

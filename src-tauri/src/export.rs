@@ -276,7 +276,7 @@ fn parse_color(value: &str, alpha: u8) -> Rgba<u8> {
     }
 }
 
-fn decode_color_managed(path: &Path, orientation: u32) -> Result<RgbaImage, String> {
+pub(crate) fn decode_color_managed(path: &Path, orientation: u32) -> Result<RgbaImage, String> {
     let reader = ImageReader::open(path)
         .map_err(|error| format!("无法打开图片：{error}"))?
         .with_guessed_format()

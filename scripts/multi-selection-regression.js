@@ -1,0 +1,81 @@
+(async () => {
+  const t = await import('/scripts/konva-test-utils.js');
+  const ctx = await t.context();
+  await t.disableSnap(ctx);
+  const nodes = ['focal', 'aperture', 'shutter'].map(id => ctx.world.findOne(node => node.id() === id));
+  const pick = async (node, shiftKey = false) => {
+    await t.centerNode(ctx, node);
+    const point = t.screen(ctx, node);
+    ctx.content.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: point.x, clientY: point.y, button: 0, buttons: 1, shiftKey, view: window }));
+    t.mouse(window, 'mouseup', point, 0); await t.frame();
+  };
+  const selected = () => [...document.querySelectorAll('.layer-main[aria-pressed="true"]')].map(button => button.getAttribute('aria-label'));
+  await t.zoom(ctx, 100);
+  await pick(nodes[0]); await pick(nodes[1], true); await pick(nodes[2], true);
+  t.assert(selected().length === 3, `Shift selection failed: ${selected()}`);
+  await pick(nodes[1], true); t.assert(selected().length === 2, 'Shift did not toggle membership');
+  await pick(nodes[1], true);
+  t.assert(ctx.stage.find('.selection-box').length === 3 && ctx.stage.findOne('.selection-bounds').visible(), 'Multi-selection outlines missing');
+  const original = nodes.map(node => node.position());
+  for (const level of [40, 100, 250]) {
+    await t.zoom(ctx, level); await t.centerNode(ctx, nodes[0]);
+    const start = t.screen(ctx, nodes[0]);
+    const before = nodes.map(node => t.screen(ctx, node));
+    const scale = ctx.world.scaleX();
+    t.mouse(ctx.content, 'mousedown', start); await t.frame();
+    t.mouse(window, 'mousemove', { x: start.x + 24, y: start.y + 12 }); await t.frame();
+    nodes.forEach((node, index) => {
+      const moved = t.screen(ctx, node);
+      t.near(moved.x - before[index].x, 24, 'Group drag x', 0.05);
+      t.near(moved.y - before[index].y, 12, 'Group drag y', 0.05);
+    });
+    t.assert(selected().length === 3, 'Dragging selected member collapsed selection');
+    t.mouse(window, 'mouseup', { x: start.x + 24, y: start.y + 12 }, 0); await t.frame();
+    document.querySelector('button[aria-label="撤销"]').click(); await t.frame();
+    nodes.forEach((node, index) => t.near(node.x(), original[index].x, 'One-step group undo', 0.001));
+    document.querySelector('button[aria-label="重做"]').click(); await t.frame();
+    nodes.forEach((node, index) => t.near(node.x(), original[index].x + 24 / scale, 'Group redo', 0.001));
+    document.querySelector('button[aria-label="撤销"]').click(); await t.frame();
+  }
+  // Use unequal text widths and measured rotated bounds, not centre intervals.
+  const bounds = () => nodes.map(node => node.findOne('Text').getClientRect({ relativeTo: ctx.world })).sort((a,b) => a.x-b.x);
+  const initialBounds = bounds();
+  const distribute = [...document.querySelectorAll('button')].find(button => button.textContent === '横向等间距');
+  t.assert(!distribute.disabled, 'Three selected elements cannot distribute');
+  distribute.click(); await t.frame();
+  const result = bounds();
+  t.near(result[0].x, initialBounds[0].x, 'Distribution moved left endpoint', .001);
+  t.near(result[2].x + result[2].width, initialBounds[2].x + initialBounds[2].width, 'Distribution moved right endpoint', .001);
+  const gap1 = result[1].x - result[0].x - result[0].width;
+  const gap2 = result[2].x - result[1].x - result[1].width;
+  t.near(gap1, gap2, 'Gaps differ', .001);
+  document.querySelector('button[aria-label="撤销"]').click(); await t.frame();
+  nodes.forEach((node,index) => t.near(node.x(), original[index].x, 'Distribution undo', .001));
+  const reference = document.querySelector('select[aria-label="对齐参照"]');
+  reference.value = 'photo'; reference.dispatchEvent(new Event('change', {bubbles:true})); await t.frame();
+  [...document.querySelectorAll('button')].find(button => button.textContent === '垂直居中').click(); await t.frame();
+  const ys = nodes.map((node,index) => node.y()-original[index].y);
+  t.near(ys[0],ys[1],'Group alignment changed relative positions');
+  t.assert(Math.abs(ys[0]) > 100, 'Photo alignment was clamped to bottom region');
+  document.querySelector('button[aria-label="撤销"]').click(); await t.frame();
+  // Batch styling is one undo step and leaves each metadata value intact.
+  const weight = [...document.querySelectorAll('select')].find(select => select.parentElement.textContent.includes('字重'));
+  weight.value = '700'; weight.dispatchEvent(new Event('change', {bubbles:true})); await t.frame();
+  nodes.forEach(node => t.assert(node.findOne('Text').fontStyle() === '700', 'Batch weight missed a layer'));
+  document.querySelector('button[aria-label="撤销"]').click(); await t.frame();
+  nodes.forEach(node => t.assert(node.findOne('Text').fontStyle() === '500', 'Batch style undo missed a layer'));
+  const key = (key, options={}) => ctx.viewport.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,cancelable:true,key,...options}));
+  key('ArrowRight', {shiftKey:true}); await t.frame();
+  nodes.forEach((node,index)=>t.near(node.x(),original[index].x+10,'Group nudge'));
+  key('z',{ctrlKey:true}); await t.frame();
+  nodes.forEach((node,index)=>t.near(node.x(),original[index].x,'Keyboard undo'));
+  key('Delete'); await t.frame();
+  t.assert(!ctx.world.findOne(node=>node.id()==='focal'), 'Batch deletion left a node');
+  key('z',{ctrlKey:true}); await t.frame();
+  t.assert(ctx.world.findOne(node=>node.id()==='focal'), 'Batch deletion undo failed');
+  key('a',{ctrlKey:true}); await t.frame();
+  t.assert(selected().length === ctx.world.find('.watermark-layer').length, 'Select all failed');
+  key('Escape'); await t.frame(); t.assert(selected().length === 0, 'Escape did not clear selection');
+  await t.fit(ctx);
+  return { shiftToggle:true, groupDragScales:[40,100,250], equalEdgeGaps:true, gap:gap1, groupAlignment:true, batchStyle:true, undoRedo:true, keyboard:true };
+})();

@@ -1,493 +1,361 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type KeyboardEvent,
-  type PointerEvent,
-  type RefObject,
-} from "react";
-import { flushSync } from "react-dom";
-import {
-  calculateGeometry,
-  globalToRegion,
-  layerPosition,
-  resolveLayerText,
-} from "./editor-model";
-import type { EditorDocument, PhotoAsset, Rect, RegionId, WatermarkLayer } from "./types";
-import { PreviewBackdrop } from "./PreviewBackdrop";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useId, useMemo, useRef, useState } from "react";
+import Konva from "konva";
+import { Group, Image as CanvasImage, Layer, Line, Rect, Stage, Text } from "react-konva";
+import { calculateGeometry, layerPosition, resolveLayerText } from "./editor-model";
+import { baseScale, clampZoom, fitCamera, isVisible, regionNames, safeRect, snapSelection, zoomAt, type Camera, type Guide, type Point } from "./canvas-camera";
+import { usePreviewBackdrop } from "./use-preview-backdrop";
+import { useEditorPhoto } from "./use-editor-photo";
+import { arrangeSelection, moveSelection, positionPatch, selectLayer, unionBounds, type AlignReference, type ArrangeAction, type LayerPatch, type MeasuredLayer } from "./selection-model";
+import type { EditorDocument, PhotoAsset, WatermarkLayer, Rect as SceneRect, RegionId } from "./types";
 
-type Guide = {
-  axis: "x" | "y";
-  value: number;
-  label: string;
-  tone: "canvas" | "region" | "photo";
-};
-
-type DragState = {
-  layerId: string;
-  pointerId: number;
-  startClient: { x: number; y: number };
-  startPoint: { x: number; y: number };
-  origin: { x: number; y: number };
-  moved: boolean;
-};
-
-type ZoomAnchor = { x: number; y: number; viewportX: number; viewportY: number };
-
-const regionNames: Record<RegionId, string> = {
-  canvas: "整个画布",
-  top: "上参数区",
-  bottom: "下参数区",
-  left: "左参数区",
-  right: "右参数区",
-};
-
-function insideRegion(layer: WatermarkLayer, document: EditorDocument) {
-  return layer.region === "canvas" || document.regions[layer.region].enabled;
+export interface EditorCanvasHandle {
+  setZoom: (zoom: number) => void;
+  fit: () => void;
+  isInteracting: () => boolean;
+  arrange: (action: ArrangeAction, reference: AlignReference) => void;
 }
-
-function safeRect(rect: Rect, safe: number) {
-  const inset = Math.min(rect.width, rect.height) * safe / 100;
-  return {
-    x: rect.x + inset,
-    y: rect.y + inset,
-    width: Math.max(1, rect.width - inset * 2),
-    height: Math.max(1, rect.height - inset * 2),
-  };
-}
-
-export function EditorCanvas({
-  photo,
-  document,
-  zoom,
-  selectedLayerId,
-  snapEnabled,
-  onZoomChange,
-  onSelectLayer,
-  onLayerPreview,
-  onDragStart,
-  onDragEnd,
-  viewportRef,
-}: {
+interface Props {
   photo: PhotoAsset;
   document: EditorDocument;
-  zoom: number;
-  selectedLayerId: string;
+  selectedLayerIds: string[];
   snapEnabled: boolean;
   onZoomChange: (zoom: number) => void;
-  onSelectLayer: (id: string) => void;
-  onLayerPreview: (id: string, patch: Partial<WatermarkLayer>) => void;
-  onDragStart: () => void;
-  onDragEnd: () => void;
-  viewportRef: RefObject<HTMLDivElement | null>;
-}) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const dragRef = useRef<DragState | null>(null);
-  const zoomFrameRef = useRef<number | null>(null);
-  const queuedZoomRef = useRef(zoom);
-  const wheelAnchorRef = useRef<ZoomAnchor | null>(null);
-  const lastWheelAnchorRef = useRef<ZoomAnchor | null>(null);
-  const appliedScrollRef = useRef({ left: 0, top: 0 });
-  const centerAnchorRef = useRef<ZoomAnchor | null>(null);
-  const previousZoomRef = useRef(zoom);
-  const [guides, setGuides] = useState<Guide[]>([]);
-  const geometry = useMemo(() => calculateGeometry(photo, document), [document, photo]);
-  const previewBaseWidth = Math.max(420, Math.min(860, geometry.width * 0.48));
-  const previewBaseHeight = previewBaseWidth * geometry.height / geometry.width;
-  const zoomScale = zoom / 100;
-  const blurOverscan = Math.min(
-    Math.min(geometry.width, geometry.height) * 0.25,
-    Math.max(Math.min(geometry.width, geometry.height) * 0.08, document.frame.blur * 3),
-  );
-  const selectedLayer = document.layers.find((item) => item.id === selectedLayerId);
-  const selectedRegion = selectedLayer?.region ?? "canvas";
-  const selectedBounds = geometry.regions[selectedRegion];
-  const backdropKey = photo.thumbnailDataUrl + JSON.stringify([document.frame, geometry.width, geometry.height, geometry.photo]);
+  onSelectionChange: (ids: string[]) => void;
+  onLayersCommit: (patches: LayerPatch[]) => void;
+}
 
-  function captureAnchor(clientX?: number, clientY?: number): ZoomAnchor | null {
-    const viewport = viewportRef.current;
-    const svg = svgRef.current;
-    if (!viewport || !svg) return null;
-    const bounds = viewport.getBoundingClientRect();
-    const canvas = svg.getBoundingClientRect();
-    const viewportX = clientX === undefined ? viewport.clientWidth / 2 : clientX - bounds.left;
-    const viewportY = clientY === undefined ? viewport.clientHeight / 2 : clientY - bounds.top;
-    return {
-      x: (bounds.left + viewportX - canvas.left) / canvas.width,
-      y: (bounds.top + viewportY - canvas.top) / canvas.height,
-      viewportX,
-      viewportY,
-    };
+// React owns document changes. Konva owns transient camera/drag positions.
+// These must not be sent through the document store on each input event.
+export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, Props>(function EditorCanvas({
+  photo, document: design, selectedLayerIds, snapEnabled, onZoomChange, onSelectionChange, onLayersCommit,
+}, ref) {
+  const helpId = useId();
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<Konva.Stage>(null);
+  const backgroundRef = useRef<Konva.Group>(null);
+  const objectsRef = useRef<Konva.Group>(null);
+  const overlayRef = useRef<Konva.Group>(null);
+  const selectionRef = useRef<Konva.Group>(null);
+  const selectionIds = useRef(selectedLayerIds);
+  selectionIds.current = selectedLayerIds;
+  const guidesRef = useRef<Konva.Group>(null);
+  const camera = useRef<Camera>({ x: 0, y: 0, scale: 1 });
+  const fitted = useRef(true);
+  const zoomFrame = useRef<number | null>(null);
+  const drag = useRef<{ node: Konva.Group; items: { node: Konva.Group; layer: WatermarkLayer; origin: Point }[]; bounds: SceneRect; regions: { id: RegionId; bounds: SceneRect }[]; others: { bounds: SceneRect; name: string }[]; cancelled: boolean } | null>(null);
+  const pan = useRef<{ pointerId: number; start: Point; origin: Camera } | null>(null);
+  const spacePressed = useRef(false);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const previousSize = useRef(size);
+  const geometry = useMemo(() => calculateGeometry(photo, design), [photo, design]);
+  const { image, error } = usePreviewBackdrop(photo.thumbnailDataUrl, design.frame, geometry);
+  const { image: editorPhoto, error: photoError, loading: photoLoading } = useEditorPhoto(photo);
+  const clipPhoto = useCallback((context: Konva.Context) => {
+    context.beginPath();
+    context.roundRect(0, 0, geometry.photo.width, geometry.photo.height,
+      Math.min(design.frame.radius * 2, geometry.photo.width / 2, geometry.photo.height / 2));
+    context.closePath();
+  }, [geometry.photo.width, geometry.photo.height, design.frame.radius]);
+  const selectedLayers = design.layers.filter(layer => selectedLayerIds.includes(layer.id) && isVisible(layer, design.regions));
+  const selectedRegions = [...new Set(selectedLayers.map(layer => layer.region))].filter(region => region !== "canvas");
+  const visibleLayers = design.layers.filter(layer => isVisible(layer, design.regions));
+  // Font readiness changes text measurement even if the document is unchanged.
+  const [fontRevision, setFontRevision] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const update = () => { if (alive) setFontRevision(value => value + 1); };
+    void document.fonts.ready.then(update);
+    document.fonts.addEventListener("loadingdone", update);
+    return () => { alive = false; document.fonts.removeEventListener("loadingdone", update); };
+  }, []);
+
+  function reportZoom() {
+    if (zoomFrame.current !== null) return;
+    zoomFrame.current = requestAnimationFrame(() => {
+      zoomFrame.current = null;
+      onZoomChange(camera.current.scale / baseScale(geometry.width) * 100);
+    });
   }
+  function applyCamera(next: Camera) {
+    camera.current = next;
+    for (const world of [backgroundRef.current, objectsRef.current, overlayRef.current]) {
+      world?.setAttrs({ x: next.x, y: next.y, scaleX: next.scale, scaleY: next.scale });
+    }
+    reportZoom();
+  }
+  function fit() {
+    if (drag.current || pan.current || !size.width) return;
+    fitted.current = true;
+    applyCamera(fitCamera(size, geometry));
+  }
+  function setZoom(percent: number, anchor = { x: size.width / 2, y: size.height / 2 }) {
+    if (drag.current || pan.current) return;
+    fitted.current = false;
+    applyCamera(zoomAt(camera.current, baseScale(geometry.width) * clampZoom(percent) / 100, anchor));
+  }
+  useImperativeHandle(ref, () => ({ setZoom, fit, isInteracting: () => !!drag.current || !!pan.current, arrange(action, reference) {
+    if (drag.current || pan.current) return;
+    const patches = arrangeSelection(action, reference, measureSelection(), design.layers, geometry);
+    if (patches.length) onLayersCommit(patches);
+  } }));
 
   useLayoutEffect(() => {
-    const viewport = viewportRef.current;
-    const svg = svgRef.current;
-    const wheelAnchor = wheelAnchorRef.current;
-    const anchor = wheelAnchor ?? centerAnchorRef.current;
-    if (!wheelAnchor) lastWheelAnchorRef.current = null;
-    if (viewport && svg && anchor && previousZoomRef.current !== zoom) {
-      if (!wheelAnchor) {
-        anchor.viewportX = viewport.clientWidth / 2;
-        anchor.viewportY = viewport.clientHeight / 2;
-      }
-      const bounds = viewport.getBoundingClientRect();
-      const canvas = svg.getBoundingClientRect();
-      // Correct before paint; CSS scroll anchoring must not also move the canvas.
-      viewport.scrollLeft += canvas.left + anchor.x * canvas.width - bounds.left - anchor.viewportX;
-      viewport.scrollTop += canvas.top + anchor.y * canvas.height - bounds.top - anchor.viewportY;
-      if (wheelAnchor) {
-        const actual = captureAnchor(bounds.left + anchor.viewportX, bounds.top + anchor.viewportY);
-        if (actual) {
-          // A centred, fitting canvas has no scroll range. Rebase only the
-          // clamped axis so crossing into overflow never jumps back to an
-          // unreachable anchor from an earlier, smaller scale.
-          if (Math.abs(actual.x - anchor.x) * canvas.width > 1.1) anchor.x = actual.x;
-          if (Math.abs(actual.y - anchor.y) * canvas.height > 1.1) anchor.y = actual.y;
-        }
-      }
-    }
-    previousZoomRef.current = zoom;
-    if (!wheelAnchor) queuedZoomRef.current = zoom;
-    wheelAnchorRef.current = null;
-    const center = captureAnchor();
-    if (wheelAnchor || !anchor) centerAnchorRef.current = center;
-    else if (center && svg) {
-      const bounds = svg.getBoundingClientRect();
-      // Keep the exact anchor across slider/button updates. Only rebase an
-      // axis when the scroll boundary prevents preserving its position.
-      if (Math.abs(center.x - anchor.x) * bounds.width > 1.1) anchor.x = center.x;
-      if (Math.abs(center.y - anchor.y) * bounds.height > 1.1) anchor.y = center.y;
-    }
-    if (viewport) appliedScrollRef.current = { left: viewport.scrollLeft, top: viewport.scrollTop };
-  }, [zoom, previewBaseWidth, previewBaseHeight]);
+    const element = viewportRef.current;
+    if (!element) return;
+    const measure = () => setSize({ width: element.clientWidth, height: element.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    if (!size.width || !size.height) return;
+    if (fitted.current) applyCamera(fitCamera(size, geometry));
+    else applyCamera({ ...camera.current,
+      x: camera.current.x + (size.width - previousSize.current.width) / 2,
+      y: camera.current.y + (size.height - previousSize.current.height) / 2,
+    });
+    previousSize.current = size;
+  }, [size.width, size.height, geometry.width, geometry.height]);
 
+  function selectedNodes(ids = selectionIds.current) {
+    return objectsRef.current?.find<Konva.Group>((node: Konva.Node) => node.hasName("watermark-layer") && ids.includes(node.id())) ?? [];
+  }
+  function measureSelection(ids = selectionIds.current): MeasuredLayer[] {
+    return selectedNodes(ids).map(node => ({ id: node.id(), position: node.position(),
+      bounds: node.findOne<Konva.Text>("Text")!.getClientRect({ relativeTo: objectsRef.current! }) }));
+  }
+  function showSelection() {
+    const group = selectionRef.current;
+    if (!group) return;
+    for (const node of selectedNodes()) {
+      const text = node.findOne<Konva.Text>("Text");
+      const box = group.findOne<Konva.Rect>((box: Konva.Node) => box.id() === `selection-${node.id()}`);
+      if (!text || !box) continue;
+      box.setAttrs({ visible: true, x: node.x(), y: node.y(), rotation: node.rotation(),
+        width: text.width() + 16, height: text.height() + 12,
+        offsetX: text.width() / 2 + 8, offsetY: text.height() / 2 + 6 });
+    }
+    const overall = group.findOne<Konva.Rect>(".selection-bounds");
+    const bounds = unionBounds(measureSelection());
+    overall?.setAttrs({ visible: selectedNodes().length > 1 && !!bounds, ...(bounds ?? {}) });
+  }
+  useLayoutEffect(() => { showSelection(); }, [selectedLayerIds, design, photo, fontRevision, size.width]);
+
+  function showGuides(guides: Guide[]) {
+    const container = guidesRef.current;
+    if (!container) return;
+    for (const axis of ["x", "y"] as const) {
+      const group = container.findOne<Konva.Group>(`.guide-${axis}`)!;
+      const guide = guides.find(item => item.axis === axis);
+      group.visible(!!guide);
+      if (!guide) continue;
+      group.findOne<Konva.Line>("Line")!.setAttrs({ stroke: guide.color,
+        points: axis === "x" ? [guide.value, 0, guide.value, geometry.height] : [0, guide.value, geometry.width, guide.value] });
+      group.findOne<Konva.Text>("Text")!.setAttrs({ text: guide.label, fill: guide.color,
+        x: axis === "x" ? guide.value + 10 : 12, y: axis === "y" ? Math.max(0, guide.value - 28) : 10 });
+    }
+  }
+  function cancelDrag() {
+    const active = drag.current;
+    if (!active) return;
+    active.cancelled = true;
+    active.items.forEach(item => item.node.position(item.origin));
+    active.node.stopDrag();
+    showSelection();
+    showGuides([]);
+    drag.current = null;
+  }
+  function stopPan(cancel = false) {
+    const active = pan.current;
+    if (!active) return;
+    pan.current = null;
+    if (cancel) applyCamera(active.origin);
+    if (viewportRef.current?.hasPointerCapture(active.pointerId)) viewportRef.current.releasePointerCapture(active.pointerId);
+    if (viewportRef.current) viewportRef.current.style.cursor = spacePressed.current ? "grab" : "";
+  }
+
+  // Non-passive wheel handling suppresses browser zoom. Ordinary wheel pans the
+  // camera, including horizontal trackpad input, without any scrollable mega DOM.
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
-    function handleWheel(event: globalThis.WheelEvent) {
-      if (!event.ctrlKey) {
-        lastWheelAnchorRef.current = null;
-        return;
-      }
+    const wheel = (event: WheelEvent) => {
       event.preventDefault();
-      if (event.deltaY === 0 || dragRef.current) return;
-      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport!.clientHeight : 1;
-      // Match the prototype's proportional response; do not discard small
-      // trackpad deltas by rounding each event before the frame is committed.
-      const next = Math.max(20, Math.min(300, queuedZoomRef.current * Math.exp(-event.deltaY * unit * 0.0015)));
-      if (next === queuedZoomRef.current) return;
-      const anchor = captureAnchor(event.clientX, event.clientY);
-      const lastAnchor = lastWheelAnchorRef.current;
-      // Scroll offsets can round to whole pixels. Reuse the same photo point
-      // across a stationary gesture so that rounding does not accumulate.
-      wheelAnchorRef.current = anchor && lastAnchor
-        && anchor.viewportX === lastAnchor.viewportX && anchor.viewportY === lastAnchor.viewportY
-        ? lastAnchor : anchor;
-      lastWheelAnchorRef.current = wheelAnchorRef.current;
-      queuedZoomRef.current = next;
-      if (zoomFrameRef.current !== null) return;
-      zoomFrameRef.current = requestAnimationFrame(() => {
-        zoomFrameRef.current = null;
-        if (queuedZoomRef.current === previousZoomRef.current) {
-          wheelAnchorRef.current = null;
-          return;
-        }
-        // Apply scale and anchor correction in the same animation frame.
-        // A deferred commit can otherwise consume the next wheel event's
-        // anchor and paint one frame at the wrong scroll position.
-        flushSync(() => onZoomChange(queuedZoomRef.current));
-      });
-    }
-    // React delegates wheel events through a passive listener in Chromium.
-    viewport.addEventListener("wheel", handleWheel, { passive: false });
+      if (drag.current || pan.current) return;
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? size.height : 1;
+      if (event.ctrlKey || event.metaKey) {
+        if (!event.deltaY) return;
+        const bounds = viewport.getBoundingClientRect();
+        const zoom = camera.current.scale / baseScale(geometry.width) * 100;
+        setZoom(zoom * Math.exp(-event.deltaY * unit * 0.0015), { x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+      } else {
+        fitted.current = false;
+        const dx = event.shiftKey && !event.deltaX ? event.deltaY : event.deltaX;
+        const dy = event.shiftKey && !event.deltaX ? 0 : event.deltaY;
+        applyCamera({ ...camera.current, x: camera.current.x - dx * unit, y: camera.current.y - dy * unit });
+      }
+    };
+    viewport.addEventListener("wheel", wheel, { passive: false });
+    return () => viewport.removeEventListener("wheel", wheel);
+  }, [size.height, geometry.width, onZoomChange]);
+
+  useEffect(() => {
+    const blur = () => { cancelDrag(); stopPan(); spacePressed.current = false; if (viewportRef.current) viewportRef.current.style.cursor = ""; };
+    window.addEventListener("blur", blur);
     return () => {
-      viewport.removeEventListener("wheel", handleWheel);
-      if (zoomFrameRef.current !== null) cancelAnimationFrame(zoomFrameRef.current);
-      zoomFrameRef.current = null;
+      window.removeEventListener("blur", blur);
+      if (drag.current) { drag.current.cancelled = true; drag.current.node.stopDrag(); drag.current = null; }
+      if (zoomFrame.current !== null) cancelAnimationFrame(zoomFrame.current);
     };
-  }, [onZoomChange, viewportRef]);
+  }, []);
 
-  function clientPoint(event: { clientX: number; clientY: number }) {
-    const svg = svgRef.current;
-    if (!svg) return null;
-    const matrix = svg.getScreenCTM()?.inverse();
-    if (!matrix) return null;
-    const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix);
-    return { x: point.x, y: point.y };
+  function select(id: string, extend: boolean) {
+    viewportRef.current?.focus({ preventScroll: true });
+    const next = selectLayer(selectionIds.current, id, extend, true);
+    selectionIds.current = next;
+    onSelectionChange(next);
+  }
+  function startDrag(node: Konva.Group) {
+    const items = selectedNodes().map(item => ({ node: item, layer: design.layers.find(layer => layer.id === item.id())!, origin: item.position() }));
+    const bounds = unionBounds(measureSelection());
+    if (!bounds || !items.some(item => item.node === node)) { node.stopDrag(); return; }
+    const regions = [...new Set(items.map(item => item.layer.region))].filter(id => id !== "canvas")
+      .map(id => ({ id, bounds: safeRect(geometry.regions[id], design.regions[id].safePadding) }));
+    const others = measureSelection(visibleLayers.filter(layer => !selectionIds.current.includes(layer.id)).map(layer => layer.id))
+      .map(item => ({ bounds: item.bounds, name: design.layers.find(layer => layer.id === item.id)!.name }));
+    drag.current = { node, items, bounds, regions, others, cancelled: false };
+    showSelection();
+  }
+  function moveDrag(node: Konva.Group, event: MouseEvent | TouchEvent) {
+    const active = drag.current;
+    const primary = active?.items.find(item => item.node === node);
+    if (!active || !primary) return;
+    const delta = { x: node.x() - primary.origin.x, y: node.y() - primary.origin.y };
+    const snapped = snapSelection(active.bounds, delta, geometry, active.regions, active.others, camera.current.scale, snapEnabled && !event.ctrlKey && !event.metaKey);
+    active.items.forEach(item => item.node.position({ x: item.origin.x + snapped.delta.x, y: item.origin.y + snapped.delta.y }));
+    showSelection(); showGuides(snapped.guides);
+  }
+  function commitMove() {
+    const active = drag.current;
+    showGuides([]);
+    drag.current = null;
+    if (!active || active.cancelled) return;
+    const patches = active.items.filter(item => Math.abs(item.node.x() - item.origin.x) > 1e-9 || Math.abs(item.node.y() - item.origin.y) > 1e-9)
+      .map(item => positionPatch(item.layer, item.node.position(), geometry));
+    if (patches.length) onLayersCommit(patches);
   }
 
-  function candidateGuides(layer: WatermarkLayer): Guide[] {
-    const source = layer.region === "canvas"
-      ? geometry.regions.canvas
-      : safeRect(geometry.regions[layer.region], document.regions[layer.region].safePadding);
-    const name = regionNames[layer.region];
-    const items: Guide[] = [
-      { axis: "x", value: source.x + source.width / 2, label: `${name} · 水平居中`, tone: layer.region === "canvas" ? "canvas" : "region" },
-      { axis: "y", value: source.y + source.height / 2, label: `${name} · 垂直居中`, tone: layer.region === "canvas" ? "canvas" : "region" },
-      { axis: "x", value: source.x + source.width / 3, label: `${name} · 宽度 1/3`, tone: "region" },
-      { axis: "x", value: source.x + source.width * 2 / 3, label: `${name} · 宽度 2/3`, tone: "region" },
-      { axis: "y", value: source.y + source.height / 3, label: `${name} · 高度 1/3`, tone: "region" },
-      { axis: "y", value: source.y + source.height * 2 / 3, label: `${name} · 高度 2/3`, tone: "region" },
-    ];
-    if (layer.region !== "canvas") {
-      items.push(
-        { axis: "x", value: geometry.width / 2, label: "画布 · 水平居中", tone: "canvas" },
-        { axis: "y", value: geometry.height / 2, label: "画布 · 垂直居中", tone: "canvas" },
-        { axis: "x", value: geometry.photo.x + geometry.photo.width / 2, label: "照片 · 水平居中", tone: "photo" },
-        { axis: "y", value: geometry.photo.y + geometry.photo.height / 2, label: "照片 · 垂直居中", tone: "photo" },
-      );
-    }
-    return items;
-  }
-
-  function snapPoint(layer: WatermarkLayer, point: { x: number; y: number }) {
-    if (!snapEnabled) return { point, guides: [] as Guide[] };
-    const svg = svgRef.current;
-    const width = svg?.getBoundingClientRect().width ?? 1;
-    const threshold = geometry.width * 9 / Math.max(1, width);
-    const found: Guide[] = [];
-    let x = point.x;
-    let y = point.y;
-    for (const axis of ["x", "y"] as const) {
-      const nearest = candidateGuides(layer)
-        .filter((guide) => guide.axis === axis)
-        .map((guide) => ({ guide, distance: Math.abs(point[axis] - guide.value) }))
-        .sort((a, b) => a.distance - b.distance)[0];
-      if (nearest && nearest.distance <= threshold) {
-        if (axis === "x") x = nearest.guide.value;
-        else y = nearest.guide.value;
-        found.push(nearest.guide);
+  return <div className="canvas-viewport design-canvas" ref={viewportRef} tabIndex={0} role="group"
+    aria-label={`${photo.fileName} 的相框设计画布`} aria-describedby={helpId} title="Ctrl + 滚轮缩放 · 滚轮平移 · 空格或中键拖动平移"
+    onBlur={event => { spacePressed.current = false; if (!pan.current) event.currentTarget.style.cursor = ""; }}
+    onContextMenu={event => event.preventDefault()}
+    onPointerDownCapture={event => {
+      if (!event.isPrimary || drag.current || pan.current) return;
+      if (event.button !== 0 && event.button !== 1) return;
+      const bounds = event.currentTarget.getBoundingClientRect();
+      const point = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+      const hit = stageRef.current?.getIntersection(point);
+      if (event.button === 1 || spacePressed.current || !hit) {
+        event.preventDefault(); event.stopPropagation();
+        event.currentTarget.focus({ preventScroll: true });
+        if (event.button === 0 && !spacePressed.current) onSelectionChange([]);
+        fitted.current = false;
+        pan.current = { pointerId: event.pointerId, start: { x: event.clientX, y: event.clientY }, origin: { ...camera.current } };
+        event.currentTarget.setPointerCapture(event.pointerId);
+        event.currentTarget.style.cursor = "grabbing";
       }
-    }
-    return { point: { x, y }, guides: found };
-  }
+    }}
+    onPointerMove={event => {
+      const active = pan.current;
+      if (!active || active.pointerId !== event.pointerId) return;
+      applyCamera({ ...active.origin, x: active.origin.x + event.clientX - active.start.x, y: active.origin.y + event.clientY - active.start.y });
+    }}
+    onPointerUp={event => { if (pan.current?.pointerId === event.pointerId) stopPan(); }}
+    onPointerCancel={() => { stopPan(true); cancelDrag(); }}
+    onLostPointerCapture={() => stopPan()}
+    onKeyDown={event => {
+      if (event.code === "Space") { event.preventDefault(); spacePressed.current = true; event.currentTarget.style.cursor = "grab"; return; }
+      if (event.key === "Escape") { const moving = !!drag.current || !!pan.current; cancelDrag(); stopPan(true); if (!moving) onSelectionChange([]); event.stopPropagation(); return; }
+      if (drag.current || pan.current || !selectedLayers.length || event.ctrlKey || event.metaKey || event.altKey) return;
+      const directions: Record<string, Point> = { ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 } };
+      const direction = directions[event.key];
+      if (!direction) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const step = event.shiftKey ? 10 : 1;
+      onLayersCommit(moveSelection(selectedLayers, geometry, { x: direction.x * step, y: direction.y * step }));
+    }}
+    onKeyUp={event => { if (event.code === "Space") { spacePressed.current = false; event.currentTarget.style.cursor = pan.current ? "grabbing" : ""; } }}
+  >
+    <Stage className="konva-stage" ref={stageRef} width={size.width} height={size.height}>
+      <Layer listening={false}>
+        <Group ref={backgroundRef} name="background-world">
+          <Rect width={geometry.width} height={geometry.height} fill={design.frame.color} />
+          {image && <CanvasImage name="preview-backdrop" image={image} width={geometry.width} height={geometry.height} />}
+          {editorPhoto && <Group x={geometry.photo.x} y={geometry.photo.y} clipFunc={clipPhoto}><CanvasImage name="preview-photo" image={editorPhoto} width={geometry.photo.width} height={geometry.photo.height} /></Group>}
+        </Group>
+      </Layer>
+      <Layer>
+        <Group ref={objectsRef} name="objects-world" clipX={0} clipY={0} clipWidth={geometry.width} clipHeight={geometry.height}>
+          {visibleLayers.map(layer => <Watermark key={layer.id} layer={layer} text={resolveLayerText(layer, photo)}
+            position={layerPosition(layer, geometry)} fontRevision={fontRevision}
+            onSelect={extend => select(layer.id, extend)}
+            onDragStart={startDrag}
+            onDragMove={moveDrag}
+            onDragEnd={commitMove} />)}
+        </Group>
+      </Layer>
+      <Layer listening={false}>
+        <Group ref={overlayRef} name="overlay-world" clipX={0} clipY={0} clipWidth={geometry.width} clipHeight={geometry.height}>
+          {selectedRegions.map(region => <Group key={region}>
+            <Rect {...geometry.regions[region]} fill="rgba(185,207,138,0.035)" stroke="rgba(185,207,138,0.72)" strokeWidth={1} strokeScaleEnabled={false} dash={[7, 7]} />
+            <Text x={geometry.regions[region].x + 12} y={geometry.regions[region].y + 8} text={regionNames[region]} fontSize={17} fill="#b9cf8a" />
+          </Group>)}
+          <Group ref={selectionRef}>
+            {selectedLayers.map(layer => <Rect key={layer.id} id={`selection-${layer.id}`} name="selection-box" fill="rgba(16,20,18,0.08)" stroke="#b9cf8a" strokeWidth={1.5} strokeScaleEnabled={false} cornerRadius={6} />)}
+            <Rect name="selection-bounds" visible={false} stroke="#b9cf8a" strokeWidth={1} strokeScaleEnabled={false} dash={[6, 5]} />
+          </Group>
+          <Group ref={guidesRef}>
+            {(["x", "y"] as const).map(axis => <Group name={`guide-${axis}`} key={axis} visible={false}>
+              <Line strokeWidth={1} strokeScaleEnabled={false} dash={[7, 5]} />
+              <Text fontSize={15} padding={4} />
+            </Group>)}
+          </Group>
+        </Group>
+      </Layer>
+    </Stage>
+    {!image && <div className="canvas-preview-status" role="status">{error ? "相框预览生成失败，请重新选择照片" : "正在生成相框预览…"}</div>}
+    {image && error && <div className="canvas-preview-status" role="status">相框预览更新失败，请重新选择照片</div>}
+    {image && (photoError || photoLoading) && <div className="canvas-photo-status" role="status">{photoError ? "高清照片读取失败，当前显示缩略图；请确认原文件仍可访问" : "正在加载高清照片…"}</div>}
+    <span id={helpId} className="sr-only">Ctrl 加滚轮缩放，滚轮平移，空格加拖动或鼠标中键平移。Shift 点选可多选，Ctrl 拖动临时关闭吸附。可在右侧图层列表选择水印，聚焦画布后用方向键微调，Shift 加方向键移动十个单位，Escape 取消拖动。</span>
+  </div>;
+}));
 
-  function handlePointerMove(event: PointerEvent<SVGSVGElement>) {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    const layer = document.layers.find((item) => item.id === drag.layerId);
-    const point = clientPoint(event);
-    if (!layer || !point) return;
-    if (!drag.moved) {
-      if (Math.hypot(event.clientX - drag.startClient.x, event.clientY - drag.startClient.y) < 4) return;
-      drag.moved = true;
-      onDragStart();
-    }
-    const snapped = snapPoint(layer, {
-      x: drag.origin.x + point.x - drag.startPoint.x,
-      y: drag.origin.y + point.y - drag.startPoint.y,
-    });
-    const local = globalToRegion(snapped.point.x, snapped.point.y, layer.region, geometry);
-    setGuides(snapped.guides);
-    onLayerPreview(layer.id, local);
-  }
-
-  function finishDrag(event: PointerEvent<SVGSVGElement>) {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    dragRef.current = null;
-    try {
-      svgRef.current?.releasePointerCapture(event.pointerId);
-    } catch {
-      // Pointer capture may already be released if the window lost focus.
-    }
-    setGuides([]);
-    if (drag.moved) onDragEnd();
-  }
-
-  function nudgeLayer(event: KeyboardEvent<SVGGElement>, layer: WatermarkLayer) {
-    const directions: Record<string, [number, number]> = {
-      ArrowLeft: [-1, 0],
-      ArrowRight: [1, 0],
-      ArrowUp: [0, -1],
-      ArrowDown: [0, 1],
-    };
-    const direction = directions[event.key];
-    if (!direction) return;
-    event.preventDefault();
-    const step = event.shiftKey ? 10 : 1;
-    const bounds = geometry.regions[layer.region];
-    onDragStart();
-    onLayerPreview(layer.id, {
-      x: Math.max(0, Math.min(1, layer.x + direction[0] * step / Math.max(1, bounds.width))),
-      y: Math.max(0, Math.min(1, layer.y + direction[1] * step / Math.max(1, bounds.height))),
-    });
-    onDragEnd();
-  }
-
-  const selectedRegionVisible = selectedLayer && selectedLayer.region !== "canvas";
-
-  return (
-    <div className="canvas-viewport" onScroll={(event) => {
-      const viewport = event.currentTarget;
-      const applied = appliedScrollRef.current;
-      if (viewport.scrollLeft !== applied.left || viewport.scrollTop !== applied.top) {
-        lastWheelAnchorRef.current = null;
-        centerAnchorRef.current = captureAnchor();
-      }
-      appliedScrollRef.current = { left: viewport.scrollLeft, top: viewport.scrollTop };
-    }} ref={viewportRef}>
-      <div className="canvas-stage">
-        <div
-          className="preview-scale svg-preview"
-          style={{
-            "--preview-base-width": `${previewBaseWidth}px`,
-            "--preview-zoom": zoomScale,
-            width: `${previewBaseWidth * zoomScale}px`,
-            height: `${previewBaseHeight * zoomScale}px`,
-          } as CSSProperties}
-        >
-        <svg
-          ref={svgRef}
-          className="design-canvas"
-          viewBox={`0 0 ${geometry.width} ${geometry.height}`}
-          role="img"
-          aria-label={`${photo.fileName} 的相框设计画布`}
-          onPointerMove={handlePointerMove}
-          onPointerUp={finishDrag}
-          onPointerCancel={finishDrag}
-          onLostPointerCapture={finishDrag}
-          onPointerDown={(event) => {
-            if (event.target === event.currentTarget) onSelectLayer("");
-          }}
-        >
-          <defs>
-            <filter id="background-blur" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation={document.frame.blur} />
-              <feComponentTransfer>
-                <feFuncR type="linear" slope={document.frame.brightness / 100} />
-                <feFuncG type="linear" slope={document.frame.brightness / 100} />
-                <feFuncB type="linear" slope={document.frame.brightness / 100} />
-              </feComponentTransfer>
-            </filter>
-            <filter id="photo-shadow" x="-30%" y="-30%" width="160%" height="170%">
-              <feDropShadow
-                dx="0"
-                dy={document.frame.shadow * 0.28}
-                stdDeviation={document.frame.shadow * 0.42}
-                floodColor="#070909"
-                floodOpacity={Math.min(0.4, document.frame.shadow / 100)}
-              />
-            </filter>
-            <clipPath id="photo-clip">
-              <rect {...geometry.photo} rx={document.frame.radius * 2} />
-            </clipPath>
-            <clipPath id="canvas-clip">
-              <rect width={geometry.width} height={geometry.height} />
-            </clipPath>
-          </defs>
-
-          <PreviewBackdrop cacheKey={backdropKey} width={geometry.width} height={geometry.height}>
-          <rect width={geometry.width} height={geometry.height} fill={document.frame.color} />
-          {document.frame.type === "blur" && (
-            <g clipPath="url(#canvas-clip)">
-              <image
-                href={photo.thumbnailDataUrl}
-                x={-blurOverscan}
-                y={-blurOverscan}
-                width={geometry.width + blurOverscan * 2}
-                height={geometry.height + blurOverscan * 2}
-                preserveAspectRatio="xMidYMid slice"
-                filter="url(#background-blur)"
-              />
-              <rect width={geometry.width} height={geometry.height} fill="#101312" opacity="0.08" />
-            </g>
-          )}
-          <g filter={document.frame.shadow ? "url(#photo-shadow)" : undefined}>
-            <image
-              href={photo.thumbnailDataUrl}
-              {...geometry.photo}
-              preserveAspectRatio="none"
-              clipPath="url(#photo-clip)"
-            />
-          </g>
-          </PreviewBackdrop>
-
-          {selectedRegionVisible && (
-            <g className="selected-region-guide" aria-hidden="true">
-              <rect {...selectedBounds} />
-              <text x={selectedBounds.x + 12} y={selectedBounds.y + 24}>{regionNames[selectedRegion]}</text>
-            </g>
-          )}
-
-          {document.layers.filter((item) => item.visible && insideRegion(item, document)).map((item) => {
-            const position = layerPosition(item, geometry);
-            const text = resolveLayerText(item, photo);
-            const selected = item.id === selectedLayerId;
-            const width = Math.max(item.fontSize * 2.2, text.length * item.fontSize * 0.62 + 22);
-            return (
-              <g
-                key={item.id}
-                className={`watermark-layer ${selected ? "selected" : ""} ${text.startsWith("未读取到") ? "missing" : ""}`}
-                transform={`translate(${position.x} ${position.y}) rotate(${item.rotation})`}
-                role="button"
-                aria-label={`${item.name}：${text}`}
-                tabIndex={0}
-                onKeyDown={(event) => nudgeLayer(event, item)}
-                onPointerDown={(event) => {
-                  if (event.button !== 0 || !event.isPrimary || dragRef.current) return;
-                  const point = clientPoint(event);
-                  if (!point) return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  event.currentTarget.focus({ preventScroll: true });
-                  onSelectLayer(item.id);
-                  dragRef.current = {
-                    layerId: item.id,
-                    pointerId: event.pointerId,
-                    startClient: { x: event.clientX, y: event.clientY },
-                    startPoint: point,
-                    origin: position,
-                    moved: false,
-                  };
-                  svgRef.current?.setPointerCapture(event.pointerId);
-                }}
-              >
-                {selected && <rect className="selection-box" x={-width / 2} y={-item.fontSize * 0.82} width={width} height={item.fontSize * 1.64} rx="6" />}
-                <text
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fill={item.color}
-                  fillOpacity={item.opacity}
-                  fontFamily={item.fontFamily}
-                  fontSize={item.fontSize}
-                  fontWeight={item.fontWeight}
-                >
-                  {text}
-                </text>
-              </g>
-            );
-          })}
-
-          {guides.map((guide) => (
-            <g className={`snap-guide ${guide.tone}`} key={`${guide.axis}-${guide.value}-${guide.label}`} aria-hidden="true">
-              {guide.axis === "x" ? (
-                <line x1={guide.value} x2={guide.value} y1="0" y2={geometry.height} />
-              ) : (
-                <line x1="0" x2={geometry.width} y1={guide.value} y2={guide.value} />
-              )}
-              <rect
-                x={guide.axis === "x" ? Math.min(guide.value + 10, geometry.width - 220) : 12}
-                y={guide.axis === "y" ? Math.max(guide.value - 31, 6) : 10}
-                width="208"
-                height="26"
-                rx="6"
-              />
-              <text
-                x={guide.axis === "x" ? Math.min(guide.value + 20, geometry.width - 210) : 22}
-                y={guide.axis === "y" ? Math.max(guide.value - 13, 24) : 28}
-              >
-                {guide.label}
-              </text>
-            </g>
-          ))}
-        </svg>
-        </div>
-      </div>
-    </div>
-  );
+function Watermark({ layer, text, position, fontRevision, onSelect, onDragStart, onDragMove, onDragEnd }: {
+  layer: WatermarkLayer; text: string; position: Point; fontRevision: number; onSelect: (extend: boolean) => void;
+  onDragStart: (node: Konva.Group) => void; onDragMove: (node: Konva.Group, event: MouseEvent | TouchEvent) => void; onDragEnd: (node: Konva.Group) => void;
+}) {
+  const textRef = useRef<Konva.Text>(null);
+  const groupRef = useRef<Konva.Group>(null);
+  const hitRef = useRef<Konva.Rect>(null);
+  useLayoutEffect(() => {
+    const node = textRef.current;
+    if (!node) return;
+    // Re-measure loaded fonts, including CJK; never estimate with text.length.
+    node.fontFamily(layer.fontFamily);
+    node.offset({ x: node.width() / 2, y: node.height() / 2 });
+    hitRef.current?.setAttrs({ x: -node.width() / 2 - 8, y: -node.height() / 2 - 6, width: node.width() + 16, height: node.height() + 12 });
+  }, [text, layer.fontSize, layer.fontFamily, layer.fontWeight, fontRevision]);
+  return <Group ref={groupRef} id={layer.id} name="watermark-layer" {...position} rotation={layer.rotation} draggable dragDistance={4}
+    onMouseDown={event => { if (event.evt.button === 0) { onSelect(event.evt.shiftKey); if (event.evt.shiftKey) groupRef.current?.stopDrag(); } }} onTouchStart={() => onSelect(false)}
+    onMouseEnter={event => { event.target.getStage()!.container().style.cursor = "grab"; }}
+    onMouseLeave={event => { event.target.getStage()!.container().style.cursor = ""; }}
+    onDragStart={event => onDragStart(event.target as Konva.Group)}
+    onDragMove={event => onDragMove(event.target as Konva.Group, event.evt as MouseEvent | TouchEvent)}
+    onDragEnd={event => onDragEnd(event.target as Konva.Group)}>
+    <Rect ref={hitRef} fill="rgba(0,0,0,0)" />
+    <Text key={fontRevision} ref={textRef} text={text} fontFamily={layer.fontFamily} fontSize={layer.fontSize} fontStyle={String(layer.fontWeight)}
+      fill={layer.color} opacity={layer.opacity * (text.startsWith("未读取到") ? 0.55 : 1)} listening={false} />
+  </Group>;
 }

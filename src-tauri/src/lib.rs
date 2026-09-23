@@ -1,6 +1,6 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use exif::{In, Reader as ExifReader, Tag, Value};
-use image::{DynamicImage, GenericImageView, ImageReader, codecs::jpeg::JpegEncoder};
+use image::{DynamicImage, GenericImageView, codecs::jpeg::JpegEncoder};
 use serde::Serialize;
 use std::{
     collections::hash_map::DefaultHasher,
@@ -137,13 +137,7 @@ pub(crate) fn apply_orientation(image: DynamicImage, orientation: u32) -> Dynami
 
 fn inspect_image(path: PathBuf) -> Result<PhotoAsset, String> {
     let exif = read_exif(&path);
-    let image = ImageReader::open(&path)
-        .map_err(|error| format!("无法打开图片：{error}"))?
-        .with_guessed_format()
-        .map_err(|error| format!("无法识别图片格式：{error}"))?
-        .decode()
-        .map_err(|error| format!("无法解码图片：{error}"))?;
-    let image = apply_orientation(image, exif.orientation);
+    let image = DynamicImage::ImageRgba8(export::decode_color_managed(&path, exif.orientation)?);
     let (width, height) = image.dimensions();
     let thumbnail = image.thumbnail(720, 720);
     let mut bytes = Vec::new();
@@ -177,6 +171,46 @@ fn inspect_image(path: PathBuf) -> Result<PhotoAsset, String> {
             captured_at: exif.captured_at,
         },
     })
+}
+
+fn editor_photo(path: &Path) -> Result<String, String> {
+    let image = export::decode_color_managed(path, read_exif(path).orientation)?;
+    // A single active 4096px editing texture covers 300% zoom on typical HiDPI
+    // viewports. Export always reads the original, independently of this limit.
+    let image = DynamicImage::ImageRgba8(image);
+    let image = if image.width().max(image.height()) > 4096 {
+        image.resize(4096, 4096, image::imageops::FilterType::Lanczos3)
+    } else {
+        image
+    };
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    image
+        .write_to(&mut bytes, image::ImageFormat::Png)
+        .map_err(|error| format!("无法生成高清编辑图：{error}"))?;
+    Ok(format!(
+        "data:image/png;base64,{}",
+        STANDARD.encode(bytes.into_inner())
+    ))
+}
+
+#[tauri::command]
+async fn load_editor_photo(path: String) -> Result<String, String> {
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicU64, Ordering},
+    };
+    static DECODE: Mutex<()> = Mutex::new(());
+    static LATEST: AtomicU64 = AtomicU64::new(0);
+    let request = LATEST.fetch_add(1, Ordering::SeqCst) + 1;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = DECODE.lock().map_err(|_| "高清图片加载锁异常".to_owned())?;
+        if request != LATEST.load(Ordering::SeqCst) {
+            return Err("已取消过期的图片加载".to_owned());
+        }
+        editor_photo(Path::new(&path))
+    })
+    .await
+    .map_err(|error| format!("高清图片任务异常结束：{error}"))?
 }
 
 #[tauri::command]
@@ -217,6 +251,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             inspect_images,
             inspect_images_resilient,
+            load_editor_photo,
             export::export_images,
             export::cancel_export
         ])
@@ -227,6 +262,29 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn editor_photo_keeps_original_detail_and_alpha() {
+        let path =
+            std::env::temp_dir().join(format!("yingkuang-detail-{}.png", std::process::id()));
+        let source = image::RgbaImage::from_fn(3200, 200, |x, _| {
+            if x % 4 < 2 {
+                image::Rgba([0, 0, 0, 128])
+            } else {
+                image::Rgba([255, 255, 255, 255])
+            }
+        });
+        source.save(&path).unwrap();
+        let encoded = editor_photo(&path).unwrap();
+        let decoded =
+            image::load_from_memory(&STANDARD.decode(encoded.split_once(',').unwrap().1).unwrap())
+                .unwrap()
+                .into_rgba8();
+        assert_eq!(decoded.dimensions(), source.dimensions());
+        assert_eq!(decoded.get_pixel(1600, 100), source.get_pixel(1600, 100));
+        assert_eq!(decoded.get_pixel(1602, 100), source.get_pixel(1602, 100));
+        std::fs::remove_file(path).unwrap();
+    }
 
     #[test]
     #[ignore = "local photo performance check; run explicitly with --ignored --nocapture"]
