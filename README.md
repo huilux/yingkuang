@@ -26,6 +26,8 @@ npm install
 npm run tauri dev
 ```
 
+`npm run tauri` 的启动入口会给子进程补充 `localhost`、`127.0.0.1` 和 `::1` 的代理例外，并保留现有代理及例外列表，避免 WebKit 把本地 Vite 请求送进代理后白屏。不会修改系统代理或应用存储地址。直接运行 `cargo run` 或 Tauri CLI 时需自行确保回环地址不走代理。
+
 常用检查：
 
 ```bash

@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "test:camera": "node --test scripts/camera-regression.test.mjs",
+    "test:selection": "node --test scripts/selection-regression.test.mjs",
+    "tauri": "node scripts/tauri.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
