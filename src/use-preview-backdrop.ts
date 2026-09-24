@@ -16,11 +16,11 @@ async function embeddedSource(source: string, signal: AbortSignal): Promise<stri
   });
 }
 
-export async function rasterize(source: string, frame: FrameSettings, geometry: CanvasGeometry, signal: AbortSignal, includePhoto = true) {
+export async function rasterize(source: string, frame: FrameSettings, geometry: CanvasGeometry, signal: AbortSignal, includePhoto = true, maxDimension = 1600) {
   const href = escapeXml(await embeddedSource(source, signal));
   if (signal.aborted) return null;
   const { width, height, photo } = geometry;
-  const scale = Math.min(1, 1600 / Math.max(width, height));
+  const scale = Math.min(1, maxDimension / Math.max(width, height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(width * scale));
   canvas.height = Math.max(1, Math.round(height * scale));

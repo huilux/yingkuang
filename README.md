@@ -15,6 +15,10 @@
 
 正式工程已经具备第一版主流程：本地 JPEG/PNG 导入、EXIF 拍摄参数读取、方向归一化、上次会话恢复、可拖拽水印画布、居中与三等分吸附、四边参数区、模板更新与另存、原图级顺序批量导出、取消与失败重试。导出支持 JPEG/PNG、尺寸与质量、基础元数据、GPS 开关和 sRGB 色彩转换。
 
+照片批次支持全选、反选、取消选择和移除已选。左侧常驻「新照片使用模板」选择器；新导入照片会套用当前默认模板，已有照片的编辑结果保持独立。顶部「模板库」可在无照片时管理模板，包括设为默认、复制、重命名自定义模板、删除、重置内置模板，以及 JSON 备份导入和导出。导入备份时须对每个同名或同 ID 的模板逐项选择覆盖、保留副本或跳过。模板预览显示相框和水印的实际套用效果。
+
+工作区用左侧纵向照片列表管理勾选、移除和批量套用；中央保留完整画布；右侧按「模板」「相框」「水印」分开套用样式、微调相框和编辑文字图层。照片只在左侧列出一次，画布下方不再重复显示缩略条。
+
 当前自动化验证覆盖真实 3000 万像素 JPEG 的导入、EXIF、带文字相框导出和 ICC 输出。200 张混合批次与 9600 万像素原尺寸输出仍属于交付前性能验收项，见 [开发状态](docs/development-status.md)。
 
 ## 本地开发
@@ -34,6 +38,7 @@ npm run tauri dev
 npm run build
 npm run test:camera
 npm run test:selection
+npm run test:templates
 cargo test --manifest-path src-tauri/Cargo.toml --lib
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```

@@ -1,0 +1,71 @@
+import { useEffect, useState } from "react";
+import { calculateGeometry, layerPosition, resolveLayerText } from "./editor-model";
+import { isVisible } from "./canvas-camera";
+import { rasterize } from "./use-preview-backdrop";
+import type { PhotoAsset, TemplateRecord } from "./types";
+
+const sampleMetadata = {
+  camera: "CAMERA X", lens: "50mm F1.8", focalLength: "50mm", aperture: "f/2.8",
+  shutter: "1/250s", iso: "ISO100", capturedAt: "2026:08:22",
+};
+
+async function previewImage(template: TemplateRecord, activePhoto: PhotoAsset | undefined, signal: AbortSignal) {
+  const source = activePhoto?.thumbnailDataUrl ?? template.cover;
+  const sourceImage = new Image();
+  sourceImage.src = source;
+  await sourceImage.decode();
+  if (signal.aborted) return null;
+  const portraitOnly = !activePhoto && !template.layouts.landscape && !!template.layouts.portrait;
+  const width = portraitOnly ? 1000 : sourceImage.naturalWidth;
+  const height = portraitOnly ? 1500 : sourceImage.naturalHeight;
+  const photo: PhotoAsset = activePhoto ?? {
+    id: "template-preview", path: "", fileName: "预览照片", width, height,
+    megapixels: width * height / 1_000_000, thumbnailDataUrl: source, metadata: sampleMetadata,
+  };
+  const document = template.layouts[width >= height ? "landscape" : "portrait"] ?? template.layouts.landscape ?? template.layouts.portrait;
+  if (!document) return null;
+  const geometry = calculateGeometry(photo, document);
+  const canvas = await rasterize(source, document.frame, geometry, signal, true, 560);
+  if (!canvas || signal.aborted) return null;
+  await window.document.fonts.ready;
+  if (signal.aborted) return null;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.save();
+  context.scale(canvas.width / geometry.width, canvas.height / geometry.height);
+  context.beginPath();
+  context.rect(0, 0, geometry.width, geometry.height);
+  context.clip();
+  for (const layer of document.layers) {
+    if (!isVisible(layer, document.regions)) continue;
+    const label = resolveLayerText(layer, photo);
+    const position = layerPosition(layer, geometry);
+    context.save();
+    context.translate(position.x, position.y);
+    context.rotate(layer.rotation * Math.PI / 180);
+    context.font = `${layer.fontWeight} ${layer.fontSize}px ${layer.fontFamily}`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillStyle = layer.color;
+    context.globalAlpha = layer.opacity * (label.startsWith("未读取到") ? 0.55 : 1);
+    context.fillText(label, 0, 0);
+    context.restore();
+  }
+  context.restore();
+  return canvas.toDataURL("image/jpeg", 0.86);
+}
+
+export function TemplatePreview({ template, photo, className = "" }: { template: TemplateRecord; photo?: PhotoAsset; className?: string }) {
+  const [image, setImage] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    setImage("");
+    void previewImage(template, photo, controller.signal).then((result) => {
+      if (result && !controller.signal.aborted) setImage(result);
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [template, photo]);
+  return <span className={`template-preview ${className}`}>
+    {image ? <img src={image} alt="" /> : <span className="template-preview-loading" aria-hidden="true" />}
+  </span>;
+}

@@ -54,7 +54,7 @@ export function LayerInspector({ document: design, photo, selectedIds, onSelect,
     setReference("region");
   }
 
-  return <div className="inspector-scroll">
+  return <div className="inspector-scroll" id="panel-watermark" role="tabpanel" aria-labelledby="tab-watermark">
     <section className="inspector-section layer-section">
       <div className="section-heading layer-heading"><strong>水印图层</strong><div className="layer-add-wrap"><button type="button" onClick={() => setShowMenu(value => !value)}><Plus /> 添加参数</button>{showMenu && <div className="layer-add-menu">{metadataOptions.map(option => <button type="button" key={option.source} onClick={() => { onAdd(option.source); setShowMenu(false); }}>{option.label}</button>)}</div>}</div></div>
       <div className="selection-toolbar"><span>Shift 点选多选{layers.length > 0 ? ` · 已选 ${layers.length} 项` : ""}</span><button type="button" onClick={() => onSelectionChange(design.layers.filter(layer => isVisible(layer, design.regions)).map(layer => layer.id))}>全选</button><button type="button" disabled={!layers.length} onClick={() => onSelectionChange([])}>清除</button></div>

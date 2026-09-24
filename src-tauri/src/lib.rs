@@ -6,7 +6,7 @@ use std::{
     collections::hash_map::DefaultHasher,
     fs::{self, File},
     hash::{Hash, Hasher},
-    io::BufReader,
+    io::{BufReader, Write},
     path::{Path, PathBuf},
 };
 
@@ -326,6 +326,40 @@ async fn list_image_files(directory: String) -> Result<Vec<String>, String> {
         .map_err(|error| format!("读取文件夹任务异常结束：{error}"))?
 }
 
+#[tauri::command]
+async fn read_template_backup(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let size = fs::metadata(&path)
+            .map_err(|error| format!("无法读取备份文件：{error}"))?
+            .len();
+        if size > 32 * 1024 * 1024 {
+            return Err("模板备份文件超过 32 MB".to_owned());
+        }
+        fs::read_to_string(path).map_err(|error| format!("无法读取备份内容：{error}"))
+    })
+    .await
+    .map_err(|error| format!("读取备份任务异常结束：{error}"))?
+}
+
+#[tauri::command]
+async fn write_template_backup(path: String, content: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let destination = Path::new(&path);
+        let parent = destination.parent().ok_or("无法确定备份文件夹")?;
+        let mut temporary = tempfile::NamedTempFile::new_in(parent)
+            .map_err(|error| format!("无法创建备份临时文件：{error}"))?;
+        temporary
+            .write_all(content.as_bytes())
+            .map_err(|error| format!("无法写入备份：{error}"))?;
+        temporary
+            .persist(destination)
+            .map_err(|error| format!("无法保存备份：{}", error.error))?;
+        Ok(())
+    })
+    .await
+    .map_err(|error| format!("保存备份任务异常结束：{error}"))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -335,6 +369,8 @@ pub fn run() {
             inspect_images,
             inspect_images_resilient,
             list_image_files,
+            read_template_backup,
+            write_template_backup,
             load_editor_photo,
             export::export_images,
             export::cancel_export

@@ -40,7 +40,7 @@
     const { default: App } = await import(`/src/App.tsx?current-canvas-batch=${Date.now()}`);
     root.render(React.createElement(React.StrictMode, null, React.createElement(App)));
     await t.waitFor(() => host.querySelectorAll('.photo-row').length === 2, 'Two photos were not restored');
-    const action = [...host.querySelectorAll('button')].find(button => button.textContent.includes('应用当前'));
+    const action = [...host.querySelectorAll('button')].find(button => button.textContent.includes('将当前画布应用'));
     t.assert(action, 'Current-canvas batch action is missing');
     action.click();
     await t.frame();

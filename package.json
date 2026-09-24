@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test:camera": "node --test scripts/camera-regression.test.mjs",
     "test:selection": "node --test scripts/selection-regression.test.mjs",
+    "test:templates": "node --test scripts/template-library.test.mjs",
     "tauri": "node scripts/tauri.mjs"
   },
   "dependencies": {
