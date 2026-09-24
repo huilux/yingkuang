@@ -1,0 +1,939 @@
+{
+  "format": "yingkuang-builtin-templates",
+  "version": 1,
+  "defaultTemplateId": "wide-float",
+  "templates": [
+    {
+      "id": "blur-bottom",
+      "name": "模糊-图中文字",
+      "description": "模糊背景，双行参数",
+      "builtIn": true,
+      "cover": "/demo.jpg",
+      "layouts": {
+        "landscape": {
+          "version": 1,
+          "frame": {
+            "type": "blur",
+            "color": "#f4f4f1",
+            "blur": 32,
+            "brightness": 75,
+            "paddingX": 4,
+            "paddingY": 4,
+            "radius": 10,
+            "shadow": 60
+          },
+          "regions": {
+            "top": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "bottom": {
+              "enabled": false,
+              "extra": 13,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "left": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": -90
+            },
+            "right": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 90
+            }
+          },
+          "layers": [
+            {
+              "id": "camera",
+              "name": "相机型号",
+              "source": "camera",
+              "customValue": "",
+              "region": "canvas",
+              "x": 0.5,
+              "y": 0.8854525418044176,
+              "fontFamily": "Noto Serif CJK SC, serif",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "focal",
+              "name": "焦距",
+              "source": "focalLength",
+              "customValue": "",
+              "region": "canvas",
+              "x": 0.31060785694401233,
+              "y": 0.9279862009486849,
+              "fontFamily": "monospace",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "aperture",
+              "name": "光圈",
+              "source": "aperture",
+              "customValue": "",
+              "region": "canvas",
+              "x": 0.37112671328213276,
+              "y": 0.9279862009486849,
+              "fontFamily": "monospace",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "shutter",
+              "name": "快门",
+              "source": "shutter",
+              "customValue": "",
+              "region": "canvas",
+              "x": 0.43924050632911393,
+              "y": 0.9279862009486849,
+              "fontFamily": "monospace",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "iso",
+              "name": "ISO",
+              "source": "iso",
+              "customValue": "",
+              "region": "canvas",
+              "x": 0.5111517677305255,
+              "y": 0.9279862009486849,
+              "fontFamily": "monospace",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "date",
+              "name": "拍摄时间",
+              "source": "capturedAt",
+              "customValue": "",
+              "region": "canvas",
+              "x": 0.632430117739532,
+              "y": 0.9279862009486849,
+              "fontFamily": "monospace",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            }
+          ]
+        },
+        "portrait": {
+          "version": 1,
+          "frame": {
+            "type": "blur",
+            "color": "#f4f4f1",
+            "blur": 32,
+            "brightness": 75,
+            "paddingX": 4,
+            "paddingY": 4,
+            "radius": 10,
+            "shadow": 32
+          },
+          "regions": {
+            "top": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "bottom": {
+              "enabled": true,
+              "extra": 13,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "left": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": -90
+            },
+            "right": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 90
+            }
+          },
+          "layers": [
+            {
+              "id": "brand",
+              "name": "品牌文字",
+              "source": "custom",
+              "customValue": "LUMIX",
+              "region": "bottom",
+              "x": 0.13,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 36,
+              "fontWeight": 700,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "camera",
+              "name": "相机型号",
+              "source": "camera",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.13,
+              "y": 0.69,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 16,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "focal",
+              "name": "焦距",
+              "source": "focalLength",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.57,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 18,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "aperture",
+              "name": "光圈",
+              "source": "aperture",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.67,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 18,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "shutter",
+              "name": "快门",
+              "source": "shutter",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.78,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 18,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "iso",
+              "name": "ISO",
+              "source": "iso",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.88,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 18,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "date",
+              "name": "拍摄时间",
+              "source": "capturedAt",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.73,
+              "y": 0.69,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 14,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            }
+          ]
+        }
+      },
+      "updatedAt": 0
+    },
+    {
+      "id": "wide-float",
+      "name": "模糊-底部文字",
+      "description": "宽留白，柔和阴影",
+      "builtIn": true,
+      "cover": "/demo.jpg",
+      "layouts": {
+        "landscape": {
+          "version": 1,
+          "frame": {
+            "type": "blur",
+            "color": "#f4f4f1",
+            "blur": 30,
+            "brightness": 55,
+            "paddingX": 8,
+            "paddingY": 5,
+            "radius": 12,
+            "shadow": 64
+          },
+          "regions": {
+            "top": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "bottom": {
+              "enabled": true,
+              "extra": 10,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "left": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": -90
+            },
+            "right": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 90
+            }
+          },
+          "layers": [
+            {
+              "id": "brand",
+              "name": "品牌文字",
+              "source": "custom",
+              "customValue": "LUMIX",
+              "region": "bottom",
+              "x": 0.4621328843889402,
+              "y": 0.33,
+              "fontFamily": "Noto Serif CJK SC, serif",
+              "fontSize": 24,
+              "fontWeight": 400,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "camera",
+              "name": "相机型号",
+              "source": "camera",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.5,
+              "y": 0.3333333333333333,
+              "fontFamily": "Noto Serif CJK SC, serif",
+              "fontSize": 24,
+              "fontWeight": 400,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "focal",
+              "name": "焦距",
+              "source": "focalLength",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.34525876575609654,
+              "y": 0.6604166666666667,
+              "fontFamily": "monospace",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "aperture",
+              "name": "光圈",
+              "source": "aperture",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.3900992623961205,
+              "y": 0.6729166666666667,
+              "fontFamily": "monospace",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "shutter",
+              "name": "快门",
+              "source": "shutter",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.44216867469879517,
+              "y": 0.6729166666666667,
+              "fontFamily": "monospace",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "iso",
+              "name": "ISO",
+              "source": "iso",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.4978525448327951,
+              "y": 0.6729166666666667,
+              "fontFamily": "monospace",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "date",
+              "name": "拍摄时间",
+              "source": "capturedAt",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.6005243667740239,
+              "y": 0.6729166666666667,
+              "fontFamily": "monospace",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            }
+          ]
+        },
+        "portrait": {
+          "version": 1,
+          "frame": {
+            "type": "blur",
+            "color": "#f4f4f1",
+            "blur": 32,
+            "brightness": 75,
+            "paddingX": 8,
+            "paddingY": 7,
+            "radius": 18,
+            "shadow": 44
+          },
+          "regions": {
+            "top": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "bottom": {
+              "enabled": true,
+              "extra": 10,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "left": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": -90
+            },
+            "right": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 90
+            }
+          },
+          "layers": [
+            {
+              "id": "brand",
+              "name": "品牌文字",
+              "source": "custom",
+              "customValue": "LUMIX",
+              "region": "bottom",
+              "x": 0.13,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 36,
+              "fontWeight": 700,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "camera",
+              "name": "相机型号",
+              "source": "camera",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.13,
+              "y": 0.68,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 16,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "focal",
+              "name": "焦距",
+              "source": "focalLength",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.57,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 18,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "aperture",
+              "name": "光圈",
+              "source": "aperture",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.67,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 18,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "shutter",
+              "name": "快门",
+              "source": "shutter",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.78,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 18,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "iso",
+              "name": "ISO",
+              "source": "iso",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.88,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 18,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "date",
+              "name": "拍摄时间",
+              "source": "capturedAt",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.73,
+              "y": 0.68,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 14,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            }
+          ]
+        }
+      },
+      "updatedAt": 0
+    },
+    {
+      "id": "solid-white",
+      "name": "纯白相框",
+      "description": "白色背景，深色文字",
+      "builtIn": true,
+      "cover": "/demo.jpg",
+      "layouts": {
+        "landscape": {
+          "version": 1,
+          "frame": {
+            "type": "solid",
+            "color": "#f7f7f4",
+            "blur": 32,
+            "brightness": 75,
+            "paddingX": 4,
+            "paddingY": 4,
+            "radius": 0,
+            "shadow": 0
+          },
+          "regions": {
+            "top": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "bottom": {
+              "enabled": true,
+              "extra": 4,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "left": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": -90
+            },
+            "right": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 90
+            }
+          },
+          "layers": [
+            {
+              "id": "brand",
+              "name": "品牌文字",
+              "source": "custom",
+              "customValue": "LUMIX",
+              "region": "bottom",
+              "x": 0.12999999999999998,
+              "y": 0.3400000000000011,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 36,
+              "fontWeight": 700,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "camera",
+              "name": "相机型号",
+              "source": "camera",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.08284145491371094,
+              "y": 0.4526470588235297,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 16,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "focal",
+              "name": "焦距",
+              "source": "focalLength",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.1932718166920509,
+              "y": 0.49749999999999944,
+              "fontFamily": "monospace",
+              "fontSize": 32,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "aperture",
+              "name": "光圈",
+              "source": "aperture",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.30106628809286085,
+              "y": 0.49749999999999944,
+              "fontFamily": "monospace",
+              "fontSize": 32,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "shutter",
+              "name": "快门",
+              "source": "shutter",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.4189873417721519,
+              "y": 0.49749999999999944,
+              "fontFamily": "monospace",
+              "fontSize": 32,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "iso",
+              "name": "ISO",
+              "source": "iso",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.5419716865906833,
+              "y": 0.49749999999999944,
+              "fontFamily": "monospace",
+              "fontSize": 32,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "date",
+              "name": "拍摄时间",
+              "source": "capturedAt",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.7307788162193415,
+              "y": 0.5025000000000006,
+              "fontFamily": "monospace",
+              "fontSize": 32,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            }
+          ]
+        },
+        "portrait": {
+          "version": 1,
+          "frame": {
+            "type": "solid",
+            "color": "#f7f7f4",
+            "blur": 32,
+            "brightness": 75,
+            "paddingX": 4,
+            "paddingY": 4,
+            "radius": 0,
+            "shadow": 0
+          },
+          "regions": {
+            "top": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "bottom": {
+              "enabled": true,
+              "extra": 13,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "left": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": -90
+            },
+            "right": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 90
+            }
+          },
+          "layers": [
+            {
+              "id": "brand",
+              "name": "品牌文字",
+              "source": "custom",
+              "customValue": "LUMIX",
+              "region": "bottom",
+              "x": 0.13,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 36,
+              "fontWeight": 700,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "camera",
+              "name": "相机型号",
+              "source": "camera",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.13,
+              "y": 0.69,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 16,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "focal",
+              "name": "焦距",
+              "source": "focalLength",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.57,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 18,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "aperture",
+              "name": "光圈",
+              "source": "aperture",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.67,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 18,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "shutter",
+              "name": "快门",
+              "source": "shutter",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.78,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 18,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "iso",
+              "name": "ISO",
+              "source": "iso",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.88,
+              "y": 0.36,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 18,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "date",
+              "name": "拍摄时间",
+              "source": "capturedAt",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.73,
+              "y": 0.69,
+              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontSize": 14,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            }
+          ]
+        }
+      },
+      "updatedAt": 0
+    }
+  ]
+}

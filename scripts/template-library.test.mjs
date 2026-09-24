@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { builtInTemplates } from '../src/editor-model.ts';
+import catalogSource from '../src/data/builtin-templates.json' with { type: 'json' };
+import { builtInTemplates, createDefaultDocument } from '../src/editor-model.ts';
+import { builtInDefaultTemplateId, builtInTemplateChanges, isBuiltInModified, parseBuiltInCatalog, serializeBuiltInCatalog } from '../src/builtin-template-catalog.ts';
 import {
   documentFromTemplate, findTemplateConflict, importTemplates,
-  parseTemplateBackup, serializeTemplateBackup,
+  parseTemplateBackup, readTemplates, serializeTemplateBackup, serializeUserTemplates, templatesKey,
 } from '../src/template-library.ts';
 
 const builtIns = builtInTemplates();
@@ -11,6 +13,92 @@ const custom = {
   ...structuredClone(builtIns[0]),
   id: 'custom-one', name: '我的相框', builtIn: false,
 };
+
+test('project JSON supplies built-in templates and the default editor layout', () => {
+  assert.equal(parseBuiltInCatalog(catalogSource).defaultTemplateId, builtInDefaultTemplateId());
+  assert.deepEqual(builtInTemplates(), catalogSource.templates);
+  const defaultTemplate = builtIns.find((template) => template.id === catalogSource.defaultTemplateId);
+  assert.deepEqual(createDefaultDocument(), defaultTemplate.layouts.landscape ?? defaultTemplate.layouts.portrait);
+  const changedSource = structuredClone(catalogSource);
+  changedSource.templates[0].layouts.landscape.frame.paddingX += 3;
+  assert.equal(parseBuiltInCatalog(changedSource).templates[0].layouts.landscape.frame.paddingX, changedSource.templates[0].layouts.landscape.frame.paddingX);
+  changedSource.defaultTemplateId = 'missing';
+  assert.throws(() => parseBuiltInCatalog(changedSource), /默认模板/);
+});
+
+test('a full template backup explains why it cannot replace the published catalog', () => {
+  const backup = JSON.parse(serializeTemplateBackup([...builtIns, custom], builtIns[0].id));
+  assert.throws(() => parseBuiltInCatalog(backup), /导出备份.*导出内置文件/);
+});
+
+test('published catalog exports edited built-ins without local photo covers', () => {
+  const edited = structuredClone(builtIns);
+  edited[0].name = '新的出厂模板';
+  edited[0].cover = 'data:image/png;base64,aGVsbG8=';
+  edited[0].layouts.landscape.frame.paddingX += 4;
+  const exported = parseBuiltInCatalog(JSON.parse(serializeBuiltInCatalog([...edited, custom], edited[0].id)));
+  assert.equal(exported.templates.length, builtIns.length);
+  assert.equal(exported.templates[0].name, '新的出厂模板');
+  assert.equal(exported.templates[0].cover, builtIns[0].cover);
+  assert.equal(exported.templates[0].layouts.landscape.frame.paddingX, edited[0].layouts.landscape.frame.paddingX);
+  assert.equal(exported.templates[0].updatedAt, 0);
+  assert.throws(() => serializeBuiltInCatalog(edited, custom.id), /内置模板/);
+});
+
+test('built-in differences identify changed values by orientation and layer without exposing image data', () => {
+  const edited = structuredClone(builtIns[0]);
+  edited.updatedAt = Date.now();
+  assert.deepEqual(builtInTemplateChanges(edited), []);
+  edited.name = '我的版本';
+  edited.cover = 'data:image/png;base64,aGVsbG8=';
+  edited.layouts.landscape.frame.paddingX += 2;
+  edited.layouts.landscape.regions.top.enabled = true;
+  edited.layouts.landscape.layers.reverse();
+  edited.layouts.portrait.layers[0].fontSize += 4;
+  edited.layouts.portrait.layers.push({ ...edited.layouts.portrait.layers[0], id: 'new-layer', name: '新图层' });
+  const changes = builtInTemplateChanges(edited);
+  assert.equal(isBuiltInModified(edited), true);
+  assert.ok(changes.some((change) => change.group === '基本信息' && change.field === '模板名称' && change.localValue === '我的版本'));
+  assert.ok(changes.some((change) => change.group === '横图 · 相框' && change.field === '左右留白' && change.builtInValue === '4' && change.localValue === '6'));
+  assert.ok(changes.some((change) => change.group === '横图 · 顶部区域' && change.field === '启用' && change.localValue === '开启'));
+  assert.ok(changes.some((change) => change.group === '横图 · 水印图层' && change.field === '图层顺序'));
+  assert.ok(changes.some((change) => change.group.startsWith('竖图 · 水印「') && change.field === '字号'));
+  assert.ok(changes.some((change) => change.group === '竖图 · 水印图层' && change.field === '「新图层」' && change.localValue === '已添加'));
+  assert.ok(changes.some((change) => change.field === '预览封面' && change.localValue === '本机照片封面'));
+  assert.equal(JSON.stringify(changes).includes('aGVsbG8='), false);
+
+  edited.layouts.portrait = undefined;
+  assert.ok(builtInTemplateChanges(edited).some((change) => change.group === '竖图布局' && change.localValue === '无'));
+});
+
+test('local storage preserves only changed built-ins and migrates untouched legacy snapshots', () => {
+  const values = new Map();
+  const previousStorage = globalThis.localStorage;
+  globalThis.localStorage = { getItem: (key) => values.get(key) ?? null };
+  try {
+    const edited = structuredClone(builtIns[0]);
+    edited.name = '本机修改';
+    edited.updatedAt = Date.now();
+    const serialized = JSON.parse(serializeUserTemplates([edited, ...builtIns.slice(1), custom]));
+    assert.deepEqual(serialized.overrides.map((template) => template.id), [edited.id]);
+    assert.deepEqual(serialized.custom.map((template) => template.id), [custom.id]);
+    values.set(templatesKey, JSON.stringify(serialized));
+    assert.equal(readTemplates()[0].name, '本机修改');
+
+    values.delete(templatesKey);
+    const oldSnapshot = structuredClone(builtIns);
+    oldSnapshot[1].name = '旧版本中的修改';
+    oldSnapshot[1].updatedAt = Date.now();
+    values.set('yingkuang-templates-v1', JSON.stringify([...oldSnapshot, custom]));
+    const migrated = readTemplates();
+    assert.deepEqual(migrated[0], builtIns[0]);
+    assert.equal(migrated[1].name, '旧版本中的修改');
+    assert.equal(migrated.at(-1).id, custom.id);
+  } finally {
+    if (previousStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previousStorage;
+  }
+});
 
 test('backup round trip preserves layouts and selected default', () => {
   const backup = parseTemplateBackup(serializeTemplateBackup([...builtIns, custom], custom.id));

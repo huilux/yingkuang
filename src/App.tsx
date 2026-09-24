@@ -25,6 +25,7 @@ import {
 import { EditorWorkspace } from "./EditorWorkspace";
 import { TemplateManager } from "./TemplateManager";
 import { TemplatePreview } from "./TemplatePreview";
+import { builtInDefaultTemplateId } from "./builtin-template-catalog";
 import type { EditorCanvasHandle } from "./EditorCanvas";
 import { LayerInspector } from "./LayerInspector";
 import { SliderRow, Segmented } from "./EditorControls";
@@ -39,7 +40,7 @@ import {
   nextLayer,
   photoOrientation,
 } from "./editor-model";
-import { defaultTemplateKey, documentFromTemplate, importTemplates, readDefaultTemplateId, readTemplates, templatesKey, type ImportDecision } from "./template-library";
+import { defaultTemplateKey, documentFromTemplate, importTemplates, readDefaultTemplateId, readTemplates, serializeUserTemplates, templatesKey, type ImportDecision } from "./template-library";
 import type {
   EditorDocument,
   ExportSettings,
@@ -146,7 +147,7 @@ function App() {
   const [documents, setDocuments] = useState<Record<string, EditorDocument>>(initialDocuments);
   const [templates, setTemplates] = useState<TemplateRecord[]>(readTemplates);
   const [defaultTemplateId, setDefaultTemplateId] = useState(() => readDefaultTemplateId(readTemplates()));
-  const [templateByPhoto, setTemplateByPhoto] = useState<Record<string, string>>(isNative ? {} : { [demoPhoto.id]: "blur-bottom" });
+  const [templateByPhoto, setTemplateByPhoto] = useState<Record<string, string>>(isNative ? {} : { [demoPhoto.id]: builtInDefaultTemplateId() });
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
   const editorRef = useRef<EditorCanvasHandle>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
@@ -178,7 +179,7 @@ function App() {
   const canRedo = redoStack.current.length > 0 && historyRevision >= 0;
 
   useEffect(() => {
-    try { localStorage.setItem(templatesKey, JSON.stringify(templates)); }
+    try { localStorage.setItem(templatesKey, serializeUserTemplates(templates)); }
     catch { setMessage("模板库保存失败：本地存储空间不足，请先导出备份"); }
   }, [templates]);
 
@@ -607,7 +608,7 @@ function App() {
 
   function deleteTemplate(id: string) {
     setTemplates((current) => current.filter((template) => template.id !== id));
-    if (defaultTemplateId === id) setDefaultTemplateId("blur-bottom");
+    if (defaultTemplateId === id) setDefaultTemplateId(builtInDefaultTemplateId());
     setTemplateByPhoto((current) => Object.fromEntries(Object.entries(current).filter(([, templateId]) => templateId !== id)));
     setMessage("已删除模板，已套用到照片的内容保持不变");
   }

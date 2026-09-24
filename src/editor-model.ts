@@ -4,9 +4,11 @@ import type {
   MetadataKey,
   PhotoAsset,
   Rect,
-  TemplateRecord,
   WatermarkLayer,
 } from "./types";
+import { builtInDefaultTemplateId, builtInTemplates } from "./builtin-template-catalog.ts";
+
+export { builtInTemplates };
 
 export const metadataOptions: Array<{ source: MetadataKey | "custom"; label: string }> = [
   { source: "camera", label: "相机型号" },
@@ -18,13 +20,6 @@ export const metadataOptions: Array<{ source: MetadataKey | "custom"; label: str
   { source: "capturedAt", label: "拍摄时间" },
   { source: "custom", label: "自定义文字" },
 ];
-
-const region = (enabled: boolean, extra: number, direction: 0 | 90 | -90 = 0) => ({
-  enabled,
-  extra,
-  safePadding: 2,
-  direction,
-});
 
 function layer(
   id: string,
@@ -54,99 +49,14 @@ function layer(
 }
 
 export function createDefaultDocument(): EditorDocument {
-  return {
-    version: 1,
-    frame: {
-      type: "blur",
-      color: "#f4f4f1",
-      blur: 32,
-      brightness: 75,
-      paddingX: 4,
-      paddingY: 4,
-      radius: 10,
-      shadow: 32,
-    },
-    regions: {
-      top: region(false, 0),
-      bottom: region(true, 13),
-      left: region(false, 0, -90),
-      right: region(false, 0, 90),
-    },
-    layers: [
-      layer("brand", "品牌文字", "custom", 0.13, 0.36, {
-        customValue: "LUMIX",
-        fontSize: 36,
-        fontWeight: 700,
-      }),
-      layer("camera", "相机型号", "camera", 0.13, 0.69, { fontSize: 16 }),
-      layer("focal", "焦距", "focalLength", 0.57, 0.36, { fontSize: 18 }),
-      layer("aperture", "光圈", "aperture", 0.67, 0.36, { fontSize: 18 }),
-      layer("shutter", "快门", "shutter", 0.78, 0.36, { fontSize: 18 }),
-      layer("iso", "ISO", "iso", 0.88, 0.36, { fontSize: 18 }),
-      layer("date", "拍摄时间", "capturedAt", 0.73, 0.69, { fontSize: 14 }),
-    ],
-  };
-}
-
-function createWideDocument(): EditorDocument {
-  const document = createDefaultDocument();
-  document.frame.paddingX = 8;
-  document.frame.paddingY = 7;
-  document.frame.radius = 18;
-  document.frame.shadow = 44;
-  document.regions.bottom.extra = 10;
-  document.layers = document.layers.map((item) => ({
-    ...item,
-    y: item.id === "camera" || item.id === "date" ? 0.68 : 0.36,
-  }));
-  return document;
-}
-
-function createSolidDocument(): EditorDocument {
-  const document = createDefaultDocument();
-  document.frame.type = "solid";
-  document.frame.color = "#f7f7f4";
-  document.frame.radius = 0;
-  document.frame.shadow = 0;
-  document.layers = document.layers.map((item) => ({ ...item, color: "#202522" }));
-  return document;
+  const template = builtInTemplates().find((item) => item.id === builtInDefaultTemplateId());
+  const layout = template?.layouts.landscape ?? template?.layouts.portrait;
+  if (!layout) throw new Error("默认内置模板缺少可用布局");
+  return cloneDocument(layout);
 }
 
 export function cloneDocument(document: EditorDocument): EditorDocument {
   return structuredClone(document);
-}
-
-export function builtInTemplates(): TemplateRecord[] {
-  const now = 0;
-  return [
-    {
-      id: "blur-bottom",
-      name: "底部信息栏",
-      description: "模糊背景，双行参数",
-      builtIn: true,
-      cover: "/demo.jpg",
-      layouts: { landscape: createDefaultDocument(), portrait: createDefaultDocument() },
-      updatedAt: now,
-    },
-    {
-      id: "wide-float",
-      name: "宽边悬浮",
-      description: "宽留白，柔和阴影",
-      builtIn: true,
-      cover: "/demo.jpg",
-      layouts: { landscape: createWideDocument(), portrait: createWideDocument() },
-      updatedAt: now,
-    },
-    {
-      id: "solid-white",
-      name: "纯白相框",
-      description: "白色背景，深色文字",
-      builtIn: true,
-      cover: "/demo.jpg",
-      layouts: { landscape: createSolidDocument(), portrait: createSolidDocument() },
-      updatedAt: now,
-    },
-  ];
 }
 
 export function photoOrientation(photo: PhotoAsset): "landscape" | "portrait" {
