@@ -509,22 +509,45 @@ fn resolve_text(
         .get(&layer.source)
         .filter(|value| !value.trim().is_empty())
     {
-        return Some(value.clone());
+        return Some(format_layer_value(&layer.source, value));
     }
     let value = match layer.source.as_str() {
         "camera" => exif.camera.clone(),
+        "make" => exif.make.clone(),
+        "model" => exif.model.clone(),
         "lens" => exif.lens.clone(),
         "focalLength" => exif.focal_length.clone(),
         "aperture" => exif.aperture.clone(),
         "shutter" => exif.shutter.clone(),
         "iso" => exif.iso.clone(),
-        "capturedAt" => exif
-            .captured_at
-            .clone()
-            .map(|value| value.replace(':', "/")),
-        _ => None,
+        "capturedAt" => exif.captured_at.clone(),
+        "capturedDate" => exif.captured_date.clone(),
+        "capturedTime" => exif.captured_time.clone(),
+        "exposureBias" => exif.exposure_bias.clone(),
+        "whiteBalance" => exif.white_balance.clone(),
+        "meteringMode" => exif.metering_mode.clone(),
+        "exposureProgram" => exif.exposure_program.clone(),
+        "focalLength35mm" => exif.focal_length_35mm.clone(),
+        "artist" => exif.artist.clone(),
+        "copyright" => exif.copyright.clone(),
+        "fileName" => exif.file_name.clone(),
+        "dimensions" => exif.dimensions.clone(),
+        source => exif.extra.get(source).cloned(),
     };
-    value.filter(|value| !value.trim().is_empty())
+    value
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| format_layer_value(&layer.source, &value))
+}
+
+fn format_layer_value(source: &str, value: &str) -> String {
+    if source != "capturedAt" {
+        return value.to_owned();
+    }
+    let value = value.trim();
+    let Some((date, rest)) = value.split_once(' ') else {
+        return value.replacen(':', "-", 2);
+    };
+    format!("{} {rest}", date.replacen(':', "-", 2))
 }
 
 fn load_font(
@@ -629,9 +652,10 @@ fn render_item(
     item: &ExportItem,
     settings: &ExportSettings,
 ) -> Result<(RgbaImage, u32, u32), String> {
-    let exif = read_exif(Path::new(&item.path));
+    let mut exif = read_exif(Path::new(&item.path));
     let source = decode_color_managed(Path::new(&item.path), exif.orientation)?;
     let (source_width, source_height) = source.dimensions();
+    exif.dimensions = Some(format!("{source_width} × {source_height}"));
     let geometry = calculate_geometry(source_width, source_height, &item.document);
     let original_scale = source_width as f32 / geometry.photo.width;
     let scale = if settings.size == "long-edge" {
@@ -1150,6 +1174,42 @@ mod tests {
             },
             layers: Vec::new(),
         }
+    }
+
+    fn test_layer(source: &str) -> WatermarkLayer {
+        WatermarkLayer {
+            name: source.to_owned(),
+            source: source.to_owned(),
+            custom_value: String::new(),
+            region: "bottom".to_owned(),
+            x: 0.5,
+            y: 0.5,
+            font_family: "DejaVu Sans, sans-serif".to_owned(),
+            font_size: 24.0,
+            font_weight: 500,
+            color: "#202522".to_owned(),
+            opacity: 1.0,
+            rotation: 0,
+            visible: true,
+        }
+    }
+
+    #[test]
+    fn resolves_full_timestamp_and_dynamic_exif_without_corrupting_time() {
+        let mut exif = ExifSnapshot {
+            captured_at: Some("2026:07:24 17:30:23".to_owned()),
+            ..ExifSnapshot::default()
+        };
+        exif.extra
+            .insert("exif:BodySerialNumber".to_owned(), "ABC123".to_owned());
+        assert_eq!(
+            resolve_text(&test_layer("capturedAt"), &exif, &HashMap::new()).as_deref(),
+            Some("2026-07-24 17:30:23")
+        );
+        assert_eq!(
+            resolve_text(&test_layer("exif:BodySerialNumber"), &exif, &HashMap::new()).as_deref(),
+            Some("ABC123")
+        );
     }
 
     #[test]

@@ -15,6 +15,14 @@ export type BuiltInTemplateCatalog = {
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const text = (value: unknown, max: number): value is string => typeof value === "string" && value.length <= max;
+const knownLayerSources = new Set([
+  "camera", "make", "model", "lens", "focalLength", "aperture", "shutter", "iso",
+  "capturedAt", "capturedDate", "capturedTime", "exposureBias", "whiteBalance",
+  "meteringMode", "exposureProgram", "focalLength35mm", "artist", "copyright",
+  "fileName", "dimensions", "custom",
+]);
+const validLayerSource = (value: unknown): value is string => typeof value === "string" &&
+  (knownLayerSources.has(value) || /^exif:[A-Za-z0-9_ ()/.,+:-]{1,120}$/.test(value));
 
 function validDocument(value: unknown): value is EditorDocument {
   if (!record(value) || value.version !== 1 || !record(value.frame) || !record(value.regions) || !Array.isArray(value.layers)) return false;
@@ -28,7 +36,7 @@ function validDocument(value: unknown): value is EditorDocument {
   }
   if (value.layers.length > 100) return false;
   return value.layers.every((layer) => record(layer) && text(layer.id, 100) && text(layer.name, 120) &&
-    ["camera", "lens", "focalLength", "aperture", "shutter", "iso", "capturedAt", "custom"].includes(layer.source as string) &&
+    validLayerSource(layer.source) &&
     text(layer.customValue, 2000) &&
     ["canvas", "top", "bottom", "left", "right"].includes(layer.region as string) &&
     [layer.x, layer.y, layer.fontSize, layer.opacity].every(finite) &&

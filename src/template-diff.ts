@@ -27,7 +27,7 @@ const layerFields = [
 ] as const satisfies ReadonlyArray<readonly [keyof WatermarkLayer, string]>;
 
 const regionNames = { top: "顶部区域", bottom: "底部区域", left: "左侧区域", right: "右侧区域" } as const;
-const sourceNames: Record<WatermarkLayer["source"], string> = {
+const sourceNames: Partial<Record<WatermarkLayer["source"], string>> = {
   camera: "相机型号", lens: "镜头", focalLength: "焦距", aperture: "光圈",
   shutter: "快门", iso: "ISO", capturedAt: "拍摄时间", custom: "自定义文字",
 };
@@ -38,7 +38,7 @@ const layerRegions: Record<WatermarkLayer["region"], string> = {
 function showValue(field: string, value: unknown): string {
   if (field === "cover") return typeof value === "string" && value.startsWith("data:image/") ? "本机照片封面" : String(value);
   if (field === "type") return value === "blur" ? "模糊背景" : "纯色背景";
-  if (field === "source") return sourceNames[value as WatermarkLayer["source"]];
+  if (field === "source") return sourceNames[value as WatermarkLayer["source"]] ?? String(value).replace(/^exif:/, "EXIF ");
   if (field === "region") return layerRegions[value as WatermarkLayer["region"]];
   if (typeof value === "boolean") return value ? "开启" : "关闭";
   if (field === "direction" || field === "rotation") return `${value}°`;

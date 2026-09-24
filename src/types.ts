@@ -1,14 +1,29 @@
 export type FrameType = "blur" | "solid";
 
-export interface PhotoMetadata {
-  camera?: string;
-  lens?: string;
-  focalLength?: string;
-  aperture?: string;
-  shutter?: string;
-  iso?: string;
-  capturedAt?: string;
-}
+export type KnownMetadataKey =
+  | "camera"
+  | "make"
+  | "model"
+  | "lens"
+  | "focalLength"
+  | "aperture"
+  | "shutter"
+  | "iso"
+  | "capturedAt"
+  | "capturedDate"
+  | "capturedTime"
+  | "exposureBias"
+  | "whiteBalance"
+  | "meteringMode"
+  | "exposureProgram"
+  | "focalLength35mm"
+  | "artist"
+  | "copyright"
+  | "fileName"
+  | "dimensions";
+
+export type MetadataKey = KnownMetadataKey | `exif:${string}`;
+export type PhotoMetadata = Partial<Record<MetadataKey, string>>;
 
 export interface PhotoAsset {
   id: string;
@@ -33,7 +48,6 @@ export interface FrameSettings {
   shadow: number;
 }
 
-export type MetadataKey = keyof PhotoMetadata;
 export type LayerSource = MetadataKey | "custom";
 export type RegionId = "canvas" | "top" | "bottom" | "left" | "right";
 

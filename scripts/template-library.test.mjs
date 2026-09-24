@@ -110,6 +110,10 @@ test('backup round trip preserves layouts and selected default', () => {
 test('malformed backup and unsupported watermark source are rejected', () => {
   assert.throws(() => parseTemplateBackup('{'), /JSON/);
   const backup = JSON.parse(serializeTemplateBackup([custom], custom.id));
+  backup.templates[0].layouts.landscape.layers[0].source = 'exposureBias';
+  assert.equal(parseTemplateBackup(JSON.stringify(backup)).templates[0].layouts.landscape.layers[0].source, 'exposureBias');
+  backup.templates[0].layouts.landscape.layers[0].source = 'exif:BodySerialNumber';
+  assert.equal(parseTemplateBackup(JSON.stringify(backup)).templates[0].layouts.landscape.layers[0].source, 'exif:BodySerialNumber');
   backup.templates[0].layouts.landscape.layers[0].source = 'unsupported';
   assert.throws(() => parseTemplateBackup(JSON.stringify(backup)), /字段/);
   backup.templates[0].layouts.landscape.layers[0].source = 'custom';

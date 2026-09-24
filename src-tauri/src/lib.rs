@@ -3,7 +3,7 @@ use exif::{In, Reader as ExifReader, Tag, Value};
 use image::{DynamicImage, GenericImageView, codecs::jpeg::JpegEncoder};
 use serde::Serialize;
 use std::{
-    collections::hash_map::DefaultHasher,
+    collections::{HashMap, hash_map::DefaultHasher},
     fs::{self, File},
     hash::{Hash, Hasher},
     io::{BufReader, Write},
@@ -16,12 +16,27 @@ mod export;
 #[serde(rename_all = "camelCase")]
 struct PhotoMetadata {
     camera: Option<String>,
+    make: Option<String>,
+    model: Option<String>,
     lens: Option<String>,
     focal_length: Option<String>,
     aperture: Option<String>,
     shutter: Option<String>,
     iso: Option<String>,
     captured_at: Option<String>,
+    captured_date: Option<String>,
+    captured_time: Option<String>,
+    exposure_bias: Option<String>,
+    white_balance: Option<String>,
+    metering_mode: Option<String>,
+    exposure_program: Option<String>,
+    focal_length_35mm: Option<String>,
+    artist: Option<String>,
+    copyright: Option<String>,
+    file_name: Option<String>,
+    dimensions: Option<String>,
+    #[serde(flatten)]
+    extra: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -55,19 +70,66 @@ struct InspectReport {
 pub(crate) struct ExifSnapshot {
     pub(crate) orientation: u32,
     pub(crate) camera: Option<String>,
+    pub(crate) make: Option<String>,
+    pub(crate) model: Option<String>,
     pub(crate) lens: Option<String>,
     pub(crate) focal_length: Option<String>,
     pub(crate) aperture: Option<String>,
     pub(crate) shutter: Option<String>,
     pub(crate) iso: Option<String>,
     pub(crate) captured_at: Option<String>,
+    pub(crate) captured_date: Option<String>,
+    pub(crate) captured_time: Option<String>,
+    pub(crate) exposure_bias: Option<String>,
+    pub(crate) white_balance: Option<String>,
+    pub(crate) metering_mode: Option<String>,
+    pub(crate) exposure_program: Option<String>,
+    pub(crate) focal_length_35mm: Option<String>,
+    pub(crate) artist: Option<String>,
+    pub(crate) copyright: Option<String>,
+    pub(crate) file_name: Option<String>,
+    pub(crate) dimensions: Option<String>,
+    pub(crate) extra: HashMap<String, String>,
+}
+
+fn clean_metadata_text(value: &str) -> Option<String> {
+    let value = value.trim().trim_matches('\0').trim();
+    let value = value
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .unwrap_or(value)
+        .trim();
+    (!value.is_empty()).then(|| value.to_owned())
+}
+
+fn display_exif_field(exif: &exif::Exif, field: &exif::Field) -> Option<String> {
+    let value = match &field.value {
+        Value::Ascii(values) => values
+            .iter()
+            .filter_map(|value| clean_metadata_text(&String::from_utf8_lossy(value)))
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => field.display_value().with_unit(exif).to_string(),
+    };
+    clean_metadata_text(&value).filter(|value| value.len() <= 500)
 }
 
 fn display_field(exif: &exif::Exif, tag: Tag) -> Option<String> {
     exif.get_field(tag, In::PRIMARY)
-        .map(|field| field.display_value().with_unit(exif).to_string())
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
+        .and_then(|field| display_exif_field(exif, field))
+}
+
+fn captured_parts(value: Option<&str>) -> (Option<String>, Option<String>) {
+    let Some(value) = value else {
+        return (None, None);
+    };
+    let mut parts = value.split_whitespace();
+    let date = parts
+        .next()
+        .map(|date| date.replacen(':', "-", 2))
+        .filter(|date| !date.is_empty());
+    let time = parts.collect::<Vec<_>>().join(" ");
+    (date, (!time.is_empty()).then_some(time))
 }
 
 fn rational_number(exif: &exif::Exif, tag: Tag) -> Option<f64> {
@@ -79,23 +141,31 @@ fn rational_number(exif: &exif::Exif, tag: Tag) -> Option<f64> {
 }
 
 pub(crate) fn read_exif(path: &Path) -> ExifSnapshot {
+    let mut snapshot = ExifSnapshot {
+        file_name: path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(str::to_owned),
+        ..ExifSnapshot::default()
+    };
     let Ok(file) = File::open(path) else {
-        return ExifSnapshot::default();
+        return snapshot;
     };
     let mut reader = BufReader::new(file);
     let Ok(exif) = ExifReader::new().read_from_container(&mut reader) else {
-        return ExifSnapshot::default();
+        return snapshot;
     };
 
     let make = display_field(&exif, Tag::Make);
     let model = display_field(&exif, Tag::Model);
-    let camera = match (make, model) {
+    let camera = match (make.as_deref(), model.as_deref()) {
         (Some(make), Some(model)) if model.to_lowercase().contains(&make.to_lowercase()) => {
-            Some(model)
+            Some(model.to_owned())
         }
         (Some(make), Some(model)) => Some(format!("{make} {model}")),
-        (Some(make), None) => Some(make),
-        (None, model) => model,
+        (Some(make), None) => Some(make.to_owned()),
+        (None, Some(model)) => Some(model.to_owned()),
+        (None, None) => None,
     };
 
     let orientation = exif
@@ -109,17 +179,44 @@ pub(crate) fn read_exif(path: &Path) -> ExifSnapshot {
         .get_field(Tag::PhotographicSensitivity, In::PRIMARY)
         .and_then(|field| field.value.get_uint(0))
         .map(|value| format!("ISO{value}"));
+    let captured_at = display_field(&exif, Tag::DateTimeOriginal)
+        .or_else(|| display_field(&exif, Tag::DateTimeDigitized))
+        .or_else(|| display_field(&exif, Tag::DateTime));
+    let (captured_date, captured_time) = captured_parts(captured_at.as_deref());
+    let focal_length_35mm = exif
+        .get_field(Tag::FocalLengthIn35mmFilm, In::PRIMARY)
+        .and_then(|field| field.value.get_uint(0))
+        .map(|value| format!("{value}mm"));
+    let extra = exif
+        .fields()
+        .filter(|field| field.tag != Tag::MakerNote)
+        .filter_map(|field| {
+            display_exif_field(&exif, field).map(|value| (format!("exif:{}", field.tag), value))
+        })
+        .collect();
 
-    ExifSnapshot {
-        orientation,
-        camera,
-        lens: display_field(&exif, Tag::LensModel),
-        focal_length,
-        aperture,
-        shutter: display_field(&exif, Tag::ExposureTime).map(|value| value.replace(' ', "")),
-        iso,
-        captured_at: display_field(&exif, Tag::DateTimeOriginal),
-    }
+    snapshot.orientation = orientation;
+    snapshot.camera = camera;
+    snapshot.make = make;
+    snapshot.model = model;
+    snapshot.lens = display_field(&exif, Tag::LensModel)
+        .or_else(|| display_field(&exif, Tag::LensSpecification));
+    snapshot.focal_length = focal_length;
+    snapshot.aperture = aperture;
+    snapshot.shutter = display_field(&exif, Tag::ExposureTime).map(|value| value.replace(' ', ""));
+    snapshot.iso = iso;
+    snapshot.captured_at = captured_at;
+    snapshot.captured_date = captured_date;
+    snapshot.captured_time = captured_time;
+    snapshot.exposure_bias = display_field(&exif, Tag::ExposureBiasValue);
+    snapshot.white_balance = display_field(&exif, Tag::WhiteBalance);
+    snapshot.metering_mode = display_field(&exif, Tag::MeteringMode);
+    snapshot.exposure_program = display_field(&exif, Tag::ExposureProgram);
+    snapshot.focal_length_35mm = focal_length_35mm;
+    snapshot.artist = display_field(&exif, Tag::Artist);
+    snapshot.copyright = display_field(&exif, Tag::Copyright);
+    snapshot.extra = extra;
+    snapshot
 }
 
 pub(crate) fn apply_orientation(image: DynamicImage, orientation: u32) -> DynamicImage {
@@ -156,19 +253,33 @@ fn inspect_image(path: PathBuf) -> Result<PhotoAsset, String> {
     Ok(PhotoAsset {
         id: format!("photo-{:x}", hasher.finish()),
         path: path.to_string_lossy().into_owned(),
-        file_name,
+        file_name: file_name.clone(),
         width,
         height,
         megapixels: (width as f64 * height as f64) / 1_000_000.0,
         thumbnail_data_url: format!("data:image/jpeg;base64,{}", STANDARD.encode(bytes)),
         metadata: PhotoMetadata {
             camera: exif.camera,
+            make: exif.make,
+            model: exif.model,
             lens: exif.lens,
             focal_length: exif.focal_length,
             aperture: exif.aperture,
             shutter: exif.shutter,
             iso: exif.iso,
             captured_at: exif.captured_at,
+            captured_date: exif.captured_date,
+            captured_time: exif.captured_time,
+            exposure_bias: exif.exposure_bias,
+            white_balance: exif.white_balance,
+            metering_mode: exif.metering_mode,
+            exposure_program: exif.exposure_program,
+            focal_length_35mm: exif.focal_length_35mm,
+            artist: exif.artist,
+            copyright: exif.copyright,
+            file_name: Some(file_name.clone()),
+            dimensions: Some(format!("{width} × {height}")),
+            extra: exif.extra,
         },
     })
 }
@@ -548,6 +659,13 @@ mod tests {
         assert_eq!(photo.metadata.focal_length.as_deref(), Some("60mm"));
         assert_eq!(photo.metadata.aperture.as_deref(), Some("f/5.6"));
         assert_eq!(photo.metadata.iso.as_deref(), Some("ISO100"));
+        assert_eq!(photo.metadata.camera.as_deref(), Some("Panasonic DC-S5M2"));
+        assert_eq!(photo.metadata.make.as_deref(), Some("Panasonic"));
+        assert_eq!(photo.metadata.model.as_deref(), Some("DC-S5M2"));
+        assert_eq!(
+            photo.metadata.extra.get("exif:Make").map(String::as_str),
+            Some("Panasonic")
+        );
     }
 
     #[test]
