@@ -136,6 +136,7 @@ struct Geometry {
 #[serde(rename_all = "camelCase")]
 pub struct ExportProgress {
     current: usize,
+    completed: usize,
     total: usize,
     file_name: String,
     succeeded: usize,
@@ -163,6 +164,24 @@ pub struct ExportSummary {
     output_directory: String,
     failures: Vec<ExportFailure>,
     warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportPreflight {
+    ready: bool,
+    total: usize,
+    estimated_pixels: u64,
+    largest_width: u32,
+    largest_height: u32,
+    largest_file_name: String,
+    errors: Vec<String>,
+    warnings: Vec<String>,
+}
+
+#[derive(Default)]
+struct ExportRenderer {
+    fonts: HashMap<String, FontArc>,
 }
 
 struct ExportGuard;
@@ -261,6 +280,134 @@ fn calculate_geometry(width: u32, height: u32, document: &EditorDocument) -> Geo
         height: canvas_height,
         photo,
         regions,
+    }
+}
+
+fn output_dimensions(
+    width: u32,
+    height: u32,
+    document: &EditorDocument,
+    settings: &ExportSettings,
+) -> (u32, u32) {
+    let geometry = calculate_geometry(width, height, document);
+    let scale = if settings.size == "long-edge" {
+        settings.long_edge as f32 / geometry.width.max(geometry.height)
+    } else {
+        width as f32 / geometry.photo.width
+    };
+    (
+        (geometry.width * scale).round().max(1.0) as u32,
+        (geometry.height * scale).round().max(1.0) as u32,
+    )
+}
+
+fn validate_export_settings(settings: &ExportSettings) -> Vec<String> {
+    let mut errors = Vec::new();
+    if !matches!(settings.format.as_str(), "jpeg" | "png") {
+        errors.push("不支持的导出格式".to_owned());
+    }
+    if !matches!(settings.size.as_str(), "original" | "long-edge") {
+        errors.push("不支持的成品尺寸模式".to_owned());
+    }
+    if settings.size == "long-edge" && !(800..=30_000).contains(&settings.long_edge) {
+        errors.push("成品长边须为 800–30000 之间的整数".to_owned());
+    }
+    if !(1..=100).contains(&settings.quality) {
+        errors.push("JPEG 质量须为 1–100 之间的整数".to_owned());
+    }
+    if settings.suffix.chars().count() > 80
+        || settings
+            .suffix
+            .chars()
+            .any(|character| character.is_control() || r#"<>:"/\|?*"#.contains(character))
+    {
+        errors.push("文件名后缀不能包含路径或系统保留字符，且最多 80 个字符".to_owned());
+    }
+    if !matches!(settings.collision.as_str(), "number" | "skip") {
+        errors.push("不支持的重名处理方式".to_owned());
+    }
+    if !matches!(settings.metadata.as_str(), "none" | "basic" | "supported") {
+        errors.push("不支持的元数据保留方式".to_owned());
+    }
+    if !matches!(
+        settings.png_compression.as_str(),
+        "fast" | "standard" | "small"
+    ) {
+        errors.push("不支持的 PNG 压缩方式".to_owned());
+    }
+    errors
+}
+
+fn validate_export_request(request: &ExportRequest) -> Vec<String> {
+    let mut errors = validate_export_settings(&request.settings);
+    if request.items.is_empty() {
+        errors.push("当前范围没有可导出的本地照片".to_owned());
+    }
+    let directory = Path::new(&request.settings.directory);
+    if !directory.is_dir() {
+        errors.push("输出文件夹不存在".to_owned());
+    } else if let Err(error) = tempfile::NamedTempFile::new_in(directory) {
+        errors.push(format!("输出文件夹不可写：{error}"));
+    }
+    errors
+}
+
+fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
+    let mut errors = validate_export_request(request);
+    let mut estimated_pixels = 0_u64;
+    let mut largest_width = 0;
+    let mut largest_height = 0;
+    let mut largest_file_name = String::new();
+    for item in &request.items {
+        let path = Path::new(&item.path);
+        let file_name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("未命名照片");
+        if !path.is_file() {
+            errors.push(format!("{file_name}：原图不存在或不可读取"));
+            continue;
+        }
+        let (mut width, mut height) = match image::image_dimensions(path) {
+            Ok(dimensions) => dimensions,
+            Err(error) => {
+                errors.push(format!("{file_name}：无法读取图片尺寸（{error}）"));
+                continue;
+            }
+        };
+        if matches!(read_exif(path).orientation, 5..=8) {
+            std::mem::swap(&mut width, &mut height);
+        }
+        let (output_width, output_height) =
+            output_dimensions(width, height, &item.document, &request.settings);
+        let pixels = output_width as u64 * output_height as u64;
+        estimated_pixels = estimated_pixels.saturating_add(pixels);
+        if pixels > largest_width as u64 * largest_height as u64 {
+            largest_width = output_width;
+            largest_height = output_height;
+            largest_file_name = file_name.to_owned();
+        }
+        if errors.len() >= 20 {
+            errors.push("其余预检错误已省略，请先处理以上项目".to_owned());
+            break;
+        }
+    }
+    let mut warnings = Vec::new();
+    let largest_pixels = largest_width as u64 * largest_height as u64;
+    if largest_pixels > 80_000_000 {
+        warnings.push(format!(
+            "最大成品 {largest_width} × {largest_height} px，导出时会占用较多内存"
+        ));
+    }
+    ExportPreflight {
+        ready: errors.is_empty(),
+        total: request.items.len(),
+        estimated_pixels,
+        largest_width,
+        largest_height,
+        largest_file_name,
+        errors,
+        warnings,
     }
 }
 
@@ -648,9 +795,23 @@ fn css_font_scale(font: &impl Font, css_pixels: f32) -> PxScale {
     PxScale::from(css_pixels * font.height_unscaled() / font_units)
 }
 
-fn render_item(
+fn resize_photo(source: RgbaImage, width: u32, height: u32) -> RgbaImage {
+    if source.width() == width && source.height() == height {
+        return source;
+    }
+    let needs_prefilter =
+        source.width() > width.saturating_mul(2) || source.height() > height.saturating_mul(2);
+    if needs_prefilter {
+        imageops::resize(&source, width, height, FilterType::Triangle)
+    } else {
+        imageops::resize(&source, width, height, FilterType::Lanczos3)
+    }
+}
+
+fn render_item_with_renderer(
     item: &ExportItem,
     settings: &ExportSettings,
+    renderer: &mut ExportRenderer,
 ) -> Result<(RgbaImage, u32, u32), String> {
     let mut exif = read_exif(Path::new(&item.path));
     let source = decode_color_managed(Path::new(&item.path), exif.orientation)?;
@@ -665,9 +826,12 @@ fn render_item(
     };
     let canvas_width = (geometry.width * scale).round().max(1.0) as u32;
     let canvas_height = (geometry.height * scale).round().max(1.0) as u32;
+    let photo_width = (geometry.photo.width * scale).round().max(1.0) as u32;
+    let photo_height = (geometry.photo.height * scale).round().max(1.0) as u32;
+    let mut photo = resize_photo(source, photo_width, photo_height);
     let mut canvas = if item.document.frame.frame_type == "blur" {
         make_blurred_background(
-            &source,
+            &photo,
             canvas_width,
             canvas_height,
             item.document.frame.blur * scale,
@@ -688,13 +852,6 @@ fn render_item(
         item.document.frame.shadow,
         item.document.frame.radius * 2.0,
     );
-    let photo_width = (geometry.photo.width * scale).round().max(1.0) as u32;
-    let photo_height = (geometry.photo.height * scale).round().max(1.0) as u32;
-    let mut photo = if source.width() == photo_width && source.height() == photo_height {
-        source
-    } else {
-        imageops::resize(&source, photo_width, photo_height, FilterType::Lanczos3)
-    };
     apply_rounded_corners(
         &mut photo,
         (item.document.frame.radius * scale * 2.0).round() as u32,
@@ -706,9 +863,23 @@ fn render_item(
         (geometry.photo.y * scale).round() as i64,
     );
     drop(photo);
-    let mut fonts = HashMap::new();
-    draw_layers(&mut canvas, item, &exif, &geometry, scale, &mut fonts)?;
+    draw_layers(
+        &mut canvas,
+        item,
+        &exif,
+        &geometry,
+        scale,
+        &mut renderer.fonts,
+    )?;
     Ok((canvas, canvas_width, canvas_height))
+}
+
+#[cfg(test)]
+fn render_item(
+    item: &ExportItem,
+    settings: &ExportSettings,
+) -> Result<(RgbaImage, u32, u32), String> {
+    render_item_with_renderer(item, settings, &mut ExportRenderer::default())
 }
 
 fn unique_output_path(input: &Path, settings: &ExportSettings) -> Result<Option<PathBuf>, String> {
@@ -722,11 +893,7 @@ fn unique_output_path(input: &Path, settings: &ExportSettings) -> Result<Option<
     } else {
         "jpg"
     };
-    let suffix = if settings.suffix.is_empty() {
-        "-相框"
-    } else {
-        &settings.suffix
-    };
+    let suffix = &settings.suffix;
     let candidate = directory.join(format!("{stem}{suffix}.{extension}"));
     if !candidate.exists() && candidate != input {
         return Ok(Some(candidate));
@@ -854,18 +1021,19 @@ fn copy_metadata(
         .write_to_file(output)
         .map_err(|error| format!("写入元数据失败：{error}"))?;
     if settings.metadata == "supported" {
-        Ok(Some(format!(
-            "{}：已保留编码器支持的 EXIF；XMP、IPTC 与厂商私有 MakerNote 未复制",
-            input.display()
-        )))
+        Ok(Some(
+            "已保留编码器支持的 EXIF；XMP、IPTC 与厂商私有 MakerNote 未复制".to_owned(),
+        ))
     } else {
         Ok(None)
     }
 }
 
-fn export_one(
+fn export_one_with_renderer(
     item: &ExportItem,
     settings: &ExportSettings,
+    renderer: &mut ExportRenderer,
+    mut on_stage: impl FnMut(&'static str),
 ) -> Result<Option<(PathBuf, Vec<String>)>, String> {
     let input = Path::new(&item.path);
     if !input.is_file() {
@@ -875,8 +1043,11 @@ fn export_one(
         return Ok(None);
     };
     let temp = temporary_path(&output);
-    let (image, width, height) = render_item(item, settings)?;
+    on_stage("rendering");
+    let (image, width, height) = render_item_with_renderer(item, settings, renderer)?;
+    on_stage("encoding");
     encode_image(image, &temp, settings)?;
+    on_stage("metadata");
     let mut warnings = Vec::new();
     match copy_metadata(input, &temp, settings, width, height) {
         Ok(Some(warning)) => warnings.push(warning),
@@ -886,6 +1057,7 @@ fn export_one(
             return Err(error);
         }
     }
+    on_stage("finishing");
     fs::rename(&temp, &output).map_err(|error| {
         let _ = fs::remove_file(&temp);
         format!("无法完成输出文件：{error}")
@@ -893,21 +1065,30 @@ fn export_one(
     Ok(Some((output, warnings)))
 }
 
+#[cfg(test)]
+fn export_one(
+    item: &ExportItem,
+    settings: &ExportSettings,
+) -> Result<Option<(PathBuf, Vec<String>)>, String> {
+    export_one_with_renderer(item, settings, &mut ExportRenderer::default(), |_| {})
+}
+
+fn emit_progress(app: &AppHandle, progress: ExportProgress) {
+    let _ = app.emit("export-progress", progress);
+}
+
 fn run_export(app: &AppHandle, request: ExportRequest) -> Result<ExportSummary, String> {
-    let directory = Path::new(&request.settings.directory);
-    if !directory.is_dir() {
-        return Err("输出文件夹不存在".to_owned());
+    let validation_errors = validate_export_request(&request);
+    if !validation_errors.is_empty() {
+        return Err(validation_errors.join("；"));
     }
-    let test_path = directory.join(".yingkuang-write-test");
-    File::create(&test_path)
-        .and_then(|_| fs::remove_file(&test_path))
-        .map_err(|error| format!("输出文件夹不可写：{error}"))?;
     let total = request.items.len();
     let mut succeeded = 0;
     let mut failed = 0;
     let mut skipped = 0;
     let mut failures = Vec::new();
     let mut warnings = Vec::new();
+    let mut renderer = ExportRenderer::default();
     for (index, item) in request.items.iter().enumerate() {
         if CANCEL_EXPORT.load(Ordering::SeqCst) {
             break;
@@ -917,19 +1098,34 @@ fn run_export(app: &AppHandle, request: ExportRequest) -> Result<ExportSummary, 
             .and_then(|value| value.to_str())
             .unwrap_or("未命名照片")
             .to_owned();
-        let _ = app.emit(
-            "export-progress",
+        emit_progress(
+            app,
             ExportProgress {
-                current: index,
+                current: index + 1,
+                completed: index,
                 total,
                 file_name: file_name.clone(),
                 succeeded,
                 failed,
                 skipped,
-                stage: "rendering".to_owned(),
+                stage: "preparing".to_owned(),
             },
         );
-        match export_one(item, &request.settings) {
+        match export_one_with_renderer(item, &request.settings, &mut renderer, |stage| {
+            emit_progress(
+                app,
+                ExportProgress {
+                    current: index + 1,
+                    completed: index,
+                    total,
+                    file_name: file_name.clone(),
+                    succeeded,
+                    failed,
+                    skipped,
+                    stage: stage.to_owned(),
+                },
+            );
+        }) {
             Ok(Some((_path, item_warnings))) => {
                 succeeded += 1;
                 warnings.extend(item_warnings);
@@ -938,22 +1134,19 @@ fn run_export(app: &AppHandle, request: ExportRequest) -> Result<ExportSummary, 
             Err(reason) => {
                 failed += 1;
                 failures.push(ExportFailure {
-                    file_name,
+                    file_name: file_name.clone(),
                     path: item.path.clone(),
                     reason,
                 });
             }
         }
-        let _ = app.emit(
-            "export-progress",
+        emit_progress(
+            app,
             ExportProgress {
                 current: index + 1,
+                completed: index + 1,
                 total,
-                file_name: Path::new(&item.path)
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or("未命名照片")
-                    .to_owned(),
+                file_name,
                 succeeded,
                 failed,
                 skipped,
@@ -973,6 +1166,13 @@ fn run_export(app: &AppHandle, request: ExportRequest) -> Result<ExportSummary, 
         failures,
         warnings,
     })
+}
+
+#[tauri::command]
+pub async fn preflight_export(request: ExportRequest) -> Result<ExportPreflight, String> {
+    tauri::async_runtime::spawn_blocking(move || preflight_export_sync(&request))
+        .await
+        .map_err(|error| format!("导出预检异常结束：{error}"))
 }
 
 #[tauri::command]
@@ -1192,6 +1392,68 @@ mod tests {
             rotation: 0,
             visible: true,
         }
+    }
+
+    fn test_settings(directory: &Path) -> ExportSettings {
+        ExportSettings {
+            directory: directory.to_string_lossy().into_owned(),
+            format: "jpeg".to_owned(),
+            quality: 92,
+            size: "long-edge".to_owned(),
+            long_edge: 1200,
+            metadata: "none".to_owned(),
+            include_gps: false,
+            suffix: "-frame".to_owned(),
+            collision: "number".to_owned(),
+            png_compression: "standard".to_owned(),
+        }
+    }
+
+    #[test]
+    fn export_validation_rejects_unsafe_suffix_and_invalid_long_edge() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut settings = test_settings(directory.path());
+        settings.long_edge = 0;
+        settings.suffix = "../../escape".to_owned();
+        let errors = validate_export_settings(&settings);
+        assert!(errors.iter().any(|error| error.contains("800–30000")));
+        assert!(errors.iter().any(|error| error.contains("系统保留字符")));
+    }
+
+    #[test]
+    fn empty_suffix_is_preserved_in_output_name() {
+        let directory = tempfile::tempdir().unwrap();
+        let input = directory.path().join("photo.png");
+        File::create(&input).unwrap();
+        let mut settings = test_settings(directory.path());
+        settings.suffix.clear();
+        let output = unique_output_path(&input, &settings).unwrap().unwrap();
+        assert_eq!(output.file_name().unwrap(), "photo.jpg");
+    }
+
+    #[test]
+    fn preflight_reads_real_dimensions_before_export() {
+        let directory = tempfile::tempdir().unwrap();
+        let input = directory.path().join("photo.png");
+        RgbaImage::from_pixel(120, 80, Rgba([120, 80, 40, 255]))
+            .save(&input)
+            .unwrap();
+        let request = ExportRequest {
+            items: vec![ExportItem {
+                path: input.to_string_lossy().into_owned(),
+                document: test_document(),
+                overrides: HashMap::new(),
+            }],
+            settings: ExportSettings {
+                long_edge: 800,
+                ..test_settings(directory.path())
+            },
+        };
+        let preflight = preflight_export_sync(&request);
+        assert!(preflight.ready, "{:?}", preflight.errors);
+        assert_eq!(preflight.total, 1);
+        assert_eq!(preflight.largest_width.max(preflight.largest_height), 800);
+        assert!(preflight.estimated_pixels > 0);
     }
 
     #[test]

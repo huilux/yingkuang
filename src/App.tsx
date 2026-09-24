@@ -6,7 +6,6 @@ import { openPath } from "@tauri-apps/plugin-opener";
 import {
   ArrowCounterClockwise,
   ArrowClockwise,
-  CaretDown,
   Check,
   Copy,
   DownloadSimple,
@@ -41,9 +40,13 @@ import {
   photoOrientation,
 } from "./editor-model";
 import { defaultTemplateKey, documentFromTemplate, importTemplates, readDefaultTemplateId, readTemplates, serializeUserTemplates, templatesKey, type ImportDecision } from "./template-library";
+import { buildExportPlan, type ExportIssue } from "./export-workflow";
 import type {
   EditorDocument,
+  ExportPreflight,
+  ExportProgress,
   ExportSettings,
+  ExportSummary,
   LayerSource,
   PhotoAsset,
   RegionId,
@@ -92,27 +95,6 @@ type LoadState = "idle" | "loading" | "error";
 type InspectorTab = "template" | "frame" | "watermark";
 type Orientation = "landscape" | "portrait";
 
-type ExportProgress = {
-  current: number;
-  total: number;
-  fileName: string;
-  succeeded: number;
-  failed: number;
-  skipped: number;
-  stage: string;
-};
-
-type ExportSummary = {
-  total: number;
-  succeeded: number;
-  failed: number;
-  skipped: number;
-  cancelled: boolean;
-  outputDirectory: string;
-  failures: Array<{ fileName: string; path: string; reason: string }>;
-  warnings: string[];
-};
-
 type InspectReport = {
   items: PhotoAsset[];
   failures: Array<{ path: string; reason: string }>;
@@ -123,6 +105,16 @@ const regionLabels: Record<Exclude<RegionId, "canvas">, string> = {
   bottom: "下",
   left: "左",
   right: "右",
+};
+
+const exportStageLabels: Record<ExportProgress["stage"], string> = {
+  preflight: "正在预检文件与输出设置",
+  preparing: "正在准备照片",
+  rendering: "正在渲染相框与水印",
+  encoding: "正在编码成品",
+  metadata: "正在写入元数据",
+  finishing: "正在完成文件",
+  "completed-item": "已完成当前照片",
 };
 
 function formatPixels(photo: PhotoAsset) {
@@ -138,6 +130,8 @@ function App() {
   const folderInput = useRef<HTMLInputElement>(null);
   const transactionStart = useRef<EditorDocument | null>(null);
   const currentDocument = useRef<EditorDocument | undefined>(undefined);
+  const exportDialog = useRef<HTMLElement>(null);
+  const exportReturnFocus = useRef<HTMLElement | null>(null);
   const undoStack = useRef<EditorDocument[]>([]);
   const redoStack = useRef<EditorDocument[]>([]);
   const [historyRevision, setHistoryRevision] = useState(0);
@@ -163,6 +157,9 @@ function App() {
   const [exportRunning, setExportRunning] = useState(false);
   const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
   const [exportResult, setExportResult] = useState<ExportSummary | null>(null);
+  const [exportIssues, setExportIssues] = useState<ExportIssue[]>([]);
+  const [exportChecking, setExportChecking] = useState(false);
+  const [exportCancelling, setExportCancelling] = useState(false);
   const [sessionReady, setSessionReady] = useState(!isNative);
   const importBusy = useRef(false);
 
@@ -191,6 +188,30 @@ function App() {
     void listen<ExportProgress>("export-progress", (event) => setExportProgress(event.payload)).then((unlisten) => { dispose = unlisten; });
     return () => dispose?.();
   }, []);
+
+  useEffect(() => {
+    if (!showExport) return;
+    const frame = requestAnimationFrame(() => {
+      if (!exportDialog.current?.contains(document.activeElement)) {
+        exportDialog.current?.querySelector<HTMLElement>("[data-export-close]")?.focus();
+      }
+    });
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !exportChecking) {
+        event.preventDefault();
+        closeExport();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("keydown", handleKey);
+    };
+  }, [exportChecking, showExport]);
+
+  useEffect(() => {
+    setExportIssues((current) => current.some((issue) => issue.field === "preflight") ? [] : current);
+  }, [exportSettings]);
 
   useEffect(() => {
     if (!isNative) return;
@@ -655,64 +676,108 @@ function App() {
   }
 
   async function startExport(retryPaths?: Set<string>) {
-    if (!isNative || !exportSettings.directory) return;
-    const targetIds = exportSettings.range === "current"
-      ? activeId ? [activeId] : []
-      : exportSettings.range === "all"
-        ? photos.map((photo) => photo.id)
-        : checkedIds;
-    const items = targetIds.flatMap((id) => {
-      const photo = photos.find((candidate) => candidate.id === id);
-      const document = documents[id];
-      return photo?.path && document && (!retryPaths || retryPaths.has(photo.path)) ? [{
-        path: photo.path,
-        document,
-        overrides: photo.overrides ?? {},
-      }] : [];
-    });
-    if (!items.length) {
-      setMessage("当前范围没有可导出的本地照片");
+    const plan = buildExportPlan({ photos, documents, activeId, checkedIds, settings: exportSettings, retryPaths });
+    setExportIssues(plan.issues);
+    if (plan.issues.length) {
+      setShowExport(true);
+      setMessage(plan.issues[0].message);
       return;
     }
-    setShowExport(false);
+    if (!isNative) {
+      closeExport();
+      setMessage("导出设置已保存");
+      return;
+    }
+    setExportChecking(true);
+    let preflight: ExportPreflight;
+    try {
+      preflight = await invoke<ExportPreflight>("preflight_export", { request: { items: plan.items, settings: exportSettings } });
+    } catch (error) {
+      const message = `预检失败：${String(error)}`;
+      setExportIssues([{ field: "preflight", message }]);
+      setShowExport(true);
+      setMessage(message);
+      setExportChecking(false);
+      return;
+    }
+    if (!preflight.ready) {
+      setExportIssues(preflight.errors.map((message) => ({ field: "preflight", message })));
+      setShowExport(true);
+      setMessage(preflight.errors[0] ?? "导出预检未通过");
+      setExportChecking(false);
+      return;
+    }
+    setExportChecking(false);
+    closeExport();
     setExportResult(null);
     setExportRunning(true);
-    setExportProgress({ current: 0, total: items.length, fileName: "准备导出", succeeded: 0, failed: 0, skipped: 0, stage: "preflight" });
+    setExportCancelling(false);
+    setExportProgress({ current: 1, completed: 0, total: plan.items.length, fileName: "准备导出", succeeded: 0, failed: 0, skipped: 0, stage: "preflight" });
     try {
-      const result = await invoke<ExportSummary>("export_images", { request: { items, settings: exportSettings } });
-      setExportResult(result);
+      const result = await invoke<ExportSummary>("export_images", { request: { items: plan.items, settings: exportSettings } });
+      const warnings = [...new Set([...preflight.warnings, ...result.warnings])];
+      setExportResult({ ...result, warnings });
       setMessage(result.cancelled ? "导出已取消，已完成的文件会保留" : `导出完成：成功 ${result.succeeded} 张`);
     } catch (error) {
-      setExportResult({ total: items.length, succeeded: 0, failed: items.length, skipped: 0, cancelled: false, outputDirectory: exportSettings.directory, failures: [{ fileName: "导出任务", path: "", reason: String(error) }], warnings: [] });
+      setExportResult({ total: plan.items.length, succeeded: 0, failed: plan.items.length, skipped: 0, cancelled: false, outputDirectory: exportSettings.directory, failures: [{ fileName: "导出任务", path: "", reason: String(error) }], warnings: preflight.warnings });
       setMessage(`导出失败：${String(error)}`);
     } finally {
       setExportRunning(false);
+      setExportCancelling(false);
     }
   }
 
   async function cancelExport() {
-    if (isNative) await invoke("cancel_export");
+    if (!isNative || exportCancelling) return;
+    setExportCancelling(true);
+    try {
+      await invoke("cancel_export");
+    } catch (error) {
+      setExportCancelling(false);
+      setMessage(`取消失败：${String(error)}`);
+    }
+  }
+
+  function closeExport() {
+    if (exportChecking) return;
+    setShowExport(false);
+    setExportIssues([]);
+    requestAnimationFrame(() => exportReturnFocus.current?.focus());
   }
 
   function openExport(range: ExportSettings["range"]) {
+    exportReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setExportSettings((current) => ({ ...current, range }));
+    setExportIssues([]);
     setShowExport(true);
   }
 
-  const exportCount = useMemo(() => {
-    if (exportSettings.range === "current") return activePhoto ? 1 : 0;
-    if (exportSettings.range === "all") return photos.length;
-    return selectedCount;
-  }, [activePhoto, exportSettings.range, photos.length, selectedCount]);
+  function handleExportDialogKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    if (event.key !== "Tab") return;
+    const focusable = [...(exportDialog.current?.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex='-1'])") ?? [])];
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
-  const sampleExportSize = useMemo(() => {
-    if (!activePhoto || !activeDocument) return "";
-    const geometry = calculateGeometry(activePhoto, activeDocument);
-    const scale = exportSettings.size === "long-edge"
-      ? exportSettings.longEdge / Math.max(geometry.width, geometry.height)
-      : activePhoto.width / geometry.photo.width;
-    return `${Math.round(geometry.width * scale)} × ${Math.round(geometry.height * scale)}`;
-  }, [activeDocument, activePhoto, exportSettings.longEdge, exportSettings.size]);
+  const exportPlan = useMemo(() => buildExportPlan({
+    photos,
+    documents,
+    activeId,
+    checkedIds,
+    settings: exportSettings,
+  }), [activeId, checkedIds, documents, exportSettings, photos]);
+  const visibleExportIssues = [
+    ...exportPlan.issues,
+    ...exportIssues.filter((issue) => issue.field === "preflight"),
+  ];
 
   const activeTemplateRecord = templates.find((item) => item.id === activeTemplate);
 
@@ -847,46 +912,65 @@ function App() {
       {showTemplateDialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowTemplateDialog(false); }}><section className="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="template-title"><header><div><span>模板库</span><h2 id="template-title">另存为新模板</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setShowTemplateDialog(false)}><X /></button></header><div className="compact-dialog-body"><label className="field"><span>模板名称</span><input autoFocus className="text-input" value={templateName} onChange={(event) => setTemplateName(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") saveNewTemplate(); }} /></label><p>保存当前方向的相框、四边区域、水印字段、字体和位置，并使用当前照片更新封面。</p></div><footer><button className="button secondary" type="button" onClick={() => setShowTemplateDialog(false)}>取消</button><button className="button primary" type="button" disabled={!templateName.trim()} onClick={saveNewTemplate}>保存模板</button></footer></section></div>}
 
       {showExport && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowExport(false); }}>
-          <section className="export-dialog" role="dialog" aria-modal="true" aria-labelledby="export-title">
-            <header><div><span>{exportSettings.range === "current" ? "单张导出" : "批量导出"}</span><h2 id="export-title">导出 {exportCount} 张照片</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setShowExport(false)}><X /></button></header>
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeExport(); }}>
+          <section ref={exportDialog} className="export-dialog" role="dialog" aria-modal="true" aria-labelledby="export-title" aria-busy={exportChecking} onKeyDown={handleExportDialogKeyDown}>
+            <div className="export-dialog-header"><div><span>{exportSettings.range === "current" ? "单张导出" : "批量导出"}</span><h2 id="export-title">导出 {exportPlan.items.length} 张照片</h2></div><button data-export-close className="icon-button" type="button" aria-label="关闭" disabled={exportChecking} onClick={closeExport}><X /></button></div>
             <div className="export-body">
-              <Segmented label="导出范围" value={exportSettings.range} options={[{ value: "current", label: "当前" }, { value: "selected", label: `已选 ${selectedCount}` }, { value: "all", label: `全部 ${photos.length}` }]} onChange={(range) => setExportSettings((value) => ({ ...value, range }))} />
-              <label className="field"><span>输出文件夹</span><button className="directory-picker" type="button" aria-label="输出文件夹" onClick={() => void selectOutputDirectory()}><FolderOpen /><span>{exportSettings.directory || "选择本地文件夹"}</span><CaretDown /></button></label>
-              <div className="export-grid">
-                <label className="field"><span>格式</span><select value={exportSettings.format} onChange={(event) => { const format = event.currentTarget.value as "jpeg" | "png"; setExportSettings((value) => ({ ...value, format })); }}><option value="jpeg">JPEG</option><option value="png">PNG</option></select></label>
-                <label className="field"><span>成品尺寸</span><select value={exportSettings.size} onChange={(event) => { const size = event.currentTarget.value as "original" | "long-edge"; setExportSettings((value) => ({ ...value, size })); }}><option value="original">保持主照片像素</option><option value="long-edge">指定成品长边</option></select></label>
-              </div>
-              {exportSettings.size === "long-edge" && <label className="field"><span>成品长边像素</span><input className="text-input" type="number" min="800" max="30000" value={exportSettings.longEdge} onChange={(event) => { const longEdge = Number(event.currentTarget.value); setExportSettings((value) => ({ ...value, longEdge })); }} /></label>}
-              {exportSettings.format === "jpeg" ? (
-                <SliderRow label="JPEG 质量" value={exportSettings.quality} min={1} max={100} onChange={(quality) => setExportSettings((value) => ({ ...value, quality }))} />
-              ) : (
-                <Segmented label="PNG 压缩" value={exportSettings.pngCompression} options={[{ value: "fast", label: "快速" }, { value: "standard", label: "标准" }, { value: "small", label: "更小" }]} onChange={(pngCompression) => setExportSettings((value) => ({ ...value, pngCompression }))} />
-              )}
-              <div className="export-grid">
-                <label className="field"><span>文件名后缀</span><input className="text-input" value={exportSettings.suffix} onChange={(event) => { const suffix = event.currentTarget.value; setExportSettings((value) => ({ ...value, suffix })); }} /></label>
-                <label className="field"><span>重名处理</span><select value={exportSettings.collision} onChange={(event) => { const collision = event.currentTarget.value as ExportSettings["collision"]; setExportSettings((value) => ({ ...value, collision })); }}><option value="number">自动编号</option><option value="skip">跳过</option></select></label>
-              </div>
-              <label className="field"><span>元数据</span><select value={exportSettings.metadata} onChange={(event) => { const metadata = event.currentTarget.value as ExportSettings["metadata"]; setExportSettings((value) => ({ ...value, metadata })); }}><option value="none">不保留</option><option value="basic">保留基础拍摄信息</option><option value="supported">尽可能保留受支持信息</option></select></label>
-              <label className={`check-field ${exportSettings.metadata === "none" ? "disabled" : ""}`}><input type="checkbox" checked={exportSettings.includeGps} disabled={exportSettings.metadata === "none"} onChange={(event) => { const includeGps = event.currentTarget.checked; setExportSettings((value) => ({ ...value, includeGps })); }} /><span><strong>保留 GPS 位置</strong><small>默认关闭，单独控制照片中的定位信息</small></span></label>
-              <div className="export-summary"><span>文件名示例</span><strong>{activePhoto?.fileName.replace(/\.[^.]+$/, "") ?? "照片"}{exportSettings.suffix}.{exportSettings.format === "jpeg" ? "jpg" : "png"}</strong>{sampleExportSize && <small>当前样例成品 {sampleExportSize} px，水印按成品短边等比缩放</small>}</div>
+              <fieldset className="export-main" disabled={exportChecking}>
+                <section className="export-section">
+                  <h3>输出位置与范围</h3>
+                  <Segmented label="导出范围" value={exportSettings.range} options={[{ value: "current", label: "当前" }, { value: "selected", label: `已选 ${selectedCount}` }, { value: "all", label: `全部 ${photos.length}` }]} onChange={(range) => setExportSettings((value) => ({ ...value, range }))} />
+                  <label className={`field ${exportPlan.issues.some((issue) => issue.field === "directory") ? "field-error" : ""}`}><span>输出文件夹</span><button className="directory-picker" type="button" aria-label="选择输出文件夹" onClick={() => void selectOutputDirectory()}><FolderOpen /><span>{exportSettings.directory || "选择本地文件夹"}</span></button></label>
+                </section>
+                <section className="export-section">
+                  <h3>文件与尺寸</h3>
+                  <div className="export-grid">
+                    <label className="field"><span>格式</span><select value={exportSettings.format} onChange={(event) => { const format = event.currentTarget.value as "jpeg" | "png"; setExportSettings((value) => ({ ...value, format })); }}><option value="jpeg">JPEG</option><option value="png">PNG</option></select></label>
+                    <label className="field"><span>成品尺寸</span><select value={exportSettings.size} onChange={(event) => { const size = event.currentTarget.value as "original" | "long-edge"; setExportSettings((value) => ({ ...value, size })); }}><option value="original">保持主照片像素</option><option value="long-edge">指定成品长边</option></select></label>
+                  </div>
+                  {exportSettings.size === "long-edge" && <label className={`field ${exportPlan.issues.some((issue) => issue.field === "longEdge") ? "field-error" : ""}`}><span>成品长边像素</span><input className="text-input" type="number" min="800" max="30000" step="1" value={exportSettings.longEdge} aria-invalid={exportPlan.issues.some((issue) => issue.field === "longEdge")} onChange={(event) => { const longEdge = Number(event.currentTarget.value); setExportSettings((value) => ({ ...value, longEdge })); }} />{exportPlan.issues.filter((issue) => issue.field === "longEdge").map((issue) => <small className="field-message" key={issue.message}>{issue.message}</small>)}</label>}
+                  {exportSettings.format === "jpeg" ? (
+                    <SliderRow label="JPEG 质量" value={exportSettings.quality} min={1} max={100} onChange={(quality) => setExportSettings((value) => ({ ...value, quality }))} />
+                  ) : (
+                    <Segmented label="PNG 压缩" value={exportSettings.pngCompression} options={[{ value: "fast", label: "快速" }, { value: "standard", label: "标准" }, { value: "small", label: "更小" }]} onChange={(pngCompression) => setExportSettings((value) => ({ ...value, pngCompression }))} />
+                  )}
+                  <div className="export-grid">
+                    <label className={`field ${exportPlan.issues.some((issue) => issue.field === "suffix") ? "field-error" : ""}`}><span>文件名后缀</span><input className="text-input" value={exportSettings.suffix} aria-invalid={exportPlan.issues.some((issue) => issue.field === "suffix")} onChange={(event) => { const suffix = event.currentTarget.value; setExportSettings((value) => ({ ...value, suffix })); }} /><small className="field-hint">可留空；不能含 /、\ 或系统保留字符</small>{exportPlan.issues.filter((issue) => issue.field === "suffix").map((issue) => <small className="field-message" key={issue.message}>{issue.message}</small>)}</label>
+                    <label className="field"><span>重名处理</span><select value={exportSettings.collision} onChange={(event) => { const collision = event.currentTarget.value as ExportSettings["collision"]; setExportSettings((value) => ({ ...value, collision })); }}><option value="number">自动编号</option><option value="skip">跳过</option></select></label>
+                  </div>
+                </section>
+                <section className="export-section">
+                  <h3>隐私与元数据</h3>
+                  <label className="field"><span>元数据</span><select value={exportSettings.metadata} onChange={(event) => { const metadata = event.currentTarget.value as ExportSettings["metadata"]; setExportSettings((value) => ({ ...value, metadata })); }}><option value="none">不保留</option><option value="basic">保留基础拍摄信息</option><option value="supported">尽可能保留受支持信息</option></select></label>
+                  <label className={`check-field ${exportSettings.metadata === "none" ? "disabled" : ""}`}><input type="checkbox" checked={exportSettings.includeGps} disabled={exportSettings.metadata === "none"} onChange={(event) => { const includeGps = event.currentTarget.checked; setExportSettings((value) => ({ ...value, includeGps })); }} /><span><strong>保留 GPS 位置</strong><small>默认关闭，避免在分享照片时暴露拍摄地点</small></span></label>
+                </section>
+              </fieldset>
+              <aside className="export-review" aria-label="导出摘要">
+                <div><span>待导出</span><strong>{exportPlan.items.length} 张</strong></div>
+                <div><span>文件名示例</span><code>{exportPlan.sampleFileName}</code></div>
+                {exportPlan.sampleDimensions && <div><span>样例成品</span><strong>{exportPlan.sampleDimensions} px</strong></div>}
+                {!!exportPlan.estimatedPixels && <small>预计处理 {(exportPlan.estimatedPixels / 1_000_000).toFixed(1)} 百万像素；实际耗时还受格式与磁盘速度影响。</small>}
+                {!!visibleExportIssues.length && <div className="export-issues" role="alert"><strong><WarningCircle /> 请先处理</strong>{visibleExportIssues.map((issue) => <small key={`${issue.field}-${issue.message}`}>{issue.message}</small>)}</div>}
+                {!visibleExportIssues.length && <div className="export-ready"><Check /> 设置可用，开始前还会检查原图与输出目录。</div>}
+              </aside>
             </div>
-            <footer><span>原图不会被覆盖，设置会随上次工作自动恢复。</span><div><button className="button secondary" type="button" onClick={() => setShowExport(false)}>取消</button><button className="button primary" type="button" disabled={!exportSettings.directory || exportCount === 0} onClick={() => isNative ? void startExport() : (setShowExport(false), setMessage("导出设置已保存"))}>{isNative ? "开始导出" : "保存设置"}</button></div></footer>
+            <div className="export-dialog-footer"><span>原图不会被覆盖，设置会随上次工作自动恢复。</span><div><button className="button secondary" type="button" disabled={exportChecking} onClick={closeExport}>取消</button><button className="button primary" type="button" disabled={exportChecking || visibleExportIssues.length > 0} onClick={() => void startExport()}>{exportChecking ? "正在预检…" : isNative ? "预检并开始导出" : "保存设置"}</button></div></div>
           </section>
         </div>
       )}
 
       {exportRunning && exportProgress && (
         <div className="modal-backdrop">
-          <section className="progress-dialog" role="dialog" aria-modal="true" aria-labelledby="progress-title">
-            <header><span>批量导出</span><h2 id="progress-title">正在生成成品</h2></header>
+          <section className="progress-dialog" role="dialog" aria-modal="true" aria-labelledby="progress-title" aria-live="polite">
+            <div className="progress-dialog-header"><span>批量导出</span><h2 id="progress-title">正在生成成品</h2></div>
             <div className="progress-body">
               <div className="progress-count"><strong>{exportProgress.current} / {exportProgress.total}</strong><span>{exportProgress.fileName}</span></div>
-              <progress max={exportProgress.total || 1} value={exportProgress.current} />
+              <div className="progress-stage">{exportStageLabels[exportProgress.stage]}</div>
+              <progress max={exportProgress.total || 1} value={exportProgress.completed} />
               <div className="progress-stats"><span>成功 {exportProgress.succeeded}</span><span>失败 {exportProgress.failed}</span><span>跳过 {exportProgress.skipped}</span></div>
               <p>按原图顺序逐张处理。取消会停止后续照片，已经完成的文件会保留。</p>
             </div>
-            <footer><button className="button secondary" type="button" onClick={() => void cancelExport()}>取消后续任务</button></footer>
+            <div className="dialog-footer"><button className="button secondary" type="button" disabled={exportCancelling} onClick={() => void cancelExport()}>{exportCancelling ? "正在取消…" : "取消后续任务"}</button></div>
           </section>
         </div>
       )}
@@ -894,17 +978,17 @@ function App() {
       {!exportRunning && exportResult && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportResult(null); }}>
           <section className="result-dialog" role="dialog" aria-modal="true" aria-labelledby="result-title">
-            <header><div><span>{exportResult.cancelled ? "任务已取消" : "批量导出"}</span><h2 id="result-title">{exportResult.failed ? "导出完成，部分照片需要处理" : "导出完成"}</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setExportResult(null)}><X /></button></header>
+            <div className="result-dialog-header"><div><span>{exportResult.cancelled ? "任务已取消" : "批量导出"}</span><h2 id="result-title">{exportResult.failed ? "导出完成，部分照片需要处理" : "导出完成"}</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setExportResult(null)}><X /></button></div>
             <div className="result-body">
               <div className="result-stats"><div><strong>{exportResult.succeeded}</strong><span>成功</span></div><div><strong>{exportResult.failed}</strong><span>失败</span></div><div><strong>{exportResult.skipped}</strong><span>跳过</span></div></div>
               {!!exportResult.failures.length && <div className="result-list"><strong><WarningCircle /> 失败项目</strong>{exportResult.failures.map((failure) => <div key={`${failure.fileName}-${failure.reason}`}><span>{failure.fileName}</span><small>{failure.reason}</small></div>)}</div>}
-              {!!exportResult.warnings.length && <div className="result-list"><strong><WarningCircle /> 元数据提示</strong>{exportResult.warnings.map((warning) => <small key={warning}>{warning}</small>)}</div>}
+              {!!exportResult.warnings.length && <div className="result-list warning-list"><strong><WarningCircle /> 导出提示</strong>{exportResult.warnings.map((warning) => <small key={warning}>{warning}</small>)}</div>}
             </div>
-            <footer>
+            <div className="dialog-footer">
               <button className="button secondary" type="button" onClick={() => setExportResult(null)}>关闭</button>
               {!!exportResult.failures.some((failure) => failure.path) && <button className="button secondary" type="button" onClick={() => { const paths = new Set(exportResult.failures.map((failure) => failure.path).filter(Boolean)); setExportResult(null); void startExport(paths); }}>重试失败项</button>}
-              <button className="button primary" type="button" onClick={() => void openPath(exportResult.outputDirectory)}><FolderSimple /> 打开输出文件夹</button>
-            </footer>
+              <button className="button primary" type="button" onClick={() => { void openPath(exportResult.outputDirectory).catch((error) => setMessage(`无法打开输出文件夹：${String(error)}`)); }}><FolderSimple /> 打开输出文件夹</button>
+            </div>
           </section>
         </div>
       )}

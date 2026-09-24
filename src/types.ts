@@ -122,3 +122,36 @@ export interface ExportSettings {
   collision: "number" | "skip";
   pngCompression: "fast" | "standard" | "small";
 }
+
+export interface ExportProgress {
+  current: number;
+  completed: number;
+  total: number;
+  fileName: string;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  stage: "preflight" | "preparing" | "rendering" | "encoding" | "metadata" | "finishing" | "completed-item";
+}
+
+export interface ExportSummary {
+  total: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  cancelled: boolean;
+  outputDirectory: string;
+  failures: Array<{ fileName: string; path: string; reason: string }>;
+  warnings: string[];
+}
+
+export interface ExportPreflight {
+  ready: boolean;
+  total: number;
+  estimatedPixels: number;
+  largestWidth: number;
+  largestHeight: number;
+  largestFileName: string;
+  errors: string[];
+  warnings: string[];
+}

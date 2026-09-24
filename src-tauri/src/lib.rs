@@ -483,6 +483,7 @@ pub fn run() {
             read_template_backup,
             write_template_backup,
             load_editor_photo,
+            export::preflight_export,
             export::export_images,
             export::cancel_export
         ])

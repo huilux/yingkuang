@@ -31,6 +31,10 @@
       exported = args.request;
       return { total: 1, succeeded: 1, failed: 0, skipped: 0, cancelled: false, outputDirectory: '/tmp', failures: [], warnings: [] };
     }
+    if (command === 'preflight_export') return {
+      ready: true, total: 1, estimatedPixels: 1_200_000, largestWidth: 1200, largestHeight: 900,
+      largestFileName: 'export-current.jpg', errors: [], warnings: [],
+    };
   }, { shouldMockEvents: true });
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;inset:0;z-index:1000';
