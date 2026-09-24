@@ -16,6 +16,7 @@ import {
   FrameCorners,
   ImageSquare,
   Plus,
+  Trash,
   TextT,
   UploadSimple,
   WarningCircle,
@@ -27,7 +28,7 @@ import { LayerInspector } from "./LayerInspector";
 import { SliderRow, Segmented } from "./EditorControls";
 import { selectLayer, moveSelection, type LayerPatch } from "./selection-model";
 import { isVisible } from "./canvas-camera";
-import { retainBrowserPhoto, releaseBrowserPhotos } from "./use-editor-photo";
+import { retainBrowserPhoto, releaseBrowserPhoto, releaseBrowserPhotos } from "./use-editor-photo";
 import {
   builtInTemplates,
   calculateGeometry,
@@ -144,6 +145,7 @@ function initialDocuments() {
 
 function App() {
   const fileInput = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
   const transactionStart = useRef<EditorDocument | null>(null);
   const currentDocument = useRef<EditorDocument | undefined>(undefined);
   const undoStack = useRef<EditorDocument[]>([]);
@@ -164,6 +166,7 @@ function App() {
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [showExport, setShowExport] = useState(false);
+  const [pendingRemovalIds, setPendingRemovalIds] = useState<string[] | null>(null);
   const [exportSettings, setExportSettings] = useState(defaultExport);
   const [exportRunning, setExportRunning] = useState(false);
   const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
@@ -178,6 +181,7 @@ function App() {
   currentDocument.current = activeDocument;
   const selectedLayers = activeDocument?.layers.filter(item => selectedLayerIds.includes(item.id)) ?? [];
   const selectedCount = checkedIds.length;
+  const checkedSet = useMemo(() => new Set(checkedIds), [checkedIds]);
   const canUndo = undoStack.current.length > 0 && historyRevision >= 0;
   const canRedo = redoStack.current.length > 0 && historyRevision >= 0;
 
@@ -372,14 +376,21 @@ function App() {
     }
   }
 
-  async function importNativePhotos() {
+  async function importNativePhotos(source: "files" | "folder") {
     if (importBusy.current || loadState === "loading") return;
     importBusy.current = true;
     setMessage("");
     try {
-      const selection = await open({ multiple: true, directory: false, filters: [{ name: "摄影图片", extensions: ["jpg", "jpeg", "png"] }] });
-      const selectedPaths = selection ? (Array.isArray(selection) ? selection : [selection]) : [];
-      if (!selectedPaths.length) return;
+      const selection = source === "folder"
+        ? await open({ directory: true, multiple: false, title: "选择照片文件夹" })
+        : await open({ multiple: true, directory: false, filters: [{ name: "摄影图片", extensions: ["jpg", "jpeg", "png"] }] });
+      const selectedPaths = source === "folder" && typeof selection === "string"
+        ? await invoke<string[]>("list_image_files", { directory: selection })
+        : selection ? (Array.isArray(selection) ? selection : [selection]) : [];
+      if (!selectedPaths.length) {
+        if (source === "folder" && selection) setMessage("该文件夹内没有 JPEG 或 PNG 照片");
+        return;
+      }
       const known = new Set(photos.map(photo => photo.path));
       const paths = [...new Set(selectedPaths)].filter(path => !known.has(path));
       if (!paths.length) {
@@ -419,7 +430,7 @@ function App() {
       let failed = 0;
       const known = new Set(photos.map(photo => photo.id));
       for (const [index, file] of files.entries()) {
-        const id = `browser-${file.name}-${file.size}-${file.lastModified}`;
+        const id = `browser-${file.webkitRelativePath || file.name}-${file.size}-${file.lastModified}`;
         if (known.has(id)) continue;
         setMessage(`正在导入 ${index + 1}/${files.length} 张照片`);
         try {
@@ -465,10 +476,10 @@ function App() {
     }
   }
 
-  function handleImport() {
+  function handleImport(source: "files" | "folder" = "files") {
     if (loadState === "loading") return;
-    if (isNative) void importNativePhotos();
-    else fileInput.current?.click();
+    if (isNative) void importNativePhotos(source);
+    else (source === "folder" ? folderInput : fileInput).current?.click();
   }
 
   function activatePhoto(id: string) {
@@ -479,6 +490,28 @@ function App() {
 
   function toggleChecked(id: string) {
     setCheckedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  }
+
+  function removePhotos(ids: string[]) {
+    const removed = new Set(ids);
+    const remaining = photos.filter((photo) => !removed.has(photo.id));
+    for (const id of removed) releaseBrowserPhoto(id);
+    setPhotos(remaining);
+    setCheckedIds((current) => current.filter((id) => !removed.has(id)));
+    setDocuments((current) => {
+      const next = { ...current };
+      for (const id of removed) delete next[id];
+      return next;
+    });
+    if (removed.has(activeId)) {
+      const firstRemovedIndex = photos.findIndex((photo) => removed.has(photo.id));
+      const nextPhoto = remaining.find((photo) => photos.indexOf(photo) > firstRemovedIndex) ?? remaining[remaining.length - 1];
+      setActiveId(nextPhoto?.id ?? "");
+      setSelectedLayerIds([]);
+      clearHistory();
+    }
+    setMessage(`已从当前批次移除 ${removed.size} 张照片，原图未删除`);
+    setPendingRemovalIds(null);
   }
 
   function applyTemplate(template: TemplateRecord, targetIds: string[]) {
@@ -639,7 +672,7 @@ function App() {
   return (
     <div className="app-shell" onKeyDown={event => {
       const target = event.target as HTMLElement;
-      if (showExport || showTemplateDialog || target.closest("input, textarea, select, [contenteditable=true]")) return;
+      if (showExport || showTemplateDialog || pendingRemovalIds || target.closest("input, textarea, select, [contenteditable=true]")) return;
       if (editorRef.current?.isInteracting()) return;
       const command = event.ctrlKey || event.metaKey;
       if (command && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
@@ -658,6 +691,7 @@ function App() {
       }
     }}>
       <input ref={fileInput} className="visually-hidden" type="file" accept="image/jpeg,image/png" multiple onChange={(event) => void importBrowserPhotos(event)} />
+      <input ref={(node) => { folderInput.current = node; node?.setAttribute("webkitdirectory", ""); }} className="visually-hidden" type="file" accept="image/jpeg,image/png" multiple onChange={(event) => void importBrowserPhotos(event)} />
 
       <header className="app-header">
         <div className="brand-block" aria-label="映框"><span className="brand-mark"><FrameCorners weight="bold" /></span><div><strong>映框</strong><span>摄影水印与相框</span></div></div>
@@ -666,7 +700,7 @@ function App() {
           <button className="icon-button" type="button" aria-label="撤销" disabled={!canUndo} onClick={undo}><ArrowCounterClockwise /></button>
           <button className="icon-button" type="button" aria-label="重做" disabled={!canRedo} onClick={redo}><ArrowClockwise /></button>
           <span className="header-divider" />
-          <button className="button secondary" type="button" onClick={handleImport}><UploadSimple /> 导入照片</button>
+          <button className="button secondary" type="button" onClick={() => handleImport()}><UploadSimple /> 导入照片</button>
           <button className="button secondary" type="button" onClick={() => openExport("current")} disabled={!activePhoto}><ImageSquare /> 导出当前</button>
           <button className="button primary" type="button" onClick={() => openExport(exportSettings.range === "current" ? "selected" : exportSettings.range)} disabled={!photos.length}><DownloadSimple /> 批量导出</button>
         </div>
@@ -674,49 +708,51 @@ function App() {
 
       <main className="workbench">
         <aside className="library-panel">
-          <div className="panel-heading template-heading">
-            <div><span>模板</span><strong>相框样式</strong></div>
-            <div className="heading-actions">
-              <button className="icon-button quiet" type="button" aria-label="更新当前模板" title="更新当前模板" disabled={!activeDocument} onClick={updateCurrentTemplate}><FloppyDisk /></button>
-              <button className="icon-button quiet" type="button" aria-label="另存新模板" title="另存新模板" disabled={!activeDocument} onClick={() => { setTemplateName(`${activeTemplateRecord?.name ?? "相框"} 副本`); setShowTemplateDialog(true); }}><Copy /></button>
-            </div>
+          <div className="panel-heading library-heading">
+            <div><span>当前工作集</span><strong>照片批次 <em>{photos.length}</em></strong></div>
           </div>
-          <div className="template-list">
-            {templates.map((template) => (
-              <button className={`template-card ${activeTemplate === template.id ? "active" : ""}`} type="button" key={template.id} onClick={() => applyTemplate(template, activeId ? [activeId] : [])}>
-                <span className={`template-preview ${template.id === "solid-white" ? "solid-template" : "blur-template"}`}><img src={template.cover} alt={`${template.name}模板`} /></span>
-                <span><strong>{template.name}</strong><small>{template.description}</small></span>
-                {activeTemplate === template.id && <Check weight="bold" />}
-              </button>
-            ))}
+          <div className="library-import-actions">
+            <button className="button secondary" type="button" onClick={() => handleImport()} disabled={loadState === "loading"}><Plus /> 添加照片</button>
+            <button className="button secondary" type="button" onClick={() => handleImport("folder")} disabled={loadState === "loading"}><FolderOpen /> 导入文件夹</button>
           </div>
-          {!!activeDocument && !!checkedIds.length && <button className="apply-batch-button" type="button" onClick={() => applyCurrentCanvas(checkedIds)}>应用当前画布到已选 {checkedIds.length} 张</button>}
-
-          <div className="library-section-title"><span>照片</span><small>{photos.length}</small></div>
+          <div className="photo-selection-summary"><strong>已勾选 {selectedCount} / {photos.length}</strong><span>用于批量应用与导出</span></div>
+          <div className="photo-selection-actions" role="group" aria-label="照片批量选择">
+            <button type="button" disabled={!photos.length} onClick={() => setCheckedIds(photos.map((photo) => photo.id))}>全选</button>
+            <button type="button" disabled={!photos.length} onClick={() => setCheckedIds(photos.filter((photo) => !checkedSet.has(photo.id)).map((photo) => photo.id))}>反选</button>
+            <button type="button" disabled={!selectedCount} onClick={() => setCheckedIds([])}>取消选择</button>
+          </div>
           <div className="photo-list">
             {!photos.length ? (
-              <button className="library-empty" type="button" onClick={handleImport}><ImageSquare /><span>导入 JPEG 或 PNG</span></button>
+              <button className="library-empty" type="button" onClick={() => handleImport()}><ImageSquare /><strong>还没有照片</strong><span>添加照片或导入整个文件夹</span></button>
             ) : photos.map((photo) => (
-              <button type="button" key={photo.id} className={`photo-row ${photo.id === activePhoto?.id ? "active" : ""}`} onClick={() => activatePhoto(photo.id)}>
-                <span className="check-control" role="checkbox" aria-checked={checkedIds.includes(photo.id)} onClick={(event) => { event.stopPropagation(); toggleChecked(photo.id); }}>{checkedIds.includes(photo.id) && <Check weight="bold" />}</span>
-                <img src={photo.thumbnailDataUrl} alt="" /><span className="photo-row-copy"><strong>{photo.fileName}</strong><small>{formatPixels(photo)}</small></span>
-              </button>
+              <div key={photo.id} className={`photo-row ${photo.id === activePhoto?.id ? "active" : ""} ${checkedSet.has(photo.id) ? "checked" : ""}`}>
+                <button type="button" className="photo-check-button" aria-label={`${checkedSet.has(photo.id) ? "取消勾选" : "勾选"} ${photo.fileName}`} aria-pressed={checkedSet.has(photo.id)} onClick={() => toggleChecked(photo.id)}><span className="check-control">{checkedSet.has(photo.id) && <Check weight="bold" />}</span></button>
+                <button type="button" className="photo-open-button" aria-label={`预览 ${photo.fileName}`} aria-current={photo.id === activePhoto?.id ? "true" : undefined} onClick={() => activatePhoto(photo.id)}><img src={photo.thumbnailDataUrl} alt="" /><span className="photo-row-copy"><strong>{photo.fileName}</strong><small>{formatPixels(photo)}</small></span></button>
+              </div>
             ))}
           </div>
-          <button className="add-photo-button" type="button" onClick={handleImport}><Plus /> 添加照片</button>
+          <div className="library-footer">
+            <button className="library-remove-button" type="button" disabled={!selectedCount || loadState === "loading" || exportRunning} onClick={() => setPendingRemovalIds(checkedIds)}><Trash /> 移除已选</button>
+            <button className="library-clear-button" type="button" disabled={!photos.length || loadState === "loading" || exportRunning} onClick={() => setPendingRemovalIds(photos.map((photo) => photo.id))}>清空批次</button>
+          </div>
         </aside>
 
         <section className="editor-panel">
-          <EditorWorkspace photo={activePhoto} document={activeDocument} loading={loadState === "loading"} onImport={handleImport} onToggleSnap={() => setSnapEnabled(value => !value)} editorRef={editorRef} selectedLayerIds={selectedLayerIds} snapEnabled={snapEnabled} onSelectionChange={(ids) => { setSelectedLayerIds(ids); if (ids.length) setInspectorTab("watermark"); }} onLayersCommit={updateLayers} />
+          <EditorWorkspace photo={activePhoto} document={activeDocument} loading={loadState === "loading"} onImport={() => handleImport()} onToggleSnap={() => setSnapEnabled(value => !value)} editorRef={editorRef} selectedLayerIds={selectedLayerIds} snapEnabled={snapEnabled} onSelectionChange={(ids) => { setSelectedLayerIds(ids); if (ids.length) setInspectorTab("watermark"); }} onLayersCommit={updateLayers} />
 
           <div className={`status-bar ${loadState === "error" ? "error" : ""}`}><span>{message || (selectedLayers.length ? `已选：${selectedLayers.length === 1 ? selectedLayers[0].name : `${selectedLayers.length} 个元素`}` : activePhoto ? `${activePhoto.fileName}  ${activePhoto.megapixels.toFixed(1)} MP` : "准备就绪")}</span><span>{activePhoto ? `${formatPixels(activePhoto)}  sRGB  预览` : "完全本地处理"}</span></div>
-          <div className="filmstrip"><div className="filmstrip-heading"><span>{photos.length} 张照片</span><span>已选 {selectedCount} 张</span></div><div className="filmstrip-track">{photos.map((photo) => <button type="button" key={photo.id} className={`film-photo ${photo.id === activePhoto?.id ? "active" : ""}`} onClick={() => activatePhoto(photo.id)}><img src={photo.thumbnailDataUrl} alt={photo.fileName} /><span>{photo.fileName}</span></button>)}{!!photos.length && <button className="film-add" type="button" onClick={handleImport}><Plus /><span>添加</span></button>}</div></div>
+          <div className="filmstrip"><div className="filmstrip-heading"><strong>照片预览</strong><span>已勾选 {selectedCount} 张 · 点击缩略图切换预览</span></div><div className="filmstrip-track">{photos.map((photo) => <div key={photo.id} className={`film-photo ${photo.id === activePhoto?.id ? "active" : ""} ${checkedSet.has(photo.id) ? "checked" : ""}`}><button type="button" className="film-open-button" aria-label={`预览 ${photo.fileName}`} aria-current={photo.id === activePhoto?.id ? "true" : undefined} onClick={() => activatePhoto(photo.id)}><img src={photo.thumbnailDataUrl} alt="" /><span>{photo.fileName}</span></button><button type="button" className="film-check-button" aria-label={`${checkedSet.has(photo.id) ? "取消勾选" : "勾选"} ${photo.fileName}`} aria-pressed={checkedSet.has(photo.id)} onClick={() => toggleChecked(photo.id)}><span className="check-control">{checkedSet.has(photo.id) && <Check weight="bold" />}</span></button></div>)}{!!photos.length && <button className="film-add" type="button" onClick={() => handleImport()}><Plus /><span>添加</span></button>}</div></div>
         </section>
 
         <aside className="inspector-panel">
           <div className="inspector-tabs"><button type="button" className={inspectorTab === "frame" ? "active" : ""} onClick={() => setInspectorTab("frame")}><FrameCorners /> 相框</button><button type="button" className={inspectorTab === "watermark" ? "active" : ""} onClick={() => setInspectorTab("watermark")}><TextT /> 水印</button></div>
           {activeDocument && inspectorTab === "frame" ? (
             <div className="inspector-scroll">
+              <section className="inspector-section template-section">
+                <div className="section-heading"><strong>相框样式</strong><div className="heading-actions"><button className="icon-button quiet" type="button" aria-label="更新当前模板" title="更新当前模板" onClick={updateCurrentTemplate}><FloppyDisk /></button><button className="icon-button quiet" type="button" aria-label="另存新模板" title="另存新模板" onClick={() => { setTemplateName(`${activeTemplateRecord?.name ?? "相框"} 副本`); setShowTemplateDialog(true); }}><Copy /></button></div></div>
+                <div className="template-list">{templates.map((template) => <button className={`template-card ${activeTemplate === template.id ? "active" : ""}`} type="button" key={template.id} onClick={() => applyTemplate(template, activeId ? [activeId] : [])}><span className={`template-preview ${template.id === "solid-white" ? "solid-template" : "blur-template"}`}><img src={template.cover} alt="" /></span><span><strong>{template.name}</strong><small>{template.description}</small></span>{activeTemplate === template.id && <Check weight="bold" />}</button>)}</div>
+                {!!checkedIds.length && <button className="apply-batch-button" type="button" onClick={() => applyCurrentCanvas(checkedIds)}>将当前样式应用到已勾选 {checkedIds.length} 张</button>}
+              </section>
               <section className="inspector-section">
                 <div className="section-heading"><strong>相框外观</strong><span>实时预览</span></div>
                 <Segmented label="相框类型" value={activeDocument.frame.type} options={[{ value: "blur", label: "照片模糊" }, { value: "solid", label: "纯色" }]} onChange={(value) => updateDocument((draft) => { draft.frame.type = value; })} />
@@ -741,6 +777,8 @@ function App() {
           ) : <div className="inspector-empty">导入照片后开始设置</div>}
         </aside>
       </main>
+
+      {pendingRemovalIds && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingRemovalIds(null); }}><section className="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-title"><header><div><span>照片批次</span><h2 id="remove-title">移除 {pendingRemovalIds.length} 张照片？</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setPendingRemovalIds(null)}><X /></button></header><div className="compact-dialog-body"><p>照片只会从当前批次移除，磁盘上的原图不会删除。这些照片在当前批次中的单独调整也会清除。</p></div><footer><button className="button secondary" type="button" onClick={() => setPendingRemovalIds(null)}>取消</button><button className="button primary" type="button" onClick={() => removePhotos(pendingRemovalIds)}>确认移除</button></footer></section></div>}
 
       {showTemplateDialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowTemplateDialog(false); }}><section className="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="template-title"><header><div><span>模板库</span><h2 id="template-title">另存为新模板</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setShowTemplateDialog(false)}><X /></button></header><div className="compact-dialog-body"><label className="field"><span>模板名称</span><input autoFocus className="text-input" value={templateName} onChange={(event) => setTemplateName(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") saveNewTemplate(); }} /></label><p>保存当前方向的相框、四边区域、水印字段、字体和位置，并使用当前照片更新封面。</p></div><footer><button className="button secondary" type="button" onClick={() => setShowTemplateDialog(false)}>取消</button><button className="button primary" type="button" disabled={!templateName.trim()} onClick={saveNewTemplate}>保存模板</button></footer></section></div>}
 

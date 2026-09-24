@@ -124,7 +124,7 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .panel-heading span { color: var(--text-tertiary); font-size: 10px; }
 .panel-heading strong { font-size: 13px; font-weight: 600; }
 
-.template-list { display: grid; gap: 7px; max-height: 262px; overflow-y: auto; padding: 12px; scrollbar-color: var(--line-strong) transparent; }
+.template-list { display: grid; gap: 5px; }
 .template-card {
   position: relative;
   display: grid;
@@ -154,26 +154,44 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .solid-template::before { display: none; }
 .solid-template img { width: 60px; height: 34px; border-radius: 0; box-shadow: none; }
 
-.library-section-title { min-height: 36px; margin: 3px 13px 0; padding: 0 4px; border-top: 1px solid var(--line); color: var(--text-secondary); font-size: 11px; }
-.library-section-title small { display: grid; place-items: center; min-width: 20px; height: 20px; border-radius: 10px; background: var(--bg-raised); color: var(--text-secondary); }
+.library-heading strong { display: flex; align-items: center; gap: 8px; }
+.library-heading em { font: 600 10px ui-monospace, monospace; color: var(--accent); font-style: normal; }
+.library-import-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 13px 12px 15px; }
+.library-import-actions .button { min-width: 0; padding: 0 5px; font-size: 10px; }
+.library-import-actions svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.photo-selection-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; padding: 0 15px 10px; }
+.photo-selection-summary strong { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.photo-selection-summary span { color: var(--text-tertiary); font-size: 9px; }
+.photo-selection-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 0 10px 9px; padding: 4px; border: 1px solid var(--line); border-radius: var(--control-radius); background: var(--bg-input); }
+.photo-selection-actions button { min-height: 29px; padding: 0 2px; border: 0; border-radius: 5px; background: transparent; color: var(--text-secondary); font-size: 10px; cursor: pointer; }
+.photo-selection-actions button:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
 .photo-list { min-height: 0; flex: 1; overflow-y: auto; padding: 0 10px 8px; scrollbar-color: var(--line-strong) transparent; }
-.photo-row { display: grid; grid-template-columns: 17px 54px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; padding: 7px; border: 1px solid transparent; border-radius: var(--control-radius); background: transparent; text-align: left; cursor: pointer; }
+.photo-row { display: grid; grid-template-columns: 25px minmax(0, 1fr); align-items: center; gap: 2px; width: 100%; padding: 3px; border: 1px solid transparent; border-radius: var(--control-radius); }
 .photo-row:hover { background: var(--bg-raised); }
 .photo-row.active { border-color: var(--line-strong); background: var(--bg-raised); }
+.photo-row.checked:not(.active) { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.photo-check-button, .photo-open-button, .film-open-button, .film-check-button { border: 0; background: transparent; cursor: pointer; }
+.photo-check-button { display: grid; place-items: center; width: 25px; height: 40px; padding: 0; }
+.photo-open-button { display: grid; grid-template-columns: 54px minmax(0, 1fr); align-items: center; gap: 8px; min-width: 0; padding: 3px 2px; color: var(--text); text-align: left; }
 .photo-row img { width: 54px; height: 37px; border-radius: 4px; object-fit: cover; background: var(--bg-input); }
 .photo-row-copy { display: grid; gap: 2px; min-width: 0; }
 .photo-row-copy strong { overflow: hidden; font-size: 10px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
 .photo-row-copy small { color: var(--text-tertiary); font-size: 8px; }
-.check-control { display: grid; place-items: center; width: 15px; height: 15px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--accent-ink); background: var(--bg-input); }
-.check-control[aria-checked="true"] { border-color: var(--accent); background: var(--accent); }
-.check-control svg { width: 11px; height: 11px; }
-.add-photo-button { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 9px 12px 12px; min-height: 34px; border: 1px dashed var(--line-strong); border-radius: var(--control-radius); background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
-.add-photo-button:hover { border-color: var(--accent); color: var(--text); }
-.library-empty { display: grid; place-items: center; gap: 6px; width: 100%; min-height: 104px; border: 1px dashed var(--line); border-radius: var(--control-radius); background: transparent; color: var(--text-tertiary); font-size: 10px; cursor: pointer; }
+.check-control { display: grid; place-items: center; width: 17px; height: 17px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--accent-ink); background: var(--bg-input); }
+[aria-pressed="true"] > .check-control { border-color: var(--accent); background: var(--accent); }
+.check-control svg { width: 12px; height: 12px; }
+.library-empty { display: grid; place-items: center; align-content: center; gap: 8px; width: 100%; min-height: 155px; border: 1px dashed var(--line); border-radius: var(--control-radius); background: transparent; color: var(--text-tertiary); font-size: 10px; cursor: pointer; }
 .library-empty svg { width: 24px; height: 24px; }
+.library-empty strong { color: var(--text-secondary); font-size: 12px; }
+.library-footer { display: grid; grid-template-columns: 1fr auto; gap: 6px; padding: 11px 12px; border-top: 1px solid var(--line); }
+.library-footer button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; border: 1px solid var(--line); border-radius: var(--control-radius); background: var(--bg-raised); color: var(--text-secondary); font-size: 10px; cursor: pointer; }
+.library-footer button:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+.library-footer button:disabled { cursor: not-allowed; }
+.library-footer svg { width: 14px; height: 14px; }
+.library-clear-button { padding: 0 9px; background: transparent !important; }
 .heading-actions { display: flex; gap: 3px; }
 .heading-actions .icon-button { width: 30px; min-height: 30px; }
-.apply-batch-button { min-height: 31px; margin: 0 12px 9px; border: 1px solid var(--line); border-radius: var(--control-radius); background: var(--bg-raised); color: var(--text-secondary); font-size: 9px; cursor: pointer; }
+.apply-batch-button { width: 100%; min-height: 32px; margin-top: 9px; border: 1px solid var(--line); border-radius: var(--control-radius); background: var(--bg-raised); color: var(--text-secondary); font-size: 10px; cursor: pointer; }
 .apply-batch-button:hover { border-color: var(--accent); color: var(--text); }
 
 .editor-panel { min-width: 0; min-height: 0; display: grid; grid-template-rows: 48px minmax(240px, 1fr) 28px 132px; background: #121413; }
@@ -240,14 +258,21 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .status-bar.error { color: var(--danger); }
 .filmstrip { min-width: 0; background: var(--bg-panel); }
 .filmstrip-heading { display: flex; gap: 10px; height: 29px; padding: 0 12px; align-items: center; color: var(--text-tertiary); font-size: 9px; }
-.filmstrip-heading span + span { color: var(--text-secondary); }
+.filmstrip-heading strong { color: var(--text-secondary); font-size: 10px; font-weight: 600; }
 .filmstrip-track { display: flex; gap: 8px; overflow-x: auto; padding: 2px 12px 9px; scrollbar-color: var(--line-strong) transparent; }
-.film-photo, .film-add { flex: 0 0 auto; width: 96px; height: 88px; padding: 4px; border: 1px solid transparent; border-radius: var(--control-radius); background: transparent; color: var(--text-secondary); cursor: pointer; }
+.film-photo, .film-add { position: relative; flex: 0 0 auto; width: 96px; height: 88px; padding: 4px; border: 1px solid transparent; border-radius: var(--control-radius); background: transparent; color: var(--text-secondary); }
 .film-photo:hover, .film-add:hover { background: var(--bg-raised); }
 .film-photo.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--bg-raised)); }
+.film-photo.checked:not(.active) { background: color-mix(in srgb, var(--accent) 5%, var(--bg-panel)); }
+.film-open-button { display: block; width: 100%; padding: 0; color: inherit; text-align: left; }
 .film-photo img { display: block; width: 86px; height: 57px; border-radius: 4px; object-fit: cover; }
-.film-photo span { display: block; margin-top: 5px; overflow: hidden; font-size: 8px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.film-open-button > span { display: block; margin-top: 5px; overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.film-check-button { position: absolute; top: 7px; right: 7px; display: grid; place-items: center; width: 27px; height: 27px; padding: 0; border-radius: 5px; background: rgb(13 16 14 / .78); }
+.film-check-button .check-control { width: 18px; height: 18px; border-color: #d0d5cf; }
+.film-check-button[aria-pressed="true"] .check-control { border-color: var(--accent); }
+.film-check-button:hover { background: rgb(13 16 14 / .94); }
 .film-add { display: grid; place-items: center; align-content: center; gap: 4px; border-color: var(--line); }
+.film-add { cursor: pointer; }
 .film-add svg { width: 18px; height: 18px; }
 .film-add span { font-size: 8px; }
 
@@ -258,6 +283,9 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .inspector-tabs svg { width: 16px; height: 16px; }
 .inspector-scroll { height: calc(100% - 48px); overflow-y: auto; scrollbar-color: var(--line-strong) transparent; }
 .inspector-section { padding: 18px; border-bottom: 1px solid var(--line); }
+.template-section { padding: 12px 12px 14px; }
+.template-section .section-heading { margin: 0 3px 8px; }
+.template-section .heading-actions .icon-button { width: 28px; min-height: 28px; }
 .section-heading { min-height: 24px; margin-bottom: 16px; }
 .section-heading strong { font-size: 12px; font-weight: 600; }
 .section-heading > span { color: var(--text-tertiary); font-size: 9px; }

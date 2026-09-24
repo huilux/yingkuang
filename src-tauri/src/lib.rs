@@ -4,7 +4,7 @@ use image::{DynamicImage, GenericImageView, codecs::jpeg::JpegEncoder};
 use serde::Serialize;
 use std::{
     collections::hash_map::DefaultHasher,
-    fs::File,
+    fs::{self, File},
     hash::{Hash, Hasher},
     io::BufReader,
     path::{Path, PathBuf},
@@ -283,6 +283,49 @@ async fn inspect_images_resilient(paths: Vec<String>) -> Result<InspectReport, S
     .map_err(|error| format!("图片任务异常结束：{error}"))
 }
 
+fn image_files_in_directory(directory: &Path) -> Result<Vec<String>, String> {
+    let mut paths = Vec::new();
+    let mut directories = vec![directory.to_path_buf()];
+    while let Some(current) = directories.pop() {
+        for entry in fs::read_dir(&current).map_err(|error| format!("无法读取文件夹：{error}"))?
+        {
+            let entry = entry.map_err(|error| format!("无法读取文件夹内容：{error}"))?;
+            let file_type = entry
+                .file_type()
+                .map_err(|error| format!("无法读取文件类型：{error}"))?;
+            let path = entry.path();
+            if file_type.is_dir() {
+                directories.push(path);
+                continue;
+            }
+            if !file_type.is_file() {
+                continue;
+            }
+            let is_image = path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| {
+                    matches!(
+                        extension.to_ascii_lowercase().as_str(),
+                        "jpg" | "jpeg" | "png"
+                    )
+                });
+            if is_image {
+                paths.push(path.to_string_lossy().into_owned());
+            }
+        }
+    }
+    paths.sort_by_key(|path| path.to_lowercase());
+    Ok(paths)
+}
+
+#[tauri::command]
+async fn list_image_files(directory: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || image_files_in_directory(Path::new(&directory)))
+        .await
+        .map_err(|error| format!("读取文件夹任务异常结束：{error}"))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -291,6 +334,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             inspect_images,
             inspect_images_resilient,
+            list_image_files,
             load_editor_photo,
             export::export_images,
             export::cancel_export
@@ -302,6 +346,24 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn folder_import_lists_supported_images_including_subfolders() {
+        let directory = tempfile::tempdir().unwrap();
+        for name in ["b.PNG", "a.jpg", "notes.txt"] {
+            File::create(directory.path().join(name)).unwrap();
+        }
+        let nested = directory.path().join("nested");
+        fs::create_dir(&nested).unwrap();
+        File::create(nested.join("c.jpeg")).unwrap();
+
+        let paths = image_files_in_directory(directory.path()).unwrap();
+        let names: Vec<_> = paths
+            .iter()
+            .map(|path| Path::new(path).file_name().unwrap().to_str().unwrap())
+            .collect();
+        assert_eq!(names, ["a.jpg", "b.PNG", "c.jpeg"]);
+    }
 
     #[test]
     fn editor_photo_keeps_original_detail_and_alpha() {

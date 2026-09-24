@@ -5,6 +5,7 @@ import type { PhotoAsset } from "./types";
 // Keep compressed browser originals, never all decoded full-size bitmaps.
 const browserFiles = new Map<string, Blob>();
 export function retainBrowserPhoto(id: string, file: Blob) { browserFiles.set(id, file); }
+export function releaseBrowserPhoto(id: string) { browserFiles.delete(id); }
 export function releaseBrowserPhotos() { browserFiles.clear(); }
 
 export function useEditorPhoto(photo: PhotoAsset) {
