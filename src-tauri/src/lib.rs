@@ -174,6 +174,11 @@ fn inspect_image(path: PathBuf) -> Result<PhotoAsset, String> {
 }
 
 fn editor_photo(path: &Path) -> Result<String, String> {
+    let jpeg = image::ImageFormat::from_path(path).ok() == Some(image::ImageFormat::Jpeg);
+    if jpeg && let Some(bytes) = vips_editor_jpeg(path) {
+        return Ok(format!("data:image/jpeg;base64,{}", STANDARD.encode(bytes)));
+    }
+
     let image = export::decode_color_managed(path, read_exif(path).orientation)?;
     // A single active 4096px editing texture covers 300% zoom on typical HiDPI
     // viewports. Export always reads the original, independently of this limit.
@@ -184,13 +189,48 @@ fn editor_photo(path: &Path) -> Result<String, String> {
         image
     };
     let mut bytes = std::io::Cursor::new(Vec::new());
-    image
-        .write_to(&mut bytes, image::ImageFormat::Png)
-        .map_err(|error| format!("无法生成高清编辑图：{error}"))?;
+    if jpeg {
+        JpegEncoder::new_with_quality(&mut bytes, 92)
+            .encode_image(&image)
+            .map_err(|error| format!("无法生成高清编辑图：{error}"))?;
+    } else {
+        image
+            .write_to(&mut bytes, image::ImageFormat::Png)
+            .map_err(|error| format!("无法生成高清编辑图：{error}"))?;
+    }
+    let mime = if jpeg { "image/jpeg" } else { "image/png" };
     Ok(format!(
-        "data:image/png;base64,{}",
+        "data:{mime};base64,{}",
         STANDARD.encode(bytes.into_inner())
     ))
+}
+
+// libvips shrinks JPEGs while loading and uses a fast native encoder. Keep the
+// pure-Rust path above for installations without its CLI and for alpha images.
+fn vips_editor_jpeg(path: &Path) -> Option<Vec<u8>> {
+    let directory = tempfile::Builder::new()
+        .prefix("yingkuang-editor-")
+        .tempdir()
+        .ok()?;
+    let output = directory.path().join("photo.jpg");
+    let profile_path = directory.path().join("srgb.icc");
+    let profile = lcms2::Profile::new_srgb().icc().ok()?;
+    std::fs::write(&profile_path, profile).ok()?;
+    let target = format!("{}[Q=92,strip]", output.display());
+    let result = std::process::Command::new("vips")
+        .arg("thumbnail")
+        .arg(path)
+        .arg(target)
+        .arg("4096")
+        .args(["--size", "down"])
+        .arg("--output-profile")
+        .arg(&profile_path)
+        .output();
+    let bytes = match result {
+        Ok(result) if result.status.success() => std::fs::read(&output).ok(),
+        _ => None,
+    };
+    bytes.filter(|bytes| bytes.starts_with(&[0xff, 0xd8]))
 }
 
 #[tauri::command]
@@ -287,6 +327,76 @@ mod tests {
     }
 
     #[test]
+    fn editor_photo_jpeg_preserves_exif_orientation() {
+        use little_exif::{exif_tag::ExifTag, metadata::Metadata};
+        let path =
+            std::env::temp_dir().join(format!("yingkuang-orientation-{}.jpg", std::process::id()));
+        let source = image::RgbImage::from_fn(80, 40, |x, _| {
+            if x < 40 {
+                image::Rgb([250, 20, 20])
+            } else {
+                image::Rgb([20, 20, 250])
+            }
+        });
+        source.save(&path).unwrap();
+        let mut metadata = Metadata::new();
+        metadata.set_tag(ExifTag::Orientation(vec![6]));
+        metadata.write_to_file(&path).unwrap();
+
+        let encoded = editor_photo(&path).unwrap();
+        assert!(encoded.starts_with("data:image/jpeg;base64,"));
+        let decoded =
+            image::load_from_memory(&STANDARD.decode(encoded.split_once(',').unwrap().1).unwrap())
+                .unwrap()
+                .into_rgb8();
+        assert_eq!(decoded.dimensions(), (40, 80));
+        let top = decoded.get_pixel(20, 10);
+        let bottom = decoded.get_pixel(20, 70);
+        assert!(top[0] > top[2], "red half should rotate to top: {top:?}");
+        assert!(
+            bottom[2] > bottom[0],
+            "blue half should rotate to bottom: {bottom:?}"
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn editor_photo_converts_embedded_icc_to_srgb() {
+        use image::ImageEncoder;
+        use lcms2::{CIExyY, CIExyYTRIPLE, Profile, ToneCurve};
+        let path = std::env::temp_dir().join(format!("yingkuang-icc-{}.jpg", std::process::id()));
+        let point = |x, y| CIExyY { x, y, Y: 1.0 };
+        let primaries = CIExyYTRIPLE {
+            Red: point(0.64, 0.33),
+            Green: point(0.30, 0.60),
+            Blue: point(0.15, 0.06),
+        };
+        let curve = ToneCurve::new(1.0);
+        let linear_rgb = Profile::new_rgb(&point(0.3127, 0.3290), &primaries, &[&curve; 3])
+            .unwrap()
+            .icc()
+            .unwrap();
+        let source = image::RgbImage::from_pixel(80, 40, image::Rgb([128, 128, 128]));
+        let mut bytes = Vec::new();
+        let mut encoder = JpegEncoder::new_with_quality(&mut bytes, 95);
+        encoder.set_icc_profile(linear_rgb).unwrap();
+        encoder.encode_image(&source).unwrap();
+        std::fs::write(&path, bytes).unwrap();
+
+        let encoded = editor_photo(&path).unwrap();
+        let decoded =
+            image::load_from_memory(&STANDARD.decode(encoded.split_once(',').unwrap().1).unwrap())
+                .unwrap()
+                .into_rgb8();
+        let pixel = decoded.get_pixel(40, 20);
+        assert!(
+            (175..=200).contains(&pixel[0]),
+            "linear RGB should become sRGB, got {pixel:?}"
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     #[ignore = "local photo performance check; run explicitly with --ignored --nocapture"]
     fn import_latency_budget() {
         let start = std::time::Instant::now();
@@ -297,6 +407,32 @@ mod tests {
         assert!(
             elapsed.as_secs_f64() < 2.0,
             "single-photo import exceeded 2s: {elapsed:?}"
+        );
+    }
+
+    #[test]
+    #[ignore = "local 24 MP editing-photo performance check; run explicitly"]
+    fn editor_photo_latency_budget() {
+        let path = PathBuf::from("../assets/origin/PANA9432.JPG");
+        let started = std::time::Instant::now();
+        let photo = inspect_image(path.clone()).unwrap();
+        let inspected = started.elapsed();
+        let source = editor_photo(&path).unwrap();
+        let total = started.elapsed();
+        eprintln!(
+            "24 MP ready: inspect={inspected:?} total={total:?} editor_data_url={} bytes",
+            source.len()
+        );
+        assert_eq!((photo.width, photo.height), (6000, 4000));
+        assert!(source.starts_with("data:image/jpeg;base64,"));
+        assert!(source.len() < 5_000_000, "editor transfer exceeded 5 MB");
+        let editor =
+            image::load_from_memory(&STANDARD.decode(source.split_once(',').unwrap().1).unwrap())
+                .unwrap();
+        assert_eq!(editor.dimensions(), (4096, 2731));
+        assert!(
+            total.as_secs_f64() < 2.0,
+            "24 MP preview exceeded 2s: {total:?}"
         );
     }
 

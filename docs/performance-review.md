@@ -65,3 +65,16 @@ xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 zoom
 ## 高清编辑图补充（2026-09-21）
 
 此前 720px 列表图参与照片主体绘制，且主体被合入 1600px 相框缓存，造成放大后细节丢失。现在主体按需读取最长边 4096px 的编辑图，背景缓存仍为 1600px；缩放复用纹理，水印拖拽不重绘照片。当前真实 6000×4000 JPEG 在 WebKitGTK 中首次/热缓存各 48 帧缩放采样 P95 均为 17ms，Chromium 分别约 16.8/16.7ms，均无超过 32ms 的帧。采样在高清图片就绪后开始，不包括首次解码。颜色空间与阴影一致性修复见 [渲染质量修复](render-quality.md)。
+
+## 24MP 高清图加载（2026-09-24）
+
+同一张 `PANA9432.JPG` 在本机 `tauri dev` 测试构建中，导入检查及高清编辑图生成合计 **2.8–3.0 秒**，其中再次解码约 0.22 秒、4096px 缩放约 0.8 秒、PNG 编码约 1.5 秒；传给 WebKit 的 data URL 约 **21 MB**。这解释了缩略图先出现、高清图几秒后才出现的现象。
+
+JPEG 现在优先通过系统 `vips` 命令缩图并编码为质量 92 的 4096px JPEG。输出明确转换至 sRGB：默认缩图会保留像素数值却移除 ICC，带非 sRGB 配置的照片因此会偏色。临时文件放在自动清理的私有目录。若系统没有 `vips` 或处理失败，自动退回原有 Rust 解码、Lanczos 缩放与色彩管理路径；JPEG 回退也使用 JPEG 编码以减小传输量，PNG 仍保留无损和透明度。导出仍从原图独立渲染。
+
+同一测试在加速路径下合计 **0.63–0.78 秒**，data URL 约 **2.62 MB**。测试覆盖 EXIF 旋转、嵌入 ICC 转换、PNG alpha 和编辑图尺寸。此测量只到 Tauri 返回 data URL，未计入 WebKit 最终解码和绘制；速度依赖本机可执行的 `vips`，无该工具的安装仍会使用较慢的回退路径。
+
+```bash
+vips --version
+cargo test --manifest-path src-tauri/Cargo.toml --lib editor_photo_latency_budget -- --ignored --nocapture
+```

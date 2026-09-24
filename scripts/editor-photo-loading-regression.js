@@ -10,7 +10,7 @@
   const fixture = document.createElement('canvas'); fixture.width = 64; fixture.height = 40;
   const thumbnailDataUrl = fixture.toDataURL();
   fixture.width = 3200; fixture.height = 200;
-  const high = fixture.toDataURL();
+  const high = fixture.toDataURL('image/jpeg', 0.92);
   const pending = new Map(), requests = [];
   mockIPC((command, args) => {
     if (command !== 'load_editor_photo') throw Error(`Unexpected command ${command}`);
