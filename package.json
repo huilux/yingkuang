@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && node --test scripts/bundle-budget.test.mjs",
     "preview": "vite preview",
     "test:camera": "node --test scripts/camera-regression.test.mjs",
     "test:selection": "node --test scripts/selection-regression.test.mjs",

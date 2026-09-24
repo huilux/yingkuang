@@ -13,6 +13,10 @@
 
 多选与排版的后续补齐见 [原型功能对照](prototype-parity.md)。
 
+## 按需加载（2026-09-24）
+
+`EditorWorkspace` 仅在有可编辑照片时加载 `EditorCanvas`，加载期间显示画布占位；空照片库不再加载 Konva。生产构建的入口 JavaScript 从 661.15KB 降到 328.61KB（gzip 从 200.09KB 降到 98.97KB），画布另成 334.11KB 文件。`npm run build` 会执行入口体积预算，约束启动时需要下载的 JavaScript 不超过 400KiB、gzip 不超过 125KiB。这是构建产物体积，不等同于实际启动耗时。
+
 ## 操作
 
 - Ctrl / Command + 滚轮：以鼠标位置为锚点缩放，支持细小触控板输入。
@@ -48,4 +52,4 @@ xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 zoom
 
 上述帧耗时是本机虚拟显示环境的结果，不保证实体设备、不同 DPR 或触控板上的固定帧率。200 张批量与 9600 万像素内存验收仍待完成。
 
-没有接入 libvips。后续的 [渲染质量修复](render-quality.md) 已统一原图解码、模糊颜色空间和阴影算法。前端 Canvas 文字与 Rust 字体渲染仍为两套实现，像素级一致性需要后续专项验证。画布重构不要求迁移已有模板或会话。
+没有接入 libvips。后续的 [渲染质量修复](render-quality.md) 已统一原图解码、模糊颜色空间、阴影算法和文字外框尺寸；前端 Canvas 与 Rust 的抗锯齿像素仍可能不同。画布重构不要求迁移已有模板或会话。

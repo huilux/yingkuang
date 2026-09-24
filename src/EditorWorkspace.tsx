@@ -1,10 +1,12 @@
-import { useState, type RefObject, type ComponentProps } from "react";
+import { lazy, Suspense, useState, type RefObject } from "react";
 import { FileImage, Magnet, Minus, Plus, SlidersHorizontal, UploadSimple } from "@phosphor-icons/react";
-import { EditorCanvas, type EditorCanvasHandle } from "./EditorCanvas";
+import type { EditorCanvasHandle, EditorCanvasProps } from "./EditorCanvas";
 import { NumericInput } from "./NumericInput";
 import type { EditorDocument, PhotoAsset } from "./types";
 
-type Props = Omit<ComponentProps<typeof EditorCanvas>, "photo" | "document" | "onZoomChange" | "ref"> & {
+const EditorCanvas = lazy(() => import("./EditorCanvas").then(({ EditorCanvas }) => ({ default: EditorCanvas })));
+
+type Props = Omit<EditorCanvasProps, "photo" | "document" | "onZoomChange"> & {
   photo?: PhotoAsset;
   document?: EditorDocument;
   editorRef: RefObject<EditorCanvasHandle | null>;
@@ -26,7 +28,9 @@ export function EditorWorkspace({ photo, document, loading, onImport, onToggleSn
     {loading && !photo ? (
       <div className="canvas-viewport"><div className="canvas-loading" aria-live="polite"><span className="skeleton canvas-skeleton" /><strong>正在读取照片</strong><span>生成缩略图并读取拍摄信息</span></div></div>
     ) : photo && document ? (
-      <EditorCanvas key={photo.id} ref={canvasRef} {...canvasProps} photo={photo} document={document} onZoomChange={setZoom} />
+      <Suspense fallback={<div className="canvas-viewport"><div className="canvas-loading" aria-live="polite"><span className="skeleton canvas-skeleton" /><strong>正在加载编辑器</strong></div></div>}>
+        <EditorCanvas key={photo.id} ref={canvasRef} {...canvasProps} photo={photo} document={document} onZoomChange={setZoom} />
+      </Suspense>
     ) : (
       <div className="canvas-viewport"><div className="canvas-empty"><span className="empty-icon"><FileImage /></span><strong>从一张照片开始</strong><p>导入 JPEG 或 PNG，在本机读取参数并实时设计相框。</p><button className="button primary" type="button" onClick={onImport}><UploadSimple /> 导入照片</button></div></div>
     )}

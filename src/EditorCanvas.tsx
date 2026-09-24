@@ -14,7 +14,7 @@ export interface EditorCanvasHandle {
   isInteracting: () => boolean;
   arrange: (action: ArrangeAction, reference: AlignReference) => void;
 }
-interface Props {
+export interface EditorCanvasProps {
   photo: PhotoAsset;
   document: EditorDocument;
   selectedLayerIds: string[];
@@ -26,7 +26,7 @@ interface Props {
 
 // React owns document changes. Konva owns transient camera/drag positions.
 // These must not be sent through the document store on each input event.
-export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, Props>(function EditorCanvas({
+export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProps>(function EditorCanvas({
   photo, document: design, selectedLayerIds, snapEnabled, onZoomChange, onSelectionChange, onLayersCommit,
 }, ref) {
   const helpId = useId();

@@ -20,15 +20,32 @@ if len(sys.argv) > 2:
     checks = sys.argv[2:]
 
 result = 1
+current_check = "page load"
+timeout_id = None
 manager = WebKit2.UserContentManager()
 manager.register_script_message_handler("regression")
 
 
+def timeout():
+    print(f"WebKit regression timed out during {current_check}", file=sys.stderr, flush=True)
+    Gtk.main_quit()
+    return False
+
+
+def arm_timeout():
+    global timeout_id
+    if timeout_id is not None:
+        GLib.source_remove(timeout_id)
+    timeout_id = GLib.timeout_add_seconds(45, timeout)
+
+
 def received(_manager, message):
-    global result
+    global result, current_check
     report = json.loads(message.get_js_value().to_string())
     print(json.dumps(report, ensure_ascii=False), flush=True)
     if report.get("running"):
+        current_check = report["running"]
+        arm_timeout()
         return
     result = 0 if report.get("ok") else 1
     Gtk.main_quit()
@@ -62,12 +79,6 @@ def loaded(_view, event):
     view.evaluate_javascript(javascript, -1, None, None, None, None, None)
 
 
-def timeout():
-    print("WebKit regression timed out", file=sys.stderr)
-    Gtk.main_quit()
-    return False
-
-
 view.connect("load-changed", loaded)
 def load_failed(_view, _event, uri, error):
     print(f"Unable to load {uri}: {error.message}", file=sys.stderr, flush=True)
@@ -77,6 +88,6 @@ def load_failed(_view, _event, uri, error):
 
 view.connect("load-failed", load_failed)
 view.load_uri(sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:1422")
-GLib.timeout_add_seconds(max(45, len(checks) * 10), timeout)
+arm_timeout()
 Gtk.main()
 sys.exit(result)
