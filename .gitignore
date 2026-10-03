@@ -4,6 +4,7 @@ dist/
 target/
 src-tauri/target/
 *.log
+__pycache__/
 .DS_Store
 
 # Local editor and runtime state

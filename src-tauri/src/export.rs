@@ -1,7 +1,7 @@
 use crate::{ExifSnapshot, apply_orientation, read_exif};
 use ab_glyph::{Font, FontArc, FontVec, PxScale};
 use image::{
-    DynamicImage, ImageDecoder, ImageEncoder, ImageReader, Rgba, RgbaImage,
+    DynamicImage, ImageDecoder, ImageEncoder, ImageReader, Pixel, Rgba, RgbaImage,
     codecs::{
         jpeg::JpegEncoder,
         png::{CompressionType, FilterType as PngFilterType, PngEncoder},
@@ -490,6 +490,61 @@ fn linear_to_srgb(value: f32) -> f32 {
     }) * 255.0
 }
 
+// Enlargement needs only the two neighbours on each axis. Precompute their
+// positions once rather than rebuilding a general resampling kernel per pixel.
+// This path is for the already blurred background; photo resizing keeps its
+// antialiasing filter for downsampling and Lanczos for near-size output.
+fn upscale_background(source: RgbaImage, width: u32, height: u32) -> RgbaImage {
+    if source.dimensions() == (width, height) {
+        return source;
+    }
+    let columns = interpolation_axis(source.width(), width);
+    let rows = interpolation_axis(source.height(), height);
+    let mut output = RgbaImage::new(width, height);
+    let stride = source.width() as usize * 4;
+    let pixels = source.as_raw();
+    for (target, &(top, bottom, fy)) in output
+        .as_mut()
+        .chunks_exact_mut(width as usize * 4)
+        .zip(&rows)
+    {
+        let upper = &pixels[top * stride..(top + 1) * stride];
+        let lower = &pixels[bottom * stride..(bottom + 1) * stride];
+        for (pixel, &(left, right, fx)) in target.chunks_exact_mut(4).zip(&columns) {
+            for channel in 0..4 {
+                let a = upper[left * 4 + channel] as f32;
+                let b = upper[right * 4 + channel] as f32;
+                let c = lower[left * 4 + channel] as f32;
+                let d = lower[right * 4 + channel] as f32;
+                let top = a + (b - a) * fx;
+                let bottom = c + (d - c) * fx;
+                pixel[channel] = (top + (bottom - top) * fy).round() as u8;
+            }
+        }
+    }
+    output
+}
+
+fn interpolation_axis(source: u32, target: u32) -> Vec<(usize, usize, f32)> {
+    let ratio = source as f32 / target as f32;
+    interpolation_axis_at_scale(source, target, ratio)
+}
+
+fn interpolation_axis_at_scale(source: u32, target: u32, ratio: f32) -> Vec<(usize, usize, f32)> {
+    (0..target)
+        .map(|position| {
+            let coordinate =
+                ((position as f32 + 0.5) * ratio - 0.5).clamp(0.0, (source - 1) as f32);
+            let left = coordinate.floor() as usize;
+            (
+                left,
+                (left + 1).min(source as usize - 1),
+                coordinate - left as f32,
+            )
+        })
+        .collect()
+}
+
 fn make_blurred_background(
     source: &RgbaImage,
     width: u32,
@@ -520,7 +575,9 @@ fn make_blurred_background(
             alpha,
         ])
     });
-    let filtered = if small_blur > 0.0 {
+    let filtered = if small_blur >= 4.0 {
+        imageops::fast_blur(&linear, small_blur)
+    } else if small_blur > 0.0 {
         imageops::blur(&linear, small_blur)
     } else {
         linear
@@ -541,7 +598,7 @@ fn make_blurred_background(
         }
         Rgba(result)
     });
-    imageops::resize(&blurred, width, height, FilterType::Triangle)
+    upscale_background(blurred, width, height)
 }
 
 fn rounded_contains(x: u32, y: u32, width: u32, height: u32, radius: u32) -> bool {
@@ -620,17 +677,42 @@ fn draw_soft_shadow(canvas: &mut RgbaImage, rect: Rect, scale: f32, amount: f32,
     });
     let mask = imageops::blur(&mask, (amount * 0.42 * s).max(0.1));
     let opacity = (amount / 100.0).min(0.4);
-    for (x, y, pixel) in canvas.enumerate_pixels_mut() {
-        let alpha = imageops::interpolate_bilinear(
-            &mask,
-            ((x as f32 + 0.5) * work_scale - 0.5).clamp(0.0, (width - 1) as f32),
-            ((y as f32 + 0.5) * work_scale - 0.5).clamp(0.0, (height - 1) as f32),
-        )
-        .unwrap()
-        .0[0] as f32
-            / 255.0
-            * opacity;
-        image::Pixel::blend(pixel, &Rgba([7, 9, 9, (alpha * 255.0).round() as u8]));
+    composite_shadow(canvas, &mask, work_scale, opacity);
+}
+
+fn composite_shadow(canvas: &mut RgbaImage, mask: &image::GrayImage, scale: f32, opacity: f32) {
+    let alphas: [u8; 256] =
+        std::array::from_fn(|sample| (sample as f32 / 255.0 * opacity * 255.0).round() as u8);
+    let columns = interpolation_axis_at_scale(mask.width(), canvas.width(), scale);
+    let rows = interpolation_axis_at_scale(mask.height(), canvas.height(), scale);
+    let stride = mask.width() as usize;
+    let target_stride = canvas.width() as usize * 4;
+    let samples = mask.as_raw();
+    for (target, &(top, bottom, fy)) in canvas.as_mut().chunks_exact_mut(target_stride).zip(&rows) {
+        let upper = &samples[top * stride..(top + 1) * stride];
+        let lower = &samples[bottom * stride..(bottom + 1) * stride];
+        for (pixel, &(left, right, fx)) in target.chunks_exact_mut(4).zip(&columns) {
+            let sample = ((1.0 - fx) * (1.0 - fy) * upper[left] as f32
+                + (1.0 - fx) * fy * lower[left] as f32
+                + fx * (1.0 - fy) * upper[right] as f32
+                + fx * fy * lower[right] as f32)
+                .round();
+            let alpha = alphas[sample as usize];
+            if alpha == 0 {
+                continue;
+            }
+            if pixel[3] == 255 {
+                // The frame is opaque. Integer source-over avoids converting
+                // four channels to premultiplied floats for every output pixel.
+                for (channel, shadow) in [7_u16, 9, 9].into_iter().enumerate() {
+                    pixel[channel] = ((pixel[channel] as u16 * (255 - alpha as u16)
+                        + shadow * alpha as u16)
+                        / 255) as u8;
+                }
+            } else {
+                image::Pixel::blend(Rgba::from_slice_mut(pixel), &Rgba([7, 9, 9, alpha]));
+            }
+        }
     }
 }
 
@@ -932,7 +1014,16 @@ fn encode_image(image: RgbaImage, path: &Path, settings: &ExportSettings) -> Res
         let compression = match settings.png_compression.as_str() {
             "fast" => CompressionType::Fast,
             "small" => CompressionType::Best,
-            _ => CompressionType::Default,
+            // Level 6 spends several seconds finding slightly smaller matches
+            // in large photos. Level 3 preserves all pixels at a useful balance
+            // of file size and latency; "small" remains available explicitly.
+            _ => CompressionType::Level(3),
+        };
+        let opaque = image.pixels().all(|pixel| pixel[3] == 255);
+        let image = if opaque {
+            DynamicImage::ImageRgb8(DynamicImage::ImageRgba8(image).into_rgb8())
+        } else {
+            DynamicImage::ImageRgba8(image)
         };
         let mut encoder =
             PngEncoder::new_with_quality(&mut writer, compression, PngFilterType::Adaptive);
@@ -941,10 +1032,10 @@ fn encode_image(image: RgbaImage, path: &Path, settings: &ExportSettings) -> Res
             .map_err(|error| format!("无法写入 sRGB 色彩标识：{error}"))?;
         encoder
             .write_image(
-                image.as_raw(),
+                image.as_bytes(),
                 image.width(),
                 image.height(),
-                image::ExtendedColorType::Rgba8,
+                image.color().into(),
             )
             .map_err(|error| format!("PNG 编码失败：{error}"))?;
     } else {
@@ -1198,6 +1289,128 @@ pub fn cancel_export() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn png_encoding_preserves_pixels_and_omits_only_redundant_alpha() {
+        let root = tempfile::tempdir().unwrap();
+        for transparent in [false, true] {
+            let source = RgbaImage::from_fn(13, 11, |x, y| {
+                Rgba([
+                    (x * 17) as u8,
+                    (y * 23) as u8,
+                    137,
+                    if transparent { (x * 19) as u8 } else { 255 },
+                ])
+            });
+            for compression in ["fast", "standard", "small"] {
+                let path = root.path().join(format!("{transparent}-{compression}.png"));
+                let settings = ExportSettings {
+                    format: "png".into(),
+                    png_compression: compression.into(),
+                    ..test_settings(root.path())
+                };
+                encode_image(source.clone(), &path, &settings).unwrap();
+                let output = image::open(&path).unwrap();
+                assert_eq!(
+                    output.color(),
+                    if transparent {
+                        image::ColorType::Rgba8
+                    } else {
+                        image::ColorType::Rgb8
+                    }
+                );
+                assert_eq!(output.into_rgba8(), source);
+                let mut decoder = ImageReader::open(path).unwrap().into_decoder().unwrap();
+                assert!(decoder.icc_profile().unwrap().is_some());
+            }
+        }
+    }
+
+    #[test]
+    fn shadow_compositing_matches_bilinear_source_over() {
+        for opacity in [0.01, 0.12, 0.4] {
+            for transparent in [false, true] {
+                let mask = image::GrayImage::from_fn(13, 9, |x, y| {
+                    image::Luma([((x * 47 + y * 31) % 256) as u8])
+                });
+                let mut reference = RgbaImage::from_fn(41, 29, |x, y| {
+                    Rgba([
+                        ((x * 17 + y * 43) % 256) as u8,
+                        ((x * 29 + y * 13) % 256) as u8,
+                        180,
+                        if transparent {
+                            ((x * 11 + y * 7) % 256) as u8
+                        } else {
+                            255
+                        },
+                    ])
+                });
+                let mut actual = reference.clone();
+                let scale = 13.0 / 41.0;
+                for (x, y, pixel) in reference.enumerate_pixels_mut() {
+                    let sample = imageops::interpolate_bilinear(
+                        &mask,
+                        ((x as f32 + 0.5) * scale - 0.5).clamp(0.0, 12.0),
+                        ((y as f32 + 0.5) * scale - 0.5).clamp(0.0, 8.0),
+                    )
+                    .unwrap()[0];
+                    pixel.blend(&Rgba([
+                        7,
+                        9,
+                        9,
+                        (sample as f32 / 255.0 * opacity * 255.0).round() as u8,
+                    ]));
+                }
+                composite_shadow(&mut actual, &mask, scale, opacity);
+                let max_error = reference
+                    .as_raw()
+                    .iter()
+                    .zip(actual.as_raw())
+                    .map(|(a, b)| a.abs_diff(*b))
+                    .max()
+                    .unwrap();
+                assert!(
+                    max_error <= 1,
+                    "opacity {opacity}, transparent {transparent}: {max_error}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn background_enlargement_matches_triangle_sampling() {
+        for (width, height, target_width, target_height) in [
+            (1, 1, 1, 1),
+            (1, 3, 5, 9),
+            (7, 1, 21, 2),
+            (3, 5, 11, 17),
+            (17, 13, 93, 74),
+            (80, 60, 160, 120),
+        ] {
+            let source = RgbaImage::from_fn(width, height, |x, y| {
+                Rgba([
+                    ((x * 47 + y * 31) % 256) as u8,
+                    ((x * 89 + y * 11) % 256) as u8,
+                    ((x * 23 + y * 71) % 256) as u8,
+                    ((x * 17 + y * 53) % 256) as u8,
+                ])
+            });
+            let reference =
+                imageops::resize(&source, target_width, target_height, FilterType::Triangle);
+            let actual = upscale_background(source, target_width, target_height);
+            let max_error = reference
+                .as_raw()
+                .iter()
+                .zip(actual.as_raw())
+                .map(|(a, b)| a.abs_diff(*b))
+                .max()
+                .unwrap();
+            assert!(
+                max_error <= 1,
+                "{width}x{height} -> {target_width}x{target_height}: {max_error}"
+            );
+        }
+    }
 
     #[test]
     #[ignore = "writes fixtures for scripts/render-parity.py"]
@@ -1541,6 +1754,121 @@ mod tests {
         assert!(height > 80);
         assert_eq!(image.dimensions(), (width, height));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    #[ignore = "local PNG encoding tradeoff measurement"]
+    fn png_encoding_comparison() {
+        use std::io::Write;
+        let root = tempfile::tempdir().unwrap();
+        let source = decode_color_managed(Path::new("../assets/origin/PANA9432.JPG"), 1).unwrap();
+        let rgb = DynamicImage::ImageRgba8(source.clone()).into_rgb8();
+        for (name, compression) in [
+            ("fast", CompressionType::Fast),
+            ("level1", CompressionType::Level(1)),
+            ("level3", CompressionType::Level(3)),
+            ("level6", CompressionType::Default),
+        ] {
+            for color in ["rgba", "rgb"] {
+                let path = root.path().join(format!("{name}-{color}.png"));
+                let started = std::time::Instant::now();
+                let mut writer = BufWriter::new(File::create(&path).unwrap());
+                let mut encoder =
+                    PngEncoder::new_with_quality(&mut writer, compression, PngFilterType::Adaptive);
+                encoder
+                    .set_icc_profile(Profile::new_srgb().icc().unwrap())
+                    .unwrap();
+                let (bytes, color_type) = if color == "rgb" {
+                    (rgb.as_raw(), image::ExtendedColorType::Rgb8)
+                } else {
+                    (source.as_raw(), image::ExtendedColorType::Rgba8)
+                };
+                encoder
+                    .write_image(bytes, source.width(), source.height(), color_type)
+                    .unwrap();
+                writer.flush().unwrap();
+                let elapsed = started.elapsed();
+                eprintln!(
+                    "PNG {name} {color}: {elapsed:?}, {} bytes",
+                    fs::metadata(&path).unwrap().len()
+                );
+                assert_eq!(image::open(path).unwrap().into_rgba8(), source);
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "local real-photo performance budget; run without other CPU-heavy tests"]
+    fn export_latency_budget() {
+        let root = tempfile::tempdir().unwrap();
+        let mut document = test_document();
+        document.frame.frame_type = "blur".into();
+        document.frame.blur = 32.0;
+        document.frame.brightness = 75.0;
+        document.layers.push(test_layer("focalLength"));
+        if let Ok(template_id) = std::env::var("YINGKUANG_BENCH_TEMPLATE") {
+            let catalog: serde_json::Value =
+                serde_json::from_str(include_str!("../../src/data/builtin-templates.json"))
+                    .unwrap();
+            let template = catalog["templates"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|template| template["id"] == template_id)
+                .expect("known template");
+            document = serde_json::from_value(template["layouts"]["landscape"].clone()).unwrap();
+        }
+        let item = ExportItem {
+            path: std::env::var("YINGKUANG_BENCH_INPUT")
+                .unwrap_or_else(|_| "../assets/origin/PANA9432.JPG".into()),
+            document,
+            overrides: HashMap::new(),
+        };
+        let mut settings = test_settings(root.path());
+        settings.metadata = "basic".into();
+        if let Ok(format) = std::env::var("YINGKUANG_BENCH_FORMAT") {
+            settings.format = format;
+        }
+        if std::env::var_os("YINGKUANG_BENCH_ORIGINAL").is_some() {
+            settings.size = "original".into();
+        }
+        let started = std::time::Instant::now();
+        let mut last_stage = "preparing";
+        let mut last_time = started;
+        let result =
+            export_one_with_renderer(&item, &settings, &mut ExportRenderer::default(), |stage| {
+                let now = std::time::Instant::now();
+                eprintln!("export benchmark {last_stage}: {:?}", now - last_time);
+                last_stage = stage;
+                last_time = now;
+            })
+            .unwrap()
+            .unwrap();
+        let elapsed = started.elapsed();
+        eprintln!(
+            "export benchmark {last_stage}: {:?}; total: {elapsed:?}",
+            last_time.elapsed()
+        );
+        let dimensions = image::image_dimensions(&result.0).unwrap();
+        eprintln!(
+            "export benchmark output: {}x{}; bytes: {}",
+            dimensions.0,
+            dimensions.1,
+            fs::metadata(&result.0).unwrap().len()
+        );
+        if settings.size == "long-edge" {
+            assert_eq!(dimensions.0.max(dimensions.1), 1200);
+            assert!(
+                elapsed.as_secs_f64() < 2.0,
+                "1200px single-image export exceeded 2s budget: {elapsed:?}"
+            );
+        } else {
+            assert!(dimensions.0 >= 6000 && dimensions.1 >= 4000);
+            assert!(
+                elapsed.as_secs_f64() < 10.0,
+                "original-size single-image export exceeded 10s budget: {elapsed:?}"
+            );
+        }
     }
 
     #[test]

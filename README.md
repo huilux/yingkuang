@@ -13,6 +13,8 @@
 
 ## 当前里程碑
 
+`0.1.1` 已完成第一轮导出性能修复：本机 release 默认模糊模板原尺寸 JPEG 中位数从 4.28s 降至 2.38s，PNG 从 11.87s 降至 3.65s。完整对照、内存、无损 PNG 和 96MP 压力测试边界见 [性能验收](docs/export-performance-0.1.1.md)。持续迭代的分支、提交与版本策略见 [迭代记录](docs/iteration-log.md)，用户问题与新增功能候选见 [流程巡检](docs/user-audit.md)。
+
 正式工程已经具备第一版主流程：本地 JPEG/PNG 导入、EXIF 拍摄参数读取、方向归一化、上次会话恢复、可拖拽水印画布、居中与三等分吸附、四边参数区、模板更新与另存、原图级顺序批量导出、取消与失败重试。导出支持 JPEG/PNG、尺寸与质量、基础元数据、GPS 开关和 sRGB 色彩转换。
 
 照片批次支持全选、反选、取消选择和移除已选。左侧常驻「新照片使用模板」选择器；新导入照片会套用当前默认模板，已有照片的编辑结果保持独立。顶部「模板库」可在无照片时管理模板，包括设为默认、复制、重命名、删除自定义模板、重置内置模板，以及 JSON 备份导入和导出。导入备份时须对每个同名或同 ID 的模板逐项选择覆盖、保留副本或跳过。模板预览显示相框和水印的实际套用效果。
@@ -44,12 +46,15 @@ npm run tauri dev
 
 ```bash
 npm run build
+npm run version:check
 npm run test:camera
 npm run test:selection
 npm run test:templates
 cargo test --manifest-path src-tauri/Cargo.toml --lib
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
+
+发布前使用 `npm run version:set -- 0.1.1`（替换为目标版本）同步 npm、Rust 和 Tauri 的版本；构建会检查这些版本一致。
 
 在干净的 Linux 构建环境中生成 AppImage：
 

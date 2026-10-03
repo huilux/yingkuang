@@ -1,6 +1,6 @@
 [package]
 name = "yingkuang"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local photography watermark and frame editor"
 authors = ["Ming"]
 edition = "2024"
@@ -54,6 +54,15 @@ opt-level = 3
 
 [profile.dev.package.miniz_oxide]
 opt-level = 3
+
+# Generic image operations are instantiated in this crate. Optimizing only the
+# image dependency leaves resizing, compositing and our pixel loops unoptimized.
+# Keep debug information and assertions while making desktop exports interactive.
+[profile.dev.package.yingkuang]
+opt-level = 2
+
+[profile.dev.package.little_exif]
+opt-level = 2
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
