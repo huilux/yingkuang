@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io::{BufWriter, Read},
+    io::{BufWriter, ErrorKind, Read, Write},
     path::{Path, PathBuf},
     process::Command,
     sync::atomic::{AtomicBool, Ordering},
@@ -338,10 +338,97 @@ fn validate_export_settings(settings: &ExportSettings) -> Vec<String> {
     errors
 }
 
+// Keep the supported 96 MP photos plus framing within the budget while
+// rejecting accidental multi-gigabyte canvases before allocating them.
+const MAX_OUTPUT_PIXELS: u64 = 256_000_000;
+const MAX_TEXT_PIXELS: u64 = 64_000_000;
+
+fn validate_output_dimensions(width: u32, height: u32) -> Result<(), String> {
+    if width == 0
+        || height == 0
+        || width > 30_000
+        || height > 30_000
+        || width as u64 * height as u64 > MAX_OUTPUT_PIXELS
+    {
+        return Err(format!(
+            "成品 {width} × {height} px 超出限制：单边最多 30000，像素总数最多 2.56 亿；请降低成品长边或边框尺寸"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_document(document: &EditorDocument) -> Result<(), String> {
+    let frame = &document.frame;
+    let bounded = |value: f32, maximum: f32| value.is_finite() && (0.0..=maximum).contains(&value);
+    let color = |value: &str| {
+        value.len() == 7
+            && value.starts_with('#')
+            && value.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit)
+    };
+    if !matches!(frame.frame_type.as_str(), "solid" | "blur")
+        || !color(&frame.color)
+        || !bounded(frame.blur, 200.0)
+        || !bounded(frame.brightness, 200.0)
+        || !bounded(frame.padding_x, 100.0)
+        || !bounded(frame.padding_y, 100.0)
+        || !bounded(frame.radius, 100.0)
+        || !bounded(frame.shadow, 100.0)
+    {
+        return Err("边框参数超出支持范围，请检查模板".into());
+    }
+    if [
+        &document.regions.top,
+        &document.regions.bottom,
+        &document.regions.left,
+        &document.regions.right,
+    ]
+    .iter()
+    .any(|region| !bounded(region.extra, 100.0))
+    {
+        return Err("区域尺寸超出支持范围，请检查模板".into());
+    }
+    if document.layers.len() > 100 {
+        return Err("每张照片最多支持 100 个文字图层".into());
+    }
+    for layer in &document.layers {
+        if !layer.x.is_finite()
+            || !layer.y.is_finite()
+            || !layer.font_size.is_finite()
+            || !(1.0..=1000.0).contains(&layer.font_size)
+            || !bounded(layer.opacity, 1.0)
+            || !color(&layer.color)
+            || layer.custom_value.chars().count() > 2000
+            || layer.font_family.len() > 800
+            || !matches!(layer.rotation, -90 | 0 | 90)
+            || !matches!(
+                layer.region.as_str(),
+                "canvas" | "top" | "bottom" | "left" | "right"
+            )
+        {
+            return Err(format!(
+                "文字图层“{}”的参数超出支持范围，请检查模板",
+                layer.name
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn validate_export_request(request: &ExportRequest) -> Vec<String> {
     let mut errors = validate_export_settings(&request.settings);
     if request.items.is_empty() {
         errors.push("当前范围没有可导出的本地照片".to_owned());
+    }
+    for item in &request.items {
+        if let Err(error) = validate_document(&item.document) {
+            errors.push(format!(
+                "{}：{error}",
+                Path::new(&item.path)
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+            ));
+        }
     }
     let directory = Path::new(&request.settings.directory);
     if !directory.is_dir() {
@@ -380,6 +467,9 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
         }
         let (output_width, output_height) =
             output_dimensions(width, height, &item.document, &request.settings);
+        if let Err(error) = validate_output_dimensions(output_width, output_height) {
+            errors.push(format!("{file_name}：{error}"));
+        }
         let pixels = output_width as u64 * output_height as u64;
         estimated_pixels = estimated_pixels.saturating_add(pixels);
         if pixels > largest_width as u64 * largest_height as u64 {
@@ -413,7 +503,7 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
 
 fn parse_color(value: &str, alpha: u8) -> Rgba<u8> {
     let value = value.trim_start_matches('#');
-    if value.len() == 6 {
+    if value.len() == 6 && value.is_ascii() {
         let red = u8::from_str_radix(&value[0..2], 16).unwrap_or(255);
         let green = u8::from_str_radix(&value[2..4], 16).unwrap_or(255);
         let blue = u8::from_str_radix(&value[4..6], 16).unwrap_or(255);
@@ -734,11 +824,8 @@ fn resolve_text(
     if layer.source == "custom" {
         return (!layer.custom_value.trim().is_empty()).then(|| layer.custom_value.clone());
     }
-    if let Some(value) = overrides
-        .get(&layer.source)
-        .filter(|value| !value.trim().is_empty())
-    {
-        return Some(format_layer_value(&layer.source, value));
+    if let Some(value) = overrides.get(&layer.source) {
+        return (!value.trim().is_empty()).then(|| format_layer_value(&layer.source, value));
     }
     let value = match layer.source.as_str() {
         "camera" => exif.camera.clone(),
@@ -835,6 +922,12 @@ fn draw_layers(
         let Some(text) = resolve_text(layer, exif, &item.overrides) else {
             continue;
         };
+        if text.chars().count() > 2000 {
+            return Err(format!(
+                "文字图层“{}”超过 2000 个字符，请缩短显示值",
+                layer.name
+            ));
+        }
         let bounds = geometry
             .regions
             .get(layer.region.as_str())
@@ -846,7 +939,21 @@ fn draw_layers(
         let font_scale = css_font_scale(&font, (layer.font_size * scale).max(1.0));
         let (text_width, text_height) = text_size(font_scale, &font, &text);
         let padding = (font_scale.y * 0.35).ceil() as u32 + 4;
-        let mut text_image = RgbaImage::new(text_width + padding * 2, text_height + padding * 2);
+        let width = text_width.checked_add(padding.saturating_mul(2));
+        let height = text_height.checked_add(padding.saturating_mul(2));
+        let (Some(width), Some(height)) = (width, height) else {
+            return Err(format!(
+                "文字图层“{}”过大，请缩小字号或缩短文字",
+                layer.name
+            ));
+        };
+        if width as u64 * height as u64 > MAX_TEXT_PIXELS {
+            return Err(format!(
+                "文字图层“{}”过大，请缩小字号或缩短文字",
+                layer.name
+            ));
+        }
+        let mut text_image = RgbaImage::new(width, height);
         let color = parse_color(&layer.color, (layer.opacity.clamp(0.0, 1.0) * 255.0) as u8);
         draw_text_mut(
             &mut text_image,
@@ -895,7 +1002,15 @@ fn render_item_with_renderer(
     settings: &ExportSettings,
     renderer: &mut ExportRenderer,
 ) -> Result<(RgbaImage, u32, u32), String> {
+    validate_document(&item.document)?;
     let mut exif = read_exif(Path::new(&item.path));
+    let (mut width, mut height) = image::image_dimensions(&item.path)
+        .map_err(|error| format!("无法读取图片尺寸：{error}"))?;
+    if matches!(exif.orientation, 5..=8) {
+        std::mem::swap(&mut width, &mut height);
+    }
+    let (output_width, output_height) = output_dimensions(width, height, &item.document, settings);
+    validate_output_dimensions(output_width, output_height)?;
     let source = decode_color_managed(Path::new(&item.path), exif.orientation)?;
     let (source_width, source_height) = source.dimensions();
     exif.dimensions = Some(format!("{source_width} × {source_height}"));
@@ -908,6 +1023,7 @@ fn render_item_with_renderer(
     };
     let canvas_width = (geometry.width * scale).round().max(1.0) as u32;
     let canvas_height = (geometry.height * scale).round().max(1.0) as u32;
+    validate_output_dimensions(canvas_width, canvas_height)?;
     let photo_width = (geometry.photo.width * scale).round().max(1.0) as u32;
     let photo_height = (geometry.photo.height * scale).round().max(1.0) as u32;
     let mut photo = resize_photo(source, photo_width, photo_height);
@@ -977,7 +1093,7 @@ fn unique_output_path(input: &Path, settings: &ExportSettings) -> Result<Option<
     };
     let suffix = &settings.suffix;
     let candidate = directory.join(format!("{stem}{suffix}.{extension}"));
-    if !candidate.exists() && candidate != input {
+    if !path_occupied(&candidate)? && candidate != input {
         return Ok(Some(candidate));
     }
     if settings.collision == "skip" {
@@ -985,26 +1101,27 @@ fn unique_output_path(input: &Path, settings: &ExportSettings) -> Result<Option<
     }
     for number in 2..=9999 {
         let path = directory.join(format!("{stem}{suffix}-{number}.{extension}"));
-        if !path.exists() && path != input {
+        if !path_occupied(&path)? && path != input {
             return Ok(Some(path));
         }
     }
     Err("同名文件编号已超过 9999".to_owned())
 }
 
-fn temporary_path(output: &Path) -> PathBuf {
-    let file_name = output
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("output.jpg");
-    let extension = output
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or("jpg");
-    output.with_file_name(format!(".{file_name}.yingkuang-part.{extension}"))
+fn path_occupied(path: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!("无法检查输出文件：{error}")),
+    }
 }
 
-fn encode_image(image: RgbaImage, path: &Path, settings: &ExportSettings) -> Result<(), String> {
+fn encode_image(
+    image: RgbaImage,
+    path: &Path,
+    settings: &ExportSettings,
+    exif: Vec<u8>,
+) -> Result<(), String> {
     let file = File::create(path).map_err(|error| format!("无法创建临时文件：{error}"))?;
     let mut writer = BufWriter::new(file);
     let srgb_profile = Profile::new_srgb()
@@ -1028,6 +1145,9 @@ fn encode_image(image: RgbaImage, path: &Path, settings: &ExportSettings) -> Res
         let mut encoder =
             PngEncoder::new_with_quality(&mut writer, compression, PngFilterType::Adaptive);
         encoder
+            .set_exif_metadata(exif)
+            .map_err(|error| format!("无法写入 EXIF：{error}"))?;
+        encoder
             .set_icc_profile(srgb_profile)
             .map_err(|error| format!("无法写入 sRGB 色彩标识：{error}"))?;
         encoder
@@ -1043,32 +1163,36 @@ fn encode_image(image: RgbaImage, path: &Path, settings: &ExportSettings) -> Res
         let mut encoder =
             JpegEncoder::new_with_quality(&mut writer, settings.quality.clamp(1, 100));
         encoder
+            .set_exif_metadata(exif)
+            .map_err(|error| format!("无法写入 EXIF：{error}"))?;
+        encoder
             .set_icc_profile(srgb_profile)
             .map_err(|error| format!("无法写入 sRGB 色彩标识：{error}"))?;
         encoder
             .encode_image(&DynamicImage::ImageRgb8(rgb))
             .map_err(|error| format!("JPEG 编码失败：{error}"))?;
     }
-    Ok(())
+    writer
+        .flush()
+        .map_err(|error| format!("无法写入输出文件：{error}"))
 }
 
-fn copy_metadata(
+fn prepare_metadata(
     input: &Path,
-    output: &Path,
     settings: &ExportSettings,
     width: u32,
     height: u32,
-) -> Result<Option<String>, String> {
+) -> Result<(Vec<u8>, Option<String>), String> {
     if settings.metadata == "none" {
-        return Ok(None);
+        return Ok((Vec::new(), None));
     }
     let original = match Metadata::new_from_path(input) {
         Ok(metadata) => metadata,
         Err(error) => {
-            return Ok(Some(format!(
-                "{}：未能读取元数据（{error}）",
-                input.display()
-            )));
+            return Ok((
+                Vec::new(),
+                Some(format!("{}：未能读取元数据（{error}）", input.display())),
+            ));
         }
     };
     let mut metadata = if settings.metadata == "supported" {
@@ -1108,16 +1232,12 @@ fn copy_metadata(
     metadata.set_tag(ExifTag::ImageHeight(vec![height]));
     metadata.set_tag(ExifTag::ExifImageWidth(vec![width]));
     metadata.set_tag(ExifTag::ExifImageHeight(vec![height]));
-    metadata
-        .write_to_file(output)
-        .map_err(|error| format!("写入元数据失败：{error}"))?;
-    if settings.metadata == "supported" {
-        Ok(Some(
-            "已保留编码器支持的 EXIF；XMP、IPTC 与厂商私有 MakerNote 未复制".to_owned(),
-        ))
-    } else {
-        Ok(None)
-    }
+    let exif = metadata
+        .encode()
+        .map_err(|error| format!("无法编码 EXIF：{error}"))?;
+    let warning = (settings.metadata == "supported")
+        .then(|| "已保留编码器支持的 EXIF；XMP、IPTC 与厂商私有 MakerNote 未复制".to_owned());
+    Ok((exif, warning))
 }
 
 fn export_one_with_renderer(
@@ -1130,29 +1250,41 @@ fn export_one_with_renderer(
     if !input.is_file() {
         return Err("原图不存在或不可读取".to_owned());
     }
-    let Some(output) = unique_output_path(input, settings)? else {
+    let Some(mut output) = unique_output_path(input, settings)? else {
         return Ok(None);
     };
-    let temp = temporary_path(&output);
+    let extension = if settings.format == "png" {
+        ".png"
+    } else {
+        ".jpg"
+    };
+    let mut temp = tempfile::Builder::new()
+        .prefix(".yingkuang-part-")
+        .suffix(extension)
+        .tempfile_in(&settings.directory)
+        .map_err(|error| format!("无法创建临时文件：{error}"))?
+        .into_temp_path();
     on_stage("rendering");
     let (image, width, height) = render_item_with_renderer(item, settings, renderer)?;
-    on_stage("encoding");
-    encode_image(image, &temp, settings)?;
     on_stage("metadata");
-    let mut warnings = Vec::new();
-    match copy_metadata(input, &temp, settings, width, height) {
-        Ok(Some(warning)) => warnings.push(warning),
-        Ok(None) => {}
-        Err(error) => {
-            let _ = fs::remove_file(&temp);
-            return Err(error);
+    let (exif, warning) = prepare_metadata(input, settings, width, height)?;
+    on_stage("encoding");
+    encode_image(image, &temp, settings, exif)?;
+    let warnings = warning.into_iter().collect();
+    on_stage("finishing");
+    loop {
+        match temp.persist_noclobber(&output) {
+            Ok(()) => break,
+            Err(error) if error.error.kind() == ErrorKind::AlreadyExists => {
+                temp = error.path;
+                let Some(next) = unique_output_path(input, settings)? else {
+                    return Ok(None);
+                };
+                output = next;
+            }
+            Err(error) => return Err(format!("无法完成输出文件：{}", error.error)),
         }
     }
-    on_stage("finishing");
-    fs::rename(&temp, &output).map_err(|error| {
-        let _ = fs::remove_file(&temp);
-        format!("无法完成输出文件：{error}")
-    })?;
     Ok(Some((output, warnings)))
 }
 
@@ -1168,7 +1300,11 @@ fn emit_progress(app: &AppHandle, progress: ExportProgress) {
     let _ = app.emit("export-progress", progress);
 }
 
-fn run_export(app: &AppHandle, request: ExportRequest) -> Result<ExportSummary, String> {
+fn run_export_with_progress(
+    request: ExportRequest,
+    cancel: &AtomicBool,
+    mut progress: impl FnMut(ExportProgress),
+) -> Result<ExportSummary, String> {
     let validation_errors = validate_export_request(&request);
     if !validation_errors.is_empty() {
         return Err(validation_errors.join("；"));
@@ -1181,7 +1317,7 @@ fn run_export(app: &AppHandle, request: ExportRequest) -> Result<ExportSummary, 
     let mut warnings = Vec::new();
     let mut renderer = ExportRenderer::default();
     for (index, item) in request.items.iter().enumerate() {
-        if CANCEL_EXPORT.load(Ordering::SeqCst) {
+        if cancel.load(Ordering::SeqCst) {
             break;
         }
         let file_name = Path::new(&item.path)
@@ -1189,9 +1325,18 @@ fn run_export(app: &AppHandle, request: ExportRequest) -> Result<ExportSummary, 
             .and_then(|value| value.to_str())
             .unwrap_or("未命名照片")
             .to_owned();
-        emit_progress(
-            app,
-            ExportProgress {
+        progress(ExportProgress {
+            current: index + 1,
+            completed: index,
+            total,
+            file_name: file_name.clone(),
+            succeeded,
+            failed,
+            skipped,
+            stage: "preparing".to_owned(),
+        });
+        match export_one_with_renderer(item, &request.settings, &mut renderer, |stage| {
+            progress(ExportProgress {
                 current: index + 1,
                 completed: index,
                 total,
@@ -1199,23 +1344,8 @@ fn run_export(app: &AppHandle, request: ExportRequest) -> Result<ExportSummary, 
                 succeeded,
                 failed,
                 skipped,
-                stage: "preparing".to_owned(),
-            },
-        );
-        match export_one_with_renderer(item, &request.settings, &mut renderer, |stage| {
-            emit_progress(
-                app,
-                ExportProgress {
-                    current: index + 1,
-                    completed: index,
-                    total,
-                    file_name: file_name.clone(),
-                    succeeded,
-                    failed,
-                    skipped,
-                    stage: stage.to_owned(),
-                },
-            );
+                stage: stage.to_owned(),
+            });
         }) {
             Ok(Some((_path, item_warnings))) => {
                 succeeded += 1;
@@ -1231,19 +1361,16 @@ fn run_export(app: &AppHandle, request: ExportRequest) -> Result<ExportSummary, 
                 });
             }
         }
-        emit_progress(
-            app,
-            ExportProgress {
-                current: index + 1,
-                completed: index + 1,
-                total,
-                file_name,
-                succeeded,
-                failed,
-                skipped,
-                stage: "completed-item".to_owned(),
-            },
-        );
+        progress(ExportProgress {
+            current: index + 1,
+            completed: index + 1,
+            total,
+            file_name,
+            succeeded,
+            failed,
+            skipped,
+            stage: "completed-item".to_owned(),
+        });
     }
     warnings.sort();
     warnings.dedup();
@@ -1252,7 +1379,7 @@ fn run_export(app: &AppHandle, request: ExportRequest) -> Result<ExportSummary, 
         succeeded,
         failed,
         skipped,
-        cancelled: CANCEL_EXPORT.load(Ordering::SeqCst),
+        cancelled: succeeded + failed + skipped < total && cancel.load(Ordering::SeqCst),
         output_directory: request.settings.directory,
         failures,
         warnings,
@@ -1274,11 +1401,16 @@ pub async fn export_images(
     if EXPORT_RUNNING.swap(true, Ordering::SeqCst) {
         return Err("已有导出任务正在运行".to_owned());
     }
-    let _guard = ExportGuard;
     CANCEL_EXPORT.store(false, Ordering::SeqCst);
-    tauri::async_runtime::spawn_blocking(move || run_export(&app, request))
-        .await
-        .map_err(|error| format!("导出任务异常结束：{error}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        // The blocking worker can outlive the awaiting IPC future.
+        let _guard = ExportGuard;
+        run_export_with_progress(request, &CANCEL_EXPORT, |progress| {
+            emit_progress(&app, progress)
+        })
+    })
+    .await
+    .map_err(|error| format!("导出任务异常结束：{error}"))?
 }
 
 #[tauri::command]
@@ -1289,6 +1421,315 @@ pub fn cancel_export() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn queue_continues_after_failure_and_reports_exact_progress() {
+        let root = tempfile::tempdir().unwrap();
+        let input = root.path().join("good.png");
+        RgbaImage::from_pixel(24, 16, Rgba([120, 80, 40, 255]))
+            .save(&input)
+            .unwrap();
+        let item = ExportItem {
+            path: input.to_string_lossy().into_owned(),
+            document: test_document(),
+            overrides: HashMap::new(),
+        };
+        let request = ExportRequest {
+            items: vec![
+                item.clone(),
+                ExportItem {
+                    path: root
+                        .path()
+                        .join("missing.png")
+                        .to_string_lossy()
+                        .into_owned(),
+                    ..item.clone()
+                },
+                item,
+            ],
+            settings: ExportSettings {
+                size: "original".into(),
+                format: "png".into(),
+                metadata: "none".into(),
+                ..test_settings(root.path())
+            },
+        };
+        let mut events = Vec::new();
+        let summary =
+            run_export_with_progress(request, &AtomicBool::new(false), |event| events.push(event))
+                .unwrap();
+        assert_eq!(
+            (
+                summary.total,
+                summary.succeeded,
+                summary.failed,
+                summary.skipped
+            ),
+            (3, 2, 1, 0)
+        );
+        assert!(!summary.cancelled);
+        assert!(summary.failures[0].path.ends_with("missing.png"));
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| event.stage == "completed-item")
+                .map(|event| event.completed)
+                .collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
+        assert_eq!(
+            (
+                events.last().unwrap().succeeded,
+                events.last().unwrap().failed
+            ),
+            (2, 1)
+        );
+        assert!(root.path().join("good-frame-2.png").is_file());
+    }
+
+    #[test]
+    fn cancellation_finishes_current_photo_and_only_marks_unfinished_queue() {
+        for total in [1, 3] {
+            let root = tempfile::tempdir().unwrap();
+            let input = root.path().join("photo.png");
+            RgbaImage::new(24, 16).save(&input).unwrap();
+            let item = ExportItem {
+                path: input.to_string_lossy().into_owned(),
+                document: test_document(),
+                overrides: HashMap::new(),
+            };
+            let request = ExportRequest {
+                items: vec![item; total],
+                settings: ExportSettings {
+                    size: "original".into(),
+                    format: "png".into(),
+                    metadata: "none".into(),
+                    ..test_settings(root.path())
+                },
+            };
+            let cancel = AtomicBool::new(false);
+            let summary = run_export_with_progress(request, &cancel, |event| {
+                if event.stage == "encoding" {
+                    cancel.store(true, Ordering::SeqCst);
+                }
+            })
+            .unwrap();
+            assert_eq!(summary.succeeded, 1);
+            assert_eq!(summary.cancelled, total > 1);
+            assert!(root.path().join("photo-frame.png").is_file());
+            assert!(!root.path().join("photo-frame-2.png").exists());
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn dangling_output_symlink_is_preserved() {
+        let root = tempfile::tempdir().unwrap();
+        let input = root.path().join("photo.png");
+        RgbaImage::new(24, 16).save(&input).unwrap();
+        let output = root.path().join("photo-frame.png");
+        std::os::unix::fs::symlink(root.path().join("missing-target"), &output).unwrap();
+        let item = ExportItem {
+            path: input.to_string_lossy().into_owned(),
+            document: test_document(),
+            overrides: HashMap::new(),
+        };
+        let settings = ExportSettings {
+            size: "original".into(),
+            format: "png".into(),
+            ..test_settings(root.path())
+        };
+        let result = export_one(&item, &settings).unwrap().unwrap();
+        assert_eq!(result.0.file_name().unwrap(), "photo-frame-2.png");
+        assert!(fs::symlink_metadata(output).unwrap().is_symlink());
+    }
+
+    #[test]
+    fn oversized_text_is_rejected_before_bitmap_allocation() {
+        let mut document = test_document();
+        let mut layer = test_layer("custom");
+        layer.font_size = 1000.0;
+        layer.custom_value = "W".repeat(2000);
+        document.layers.push(layer);
+        let geometry = calculate_geometry(1000, 1000, &document);
+        let item = ExportItem {
+            path: String::new(),
+            document,
+            overrides: HashMap::new(),
+        };
+        let error = draw_layers(
+            &mut RgbaImage::new(10, 10),
+            &item,
+            &ExifSnapshot::default(),
+            &geometry,
+            1.0,
+            &mut HashMap::new(),
+        )
+        .unwrap_err();
+        assert!(error.contains("缩小字号"));
+    }
+
+    #[test]
+    fn rendering_rejects_pixel_budget_without_relying_on_preflight() {
+        let root = tempfile::tempdir().unwrap();
+        let input = root.path().join("square.png");
+        RgbaImage::new(100, 100).save(&input).unwrap();
+        let item = ExportItem {
+            path: input.to_string_lossy().into_owned(),
+            document: test_document(),
+            overrides: HashMap::new(),
+        };
+        let settings = ExportSettings {
+            long_edge: 30_000,
+            ..test_settings(root.path())
+        };
+        assert!(export_one(&item, &settings).unwrap_err().contains("像素"));
+        assert_eq!(
+            fs::read_dir(root.path()).unwrap().count(),
+            1,
+            "failed export must clean up its temporary file"
+        );
+    }
+
+    #[test]
+    fn export_validation_rejects_unbounded_document_values() {
+        let root = tempfile::tempdir().unwrap();
+        let mut request = ExportRequest {
+            items: vec![ExportItem {
+                path: "photo.png".into(),
+                document: test_document(),
+                overrides: HashMap::new(),
+            }],
+            settings: test_settings(root.path()),
+        };
+        request.items[0].document.frame.padding_x = 1e20;
+        assert!(
+            !validate_export_request(&request).is_empty(),
+            "unbounded padding must fail before allocation"
+        );
+        request.items[0].document = test_document();
+        let mut layer = test_layer("custom");
+        layer.font_size = f32::INFINITY;
+        request.items[0].document.layers.push(layer);
+        assert!(
+            !validate_export_request(&request).is_empty(),
+            "infinite font size must fail before rendering"
+        );
+    }
+
+    #[test]
+    fn preflight_rejects_output_above_pixel_budget() {
+        let root = tempfile::tempdir().unwrap();
+        let input = root.path().join("square.png");
+        RgbaImage::new(100, 100).save(&input).unwrap();
+        let request = ExportRequest {
+            items: vec![ExportItem {
+                path: input.to_string_lossy().into_owned(),
+                document: test_document(),
+                overrides: HashMap::new(),
+            }],
+            settings: ExportSettings {
+                long_edge: 30_000,
+                ..test_settings(root.path())
+            },
+        };
+        let result = preflight_export_sync(&request);
+        assert!(
+            !result.ready,
+            "a 900MP canvas must be rejected before a multi-GB allocation"
+        );
+        assert!(result.errors.iter().any(|error| error.contains("像素")));
+    }
+
+    #[test]
+    fn export_never_overwrites_a_file_created_while_rendering() {
+        for collision in ["number", "skip"] {
+            let root = tempfile::tempdir().unwrap();
+            let input = root.path().join("photo.png");
+            RgbaImage::from_pixel(24, 16, Rgba([120, 80, 40, 255]))
+                .save(&input)
+                .unwrap();
+            let item = ExportItem {
+                path: input.to_string_lossy().into_owned(),
+                document: test_document(),
+                overrides: HashMap::new(),
+            };
+            let settings = ExportSettings {
+                size: "original".into(),
+                format: "png".into(),
+                collision: collision.into(),
+                ..test_settings(root.path())
+            };
+            let first = root.path().join("photo-frame.png");
+            let result = export_one_with_renderer(
+                &item,
+                &settings,
+                &mut ExportRenderer::default(),
+                |stage| {
+                    if stage == "finishing" {
+                        fs::write(&first, b"another export completed first").unwrap();
+                    }
+                },
+            )
+            .unwrap();
+            assert!(
+                fs::read(&first).unwrap() == b"another export completed first",
+                "must preserve a concurrent result"
+            );
+            if collision == "skip" {
+                assert!(result.is_none());
+            } else {
+                assert_eq!(result.unwrap().0.file_name().unwrap(), "photo-frame-2.png");
+            }
+            assert!(fs::read_dir(root.path()).unwrap().all(|entry| {
+                !entry
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with('.')
+            }));
+        }
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn export_reports_buffered_write_failures() {
+        let root = tempfile::tempdir().unwrap();
+        let settings = ExportSettings {
+            format: "png".into(),
+            metadata: "none".into(),
+            ..test_settings(root.path())
+        };
+        let result = encode_image(
+            RgbaImage::from_pixel(2, 2, Rgba([0, 0, 0, 255])),
+            Path::new("/dev/full"),
+            &settings,
+            Vec::new(),
+        );
+        assert!(
+            result.is_err(),
+            "flush errors must not be reported as successful exports"
+        );
+    }
+
+    #[test]
+    fn empty_override_does_not_restore_original_exif_in_output() {
+        let exif = ExifSnapshot {
+            camera: Some("Original camera".into()),
+            ..ExifSnapshot::default()
+        };
+        for value in ["", "   "] {
+            let overrides = HashMap::from([("camera".into(), value.into())]);
+            assert!(
+                resolve_text(&test_layer("camera"), &exif, &overrides).is_none(),
+                "a cleared display value must remain omitted"
+            );
+        }
+        assert_eq!(
+            resolve_text(&test_layer("camera"), &exif, &HashMap::new()).as_deref(),
+            Some("Original camera")
+        );
+    }
 
     #[test]
     fn png_encoding_preserves_pixels_and_omits_only_redundant_alpha() {
@@ -1309,7 +1750,7 @@ mod tests {
                     png_compression: compression.into(),
                     ..test_settings(root.path())
                 };
-                encode_image(source.clone(), &path, &settings).unwrap();
+                encode_image(source.clone(), &path, &settings, Vec::new()).unwrap();
                 let output = image::open(&path).unwrap();
                 assert_eq!(
                     output.color(),
@@ -1754,6 +2195,180 @@ mod tests {
         assert!(height > 80);
         assert_eq!(image.dimensions(), (width, height));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    #[ignore = "200 real-photo exports; run alone in release mode"]
+    fn batch_200_real_photo_exports() {
+        let root = tempfile::tempdir().unwrap();
+        let output = root.path().join("output");
+        fs::create_dir(&output).unwrap();
+        let portrait = root.path().join("portrait.jpg");
+        image::open("../assets/origin/PANA9432.JPG")
+            .unwrap()
+            .rotate90()
+            .save(&portrait)
+            .unwrap();
+        let catalog: serde_json::Value =
+            serde_json::from_str(include_str!("../../src/data/builtin-templates.json")).unwrap();
+        let template = catalog["templates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|template| template["id"] == "wide-float")
+            .unwrap();
+        let inputs = [
+            PathBuf::from("../assets/origin/PANA9432.JPG"),
+            PathBuf::from("../assets/origin/PANA9448.JPG"),
+            portrait,
+        ];
+        let started = std::time::Instant::now();
+        for format in ["jpeg", "png"] {
+            let items = (0..100)
+                .map(|index| ExportItem {
+                    path: inputs[index % inputs.len()].to_string_lossy().into_owned(),
+                    document: serde_json::from_value(
+                        template["layouts"][if index % 3 == 2 {
+                            "portrait"
+                        } else {
+                            "landscape"
+                        }]
+                        .clone(),
+                    )
+                    .unwrap(),
+                    overrides: HashMap::new(),
+                })
+                .collect();
+            let request = ExportRequest {
+                items,
+                settings: ExportSettings {
+                    format: format.into(),
+                    metadata: "basic".into(),
+                    ..test_settings(&output)
+                },
+            };
+            let preflight = preflight_export_sync(&request);
+            assert!(preflight.ready, "{:?}", preflight.errors);
+            let summary = run_export_with_progress(request, &AtomicBool::new(false), |event| {
+                if event.stage == "completed-item" && event.completed % 25 == 0 {
+                    let rss = fs::read_to_string("/proc/self/status")
+                        .unwrap_or_default()
+                        .lines()
+                        .find(|line| line.starts_with("VmRSS:"))
+                        .unwrap_or("RSS unavailable")
+                        .to_owned();
+                    eprintln!(
+                        "batch {format} {} / 100 elapsed={:.3}s {rss}",
+                        event.completed,
+                        started.elapsed().as_secs_f64()
+                    );
+                }
+            })
+            .unwrap();
+            assert_eq!(
+                (summary.succeeded, summary.failed, summary.skipped),
+                (100, 0, 0),
+                "{:?}",
+                summary.failures
+            );
+            assert!(!summary.cancelled);
+        }
+        let entries = fs::read_dir(&output)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(entries.len(), 200);
+        for entry in entries {
+            let (width, height) = image::image_dimensions(entry.path()).unwrap();
+            assert_eq!(width.max(height), 1200);
+        }
+        eprintln!(
+            "batch 200 complete: {:.3}s",
+            started.elapsed().as_secs_f64()
+        );
+    }
+
+    #[test]
+    fn imports_legacy_png_text_chunk_metadata() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("legacy.png");
+        RgbaImage::new(32, 24).save(&path).unwrap();
+        let mut metadata = Metadata::new();
+        metadata.set_tag(ExifTag::Make("LegacyCamera".into()));
+        metadata.set_tag(ExifTag::Orientation(vec![6]));
+        // Versions through 0.1.1 used little_exif's legacy zTXt representation.
+        metadata.write_to_file(&path).unwrap();
+        let snapshot = read_exif(&path);
+        assert_eq!(snapshot.make.as_deref(), Some("LegacyCamera"));
+        assert_eq!(snapshot.orientation, 6);
+    }
+
+    #[test]
+    fn metadata_policy_controls_gps_and_normalizes_orientation() {
+        let root = tempfile::tempdir().unwrap();
+        let input = root.path().join("input.jpg");
+        DynamicImage::new_rgb8(32, 24).save(&input).unwrap();
+        let mut metadata = Metadata::new();
+        metadata.set_tag(ExifTag::Make("TestCamera".into()));
+        metadata.set_tag(ExifTag::Orientation(vec![6]));
+        metadata.set_tag(ExifTag::GPSLatitudeRef("N".into()));
+        metadata.set_tag(ExifTag::GPSLongitudeRef("E".into()));
+        metadata.set_tag(ExifTag::Artist("Test Artist".into()));
+        metadata.write_to_file(&input).unwrap();
+        for format in ["jpeg", "png"] {
+            for policy in ["none", "basic", "supported"] {
+                for gps in [false, true] {
+                    let output = root.path().join(format!(
+                        "{format}-{policy}-{gps}.{}",
+                        if format == "png" { "png" } else { "jpg" }
+                    ));
+                    let settings = ExportSettings {
+                        format: format.into(),
+                        metadata: policy.into(),
+                        include_gps: gps,
+                        ..test_settings(root.path())
+                    };
+                    let (exif, _) = prepare_metadata(&input, &settings, 48, 64).unwrap();
+                    encode_image(
+                        RgbaImage::from_pixel(48, 64, Rgba([10, 20, 30, 255])),
+                        &output,
+                        &settings,
+                        exif,
+                    )
+                    .unwrap();
+                    let output_metadata = match Metadata::new_from_path(&output) {
+                        Ok(metadata) => metadata,
+                        Err(_) if policy == "none" => Metadata::new(),
+                        Err(error) => panic!("missing {policy} metadata: {error}"),
+                    };
+                    assert_eq!(
+                        output_metadata
+                            .get_tag_by_hex(0x0001, Some(ExifTagGroup::GPS))
+                            .count()
+                            > 0,
+                        gps && policy != "none"
+                    );
+                    assert_eq!(
+                        output_metadata.get_tag_by_hex(0x013b, None).count() > 0,
+                        policy == "supported"
+                    );
+                    if policy != "none" {
+                        assert_eq!(
+                            read_exif(&output).orientation,
+                            1,
+                            "{format} {policy} gps={gps}"
+                        );
+                        assert_eq!(read_exif(&output).make.as_deref(), Some("TestCamera"));
+                        assert_eq!(image::image_dimensions(&output).unwrap(), (48, 64));
+                    }
+                    let mut decoder = ImageReader::open(output).unwrap().into_decoder().unwrap();
+                    assert!(
+                        decoder.icc_profile().unwrap().is_some(),
+                        "metadata writing must preserve sRGB profile"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

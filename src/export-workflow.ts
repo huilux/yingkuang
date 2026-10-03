@@ -21,6 +21,16 @@ export type ExportPlan = {
   estimatedPixels: number;
 };
 
+export type ExportRequest = { items: ExportItem[]; settings: ExportSettings };
+
+export function createExportRequest(items: ExportItem[], settings: ExportSettings): ExportRequest {
+  return structuredClone({ items, settings });
+}
+
+export function retryExportRequest(request: ExportRequest, paths: Set<string>): ExportRequest {
+  return createExportRequest(request.items.filter(item => paths.has(item.path)), request.settings);
+}
+
 type BuildExportPlanInput = {
   photos: PhotoAsset[];
   documents: Record<string, EditorDocument>;
@@ -94,7 +104,11 @@ export function buildExportPlan(input: BuildExportPlanInput): ExportPlan {
   const dimensions = sample ? outputDimensions(sample.photo, sample.document, input.settings) : null;
   const estimatedPixels = selectedPhotos.reduce((total, { photo, document }) => {
     const output = outputDimensions(photo, document, input.settings);
-    return total + output.width * output.height;
+    const pixels = output.width * output.height;
+    if (!Number.isFinite(pixels) || pixels > 256_000_000 || output.width > 30000 || output.height > 30000) {
+      issues.push({ field: "longEdge", message: `${photo.fileName}：成品单边最多 30000，像素总数最多 2.56 亿；请降低成品长边或边框尺寸` });
+    }
+    return total + pixels;
   }, 0);
   return {
     items,

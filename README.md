@@ -13,6 +13,8 @@
 
 ## 当前里程碑
 
+`0.1.2` 修复导出文件竞争、写入失败误报、重试范围、PNG 元数据重新导入和超大成品资源限制。200 张连续导出通过，详见 [可靠性验收](docs/export-reliability-0.1.2.md)；后续功能与验收任务见 [迭代任务](docs/iteration-backlog.md)。
+
 `0.1.1` 已完成第一轮导出性能修复：本机 release 默认模糊模板原尺寸 JPEG 中位数从 4.28s 降至 2.38s，PNG 从 11.87s 降至 3.65s。完整对照、内存、无损 PNG 和 96MP 压力测试边界见 [性能验收](docs/export-performance-0.1.1.md)。持续迭代的分支、提交与版本策略见 [迭代记录](docs/iteration-log.md)，用户问题与新增功能候选见 [流程巡检](docs/user-audit.md)。
 
 正式工程已经具备第一版主流程：本地 JPEG/PNG 导入、EXIF 拍摄参数读取、方向归一化、上次会话恢复、可拖拽水印画布、居中与三等分吸附、四边参数区、模板更新与另存、原图级顺序批量导出、取消与失败重试。导出支持 JPEG/PNG、尺寸与质量、基础元数据、GPS 开关和 sRGB 色彩转换。
@@ -29,7 +31,7 @@
 
 工作区用左侧纵向照片列表管理勾选、移除和批量套用；中央保留完整画布；右侧按「模板」「相框」「水印」分开套用样式、微调相框和编辑文字图层。照片只在左侧列出一次，画布下方不再重复显示缩略条。
 
-当前自动化验证覆盖真实 3000 万像素 JPEG 的导入、EXIF、带文字相框导出和 ICC 输出。200 张混合批次与 9600 万像素原尺寸输出仍属于交付前性能验收项，见 [开发状态](docs/development-status.md)。
+当前自动化验证覆盖真实 2400 万像素 JPEG 的导入、EXIF、带文字相框导出和 ICC 输出；200 张重复素材压力批次与生成的 9600 万像素压力输入已验证。不同相机素材与真实 9600 万像素原片的覆盖边界见 [开发状态](docs/development-status.md)。
 
 ## 本地开发
 
@@ -54,7 +56,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 
-发布前使用 `npm run version:set -- 0.1.1`（替换为目标版本）同步 npm、Rust 和 Tauri 的版本；构建会检查这些版本一致。
+发布前使用 `npm run version:set -- 0.1.2`（替换为目标版本）同步 npm、Rust 和 Tauri 的版本；构建会检查这些版本一致。
 
 在干净的 Linux 构建环境中生成 AppImage：
 

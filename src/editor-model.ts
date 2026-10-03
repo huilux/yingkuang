@@ -129,7 +129,7 @@ export function resolveLayerText(layer: WatermarkLayer, photo: PhotoAsset): stri
   if (layer.source === "custom") return layer.customValue;
   const override = photo.overrides?.[layer.source];
   const value = override ?? metadataValue(photo, layer.source);
-  if (!value) return `未读取到${layer.name}`;
+  if (!value?.trim()) return `未读取到${layer.name}`;
   return layer.source === "capturedAt" ? formatCapturedAt(value) : value;
 }
 

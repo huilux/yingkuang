@@ -46,3 +46,9 @@ test('添加参数覆盖原型常用字段并说明元数据来源', () => {
     'EXIF BodySerialNumber',
   );
 });
+
+test('clearing a display value does not recover original metadata, including whitespace', () => {
+  for (const value of ['', '   ']) {
+    assert.equal(editorModel.resolveLayerText({ source: 'model', name: '型号' }, { ...photo, overrides: { model: value } }), '未读取到型号');
+  }
+});

@@ -42,3 +42,24 @@ test('an intentionally empty suffix matches the backend filename behavior', () =
   assert.equal(plan.sampleFileName, 'a.jpg');
   assert.equal(plan.issues.length, 0);
 });
+
+test('retry uses the original request after selection, edits and settings change', () => {
+  const mutableSettings = structuredClone(settings);
+  const mutableDocuments = structuredClone(documents);
+  const plan = workflow.buildExportPlan({ photos, documents: mutableDocuments, activeId: 'a', checkedIds: ['a', 'b'], settings: mutableSettings });
+  const request = workflow.createExportRequest(plan.items, mutableSettings);
+  mutableDocuments.b.frame.paddingX = 20;
+  mutableSettings.directory = '/different';
+  mutableSettings.range = 'current';
+  const retry = workflow.retryExportRequest(request, new Set(['/photos/b.jpg']));
+  assert.deepEqual(retry.items.map(item => item.path), ['/photos/b.jpg']);
+  assert.equal(retry.items[0].document.frame.paddingX, 4);
+  assert.equal(retry.settings.directory, '/output');
+  retry.items[0].document.frame.paddingX = 19;
+  assert.equal(request.items[1].document.frame.paddingX, 4);
+});
+
+test('oversized canvases are rejected in the export dialog', () => {
+  const plan = workflow.buildExportPlan({ photos, documents, activeId: 'a', checkedIds: ['a'], settings: { ...settings, size: 'long-edge', longEdge: 30000 } });
+  assert.ok(plan.issues.some(issue => issue.message.includes('像素')));
+});

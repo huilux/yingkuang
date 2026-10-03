@@ -152,7 +152,19 @@ pub(crate) fn read_exif(path: &Path) -> ExifSnapshot {
         return snapshot;
     };
     let mut reader = BufReader::new(file);
-    let Ok(exif) = ExifReader::new().read_from_container(&mut reader) else {
+    let exif = ExifReader::new()
+        .read_from_container(&mut reader)
+        .ok()
+        .or_else(|| {
+            // Older exports stored EXIF in PNG zTXt chunks. Decode that legacy
+            // container only as a fallback; new exports use the standard eXIf chunk.
+            if image::ImageFormat::from_path(path).ok() != Some(image::ImageFormat::Png) {
+                return None;
+            }
+            let metadata = little_exif::metadata::Metadata::new_from_path(path).ok()?;
+            ExifReader::new().read_raw(metadata.encode().ok()?).ok()
+        });
+    let Some(exif) = exif else {
         return snapshot;
     };
 

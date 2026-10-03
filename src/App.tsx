@@ -40,7 +40,7 @@ import {
   photoOrientation,
 } from "./editor-model";
 import { defaultTemplateKey, documentFromTemplate, importTemplates, readDefaultTemplateId, readTemplates, serializeUserTemplates, templatesKey, type ImportDecision } from "./template-library";
-import { buildExportPlan, type ExportIssue } from "./export-workflow";
+import { buildExportPlan, createExportRequest, retryExportRequest, type ExportIssue, type ExportRequest } from "./export-workflow";
 import type {
   EditorDocument,
   ExportPreflight,
@@ -112,7 +112,7 @@ const exportStageLabels: Record<ExportProgress["stage"], string> = {
   preparing: "正在准备照片",
   rendering: "正在渲染相框与水印",
   encoding: "正在编码成品",
-  metadata: "正在写入元数据",
+  metadata: "正在整理元数据",
   finishing: "正在完成文件",
   "completed-item": "已完成当前照片",
 };
@@ -162,6 +162,8 @@ function App() {
   const [exportCancelling, setExportCancelling] = useState(false);
   const [sessionReady, setSessionReady] = useState(!isNative);
   const importBusy = useRef(false);
+  const lastExportRequest = useRef<ExportRequest | null>(null);
+  const exportBusy = useRef(false);
 
   useEffect(() => () => releaseBrowserPhotos(), []);
 
@@ -185,8 +187,13 @@ function App() {
   useEffect(() => {
     if (!isNative) return;
     let dispose: (() => void) | undefined;
-    void listen<ExportProgress>("export-progress", (event) => setExportProgress(event.payload)).then((unlisten) => { dispose = unlisten; });
-    return () => dispose?.();
+    let cancelled = false;
+    void listen<ExportProgress>("export-progress", (event) => {
+      if (!cancelled && exportBusy.current) setExportProgress(event.payload);
+    }).then((unlisten) => {
+      if (cancelled) unlisten(); else dispose = unlisten;
+    }).catch((error) => { if (!cancelled) setMessage(`导出进度监听失败：${String(error)}`); });
+    return () => { cancelled = true; dispose?.(); };
   }, []);
 
   useEffect(() => {
@@ -676,7 +683,12 @@ function App() {
   }
 
   async function startExport(retryPaths?: Set<string>) {
-    const plan = buildExportPlan({ photos, documents, activeId, checkedIds, settings: exportSettings, retryPaths });
+    if (exportBusy.current) return;
+    const plan = buildExportPlan({ photos, documents, activeId, checkedIds, settings: exportSettings });
+    const retry = retryPaths && lastExportRequest.current
+      ? retryExportRequest(lastExportRequest.current, retryPaths) : null;
+    const request = retry ?? createExportRequest(plan.items, exportSettings);
+    if (retry) plan.issues = request.items.length ? [] : [{ field: "range", message: "没有可重试的失败项" }];
     setExportIssues(plan.issues);
     if (plan.issues.length) {
       setShowExport(true);
@@ -688,16 +700,18 @@ function App() {
       setMessage("导出设置已保存");
       return;
     }
+    exportBusy.current = true;
     setExportChecking(true);
     let preflight: ExportPreflight;
     try {
-      preflight = await invoke<ExportPreflight>("preflight_export", { request: { items: plan.items, settings: exportSettings } });
+      preflight = await invoke<ExportPreflight>("preflight_export", { request });
     } catch (error) {
       const message = `预检失败：${String(error)}`;
       setExportIssues([{ field: "preflight", message }]);
       setShowExport(true);
       setMessage(message);
       setExportChecking(false);
+      exportBusy.current = false;
       return;
     }
     if (!preflight.ready) {
@@ -705,23 +719,26 @@ function App() {
       setShowExport(true);
       setMessage(preflight.errors[0] ?? "导出预检未通过");
       setExportChecking(false);
+      exportBusy.current = false;
       return;
     }
     setExportChecking(false);
     closeExport();
     setExportResult(null);
+    lastExportRequest.current = request;
     setExportRunning(true);
     setExportCancelling(false);
-    setExportProgress({ current: 1, completed: 0, total: plan.items.length, fileName: "准备导出", succeeded: 0, failed: 0, skipped: 0, stage: "preflight" });
+    setExportProgress({ current: 1, completed: 0, total: request.items.length, fileName: "准备导出", succeeded: 0, failed: 0, skipped: 0, stage: "preflight" });
     try {
-      const result = await invoke<ExportSummary>("export_images", { request: { items: plan.items, settings: exportSettings } });
+      const result = await invoke<ExportSummary>("export_images", { request });
       const warnings = [...new Set([...preflight.warnings, ...result.warnings])];
       setExportResult({ ...result, warnings });
       setMessage(result.cancelled ? "导出已取消，已完成的文件会保留" : `导出完成：成功 ${result.succeeded} 张`);
     } catch (error) {
-      setExportResult({ total: plan.items.length, succeeded: 0, failed: plan.items.length, skipped: 0, cancelled: false, outputDirectory: exportSettings.directory, failures: [{ fileName: "导出任务", path: "", reason: String(error) }], warnings: preflight.warnings });
+      setExportResult({ total: request.items.length, succeeded: 0, failed: request.items.length, skipped: 0, cancelled: false, outputDirectory: request.settings.directory, failures: [{ fileName: "导出任务", path: "", reason: String(error) }], warnings: preflight.warnings });
       setMessage(`导出失败：${String(error)}`);
     } finally {
+      exportBusy.current = false;
       setExportRunning(false);
       setExportCancelling(false);
     }
