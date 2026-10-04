@@ -13,6 +13,8 @@
 
 ## 当前里程碑
 
+`0.3.0` 新增缺失原图重新定位，恢复原排版、文字、勾选与模板关联；支持移除缺失记录，修复全部原图缺失时无法清空批次。见 [恢复流程验收](docs/photo-recovery-0.3.0.md)。
+
 `0.2.0` 新增指定长边下的“小图不放大”、导出已用时间与结果耗时，并明确取消后未处理数量。详见 [导出体验验收](docs/export-workflow-0.2.0.md)。
 
 `0.1.3` 修复弹窗键盘操作、模板长名称丢失、批量撤销、缺失原图的编辑与勾选保留，以及本地存储异常处理。Chromium/WebKit 各 17 项流程检查通过，见 [用户链路验收](docs/user-workflow-0.1.3.md)。
@@ -60,7 +62,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 
-发布前使用 `npm run version:set -- 0.2.0`（替换为目标版本）同步 npm、Rust 和 Tauri 的版本；构建会检查这些版本一致。
+发布前使用 `npm run version:set -- 0.3.0`（替换为目标版本）同步 npm、Rust 和 Tauri 的版本；构建会检查这些版本一致。
 
 在干净的 Linux 构建环境中生成 AppImage：
 

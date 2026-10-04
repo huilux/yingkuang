@@ -22,7 +22,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { EditorWorkspace } from "./EditorWorkspace";
-import { parseSession, type SessionSnapshot } from "./session-storage";
+import { parseSession, relocateSessionPath, type SessionSnapshot } from "./session-storage";
 import { Modal } from "./Modal";
 import { ExportElapsed } from "./ExportElapsed";
 import { TemplateManager } from "./TemplateManager";
@@ -160,7 +160,7 @@ function App() {
   const [showTemplateManager, setShowTemplateManager] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [showExport, setShowExport] = useState(false);
-  const [pendingRemovalIds, setPendingRemovalIds] = useState<string[] | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<{ ids: string[]; missingPaths: string[] } | null>(null);
   const [exportSettings, setExportSettings] = useState(defaultExport);
   const [exportRunning, setExportRunning] = useState(false);
   const [exportStartedAt, setExportStartedAt] = useState(0);
@@ -176,6 +176,8 @@ function App() {
   const restoredSession = useRef<SessionSnapshot>({ paths: [] });
   const sessionWriteBlocked = useRef(false);
   const [missingPhotos, setMissingPhotos] = useState<Array<{ path: string; reason: string }>>([]);
+  const [pendingRelink, setPendingRelink] = useState<{ oldPath: string; photo: PhotoAsset } | null>(null);
+  const [relinkError, setRelinkError] = useState<{ path: string; message: string } | null>(null);
   const [storageErrors, setStorageErrors] = useState<Record<string, string>>({});
 
   function storageError(scope: string, message: string) {
@@ -284,33 +286,87 @@ function App() {
     const documentsByPath: Record<string, EditorDocument> = {};
     const overridesByPath: Record<string, PhotoAsset["overrides"]> = {};
     const templateIdsByPath: Record<string, string> = {};
+    const dimensionsByPath: NonNullable<SessionSnapshot["dimensionsByPath"]> = {};
     const saved = restoredSession.current;
     const unavailable = missingPhotos.filter(item => !photos.some(photo => photo.path === item.path));
     for (const { path } of unavailable) {
       if (saved.documentsByPath?.[path]) documentsByPath[path] = saved.documentsByPath[path];
       if (saved.overridesByPath?.[path]) overridesByPath[path] = saved.overridesByPath[path];
       if (saved.templateIdsByPath?.[path]) templateIdsByPath[path] = saved.templateIdsByPath[path];
+      if (saved.dimensionsByPath?.[path]) dimensionsByPath[path] = saved.dimensionsByPath[path];
     }
     for (const photo of photos) {
       if (!photo.path) continue;
       if (documents[photo.id]) documentsByPath[photo.path] = documents[photo.id];
       if (photo.overrides) overridesByPath[photo.path] = photo.overrides;
       if (templateByPhoto[photo.id]) templateIdsByPath[photo.path] = templateByPhoto[photo.id];
+      dimensionsByPath[photo.path] = { width: photo.width, height: photo.height };
     }
     const order = new Map(saved.paths.map((path, index) => [path, index]));
     const paths = [...new Set([...photos.map(photo => photo.path).filter(Boolean), ...unavailable.map(item => item.path)])]
       .sort((a, b) => (order.get(a) ?? Number.MAX_SAFE_INTEGER) - (order.get(b) ?? Number.MAX_SAFE_INTEGER));
-    try { localStorage.setItem(sessionKey, JSON.stringify({
+    const snapshot: SessionSnapshot = {
       paths,
       activePath: activePhoto?.path ?? "",
       checkedPaths: [...photos.filter(photo => checked.has(photo.id)).map(photo => photo.path), ...unavailable.filter(item => saved.checkedPaths?.includes(item.path)).map(item => item.path)],
       documentsByPath,
       overridesByPath,
       templateIdsByPath,
+      dimensionsByPath,
       exportSettings,
-    })); storageError("session", ""); }
+    };
+    try { localStorage.setItem(sessionKey, JSON.stringify(snapshot)); restoredSession.current = snapshot; storageError("session", ""); }
     catch { storageError("session", "当前工作尚未自动保存，请检查可用存储空间；原有记录仍保留。"); }
   }, [activePhoto?.path, checkedIds, documents, exportSettings, photos, sessionReady, loadState, templateByPhoto, missingPhotos]);
+
+  async function selectReplacementPhoto(oldPath: string) {
+    if (importBusy.current || loadState === "loading") return;
+    importBusy.current = true;
+    setRelinkError(null);
+    setLoadState("loading");
+    try {
+      const path = await open({ multiple: false, directory: false, title: "重新定位原图", filters: [{ name: "摄影图片", extensions: ["jpg", "jpeg", "png"] }] });
+      if (typeof path !== "string") return;
+      if (photos.some(photo => photo.path === path) || missingPhotos.some(photo => photo.path === path && path !== oldPath)) throw new Error("所选照片已在当前批次中，请选择对应的原图");
+      const report = await invoke<InspectReport>("inspect_images_resilient", { paths: [path] });
+      const photo = report.items[0];
+      if (!photo) throw new Error(report.failures[0]?.reason ?? "无法读取所选照片");
+      setPendingRelink({ oldPath, photo });
+    } catch (error) {
+      setRelinkError({ path: oldPath, message: `重新定位失败：${String(error)}` });
+    } finally {
+      importBusy.current = false;
+      setLoadState("idle");
+    }
+  }
+
+  function confirmReplacementPhoto() {
+    if (!pendingRelink) return;
+    const { oldPath, photo: inspected } = pendingRelink;
+    try {
+      if (photos.some(photo => photo.path === inspected.path || photo.id === inspected.id)) throw new Error("所选照片已在当前批次中");
+      const saved = relocateSessionPath(restoredSession.current, oldPath, inspected.path);
+      const photo = { ...inspected, overrides: saved.overridesByPath?.[inspected.path] };
+      const templateId = saved.templateIdsByPath?.[photo.path] ?? defaultTemplateId;
+      const template = templates.find(template => template.id === templateId) ?? templates[0];
+      const document = saved.documentsByPath?.[photo.path] ?? (template ? documentFromTemplate(template, photo) : createDefaultDocument());
+      commitTransaction();
+      restoredSession.current = saved;
+      setDocuments(current => ({ ...current, [photo.id]: cloneDocument(document) }));
+      setTemplateByPhoto(current => ({ ...current, [photo.id]: template?.id ?? defaultTemplateId }));
+      const order = new Map(saved.paths.map((path, index) => [path, index]));
+      setPhotos(current => [...current, photo].sort((a, b) => (order.get(a.path) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.path) ?? Number.MAX_SAFE_INTEGER)));
+      if (saved.checkedPaths?.includes(photo.path)) setCheckedIds(current => [...new Set([...current, photo.id])]);
+      setMissingPhotos(current => current.filter(item => item.path !== oldPath));
+      setActiveId(photo.id);
+      setSelectedLayerIds([]);
+      setPendingRelink(null);
+      setMessage(`已重新定位 ${photo.fileName}，原排版和手动文字已恢复，请检查画面`);
+    } catch (error) {
+      setPendingRelink(null);
+      setRelinkError({ path: oldPath, message: `重新定位失败：${String(error)}` });
+    }
+  }
 
   function clearHistory() {
     undoStack.current = [];
@@ -567,9 +623,19 @@ function App() {
     setCheckedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
 
-  function removePhotos(ids: string[]) {
+  function removePhotos(ids: string[], missingPaths: string[]) {
     const removed = new Set(ids);
     const remaining = photos.filter((photo) => !removed.has(photo.id));
+    const removedPaths = new Set([...missingPaths, ...photos.filter(photo => removed.has(photo.id)).map(photo => photo.path)]);
+    const saved = structuredClone(restoredSession.current);
+    saved.paths = saved.paths.filter(path => !removedPaths.has(path));
+    saved.checkedPaths = saved.checkedPaths?.filter(path => !removedPaths.has(path));
+    if (saved.activePath && removedPaths.has(saved.activePath)) saved.activePath = "";
+    for (const key of ["documentsByPath", "overridesByPath", "templateIdsByPath", "dimensionsByPath"] as const) {
+      for (const path of removedPaths) if (saved[key]) delete saved[key][path];
+    }
+    restoredSession.current = saved;
+    setMissingPhotos(current => current.filter(photo => !removedPaths.has(photo.path)));
     for (const id of removed) releaseBrowserPhoto(id);
     setPhotos(remaining);
     setCheckedIds((current) => current.filter((id) => !removed.has(id)));
@@ -590,8 +656,8 @@ function App() {
       setSelectedLayerIds([]);
     }
     clearHistory();
-    setMessage(`已从当前批次移除 ${removed.size} 张照片，原图未删除`);
-    setPendingRemovalIds(null);
+    setMessage(`已从当前批次移除 ${removed.size + missingPaths.length} 张照片，原图未删除`);
+    setPendingRemoval(null);
   }
 
   function applyTemplate(template: TemplateRecord, targetIds: string[]) {
@@ -831,7 +897,7 @@ function App() {
   return (
     <div className="app-shell" onKeyDown={event => {
       const target = event.target as HTMLElement;
-      if (showExport || showTemplateDialog || showTemplateManager || pendingRemovalIds || exportRunning || exportResult || target.closest("input, textarea, select, [contenteditable=true]")) return;
+      if (showExport || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || exportRunning || exportResult || target.closest("input, textarea, select, [contenteditable=true]")) return;
       if (editorRef.current?.isInteracting()) return;
       const command = event.ctrlKey || event.metaKey;
       if (command && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
@@ -882,7 +948,7 @@ function App() {
           </div>
           {activeDocument && checkedIds.some((id) => id !== activeId) && <button className="library-batch-button" type="button" onClick={() => applyCurrentCanvas(checkedIds)}>将当前画布应用到已勾选 {selectedCount} 张</button>}
           {Object.values(storageErrors).some(Boolean) && <div className="storage-notice" role="alert">{Object.entries(storageErrors).filter(([, error]) => error).map(([scope, error]) => <p key={scope}>{error}</p>)}</div>}
-          {!!missingPhotos.length && <details className="missing-photos"><summary>{missingPhotos.length} 张原图暂不可用，编辑已保留</summary><p>将原图恢复到原路径后重新导入，可继续原来的编辑。</p>{missingPhotos.map(item => <div key={item.path}><strong>{item.path.split(/[\\/]/).pop()}</strong><small>{item.reason}</small></div>)}</details>}
+          {!!missingPhotos.length && <details className="missing-photos"><summary>{missingPhotos.length} 张原图暂不可用，编辑已保留</summary><p>选择移动后的原图，或恢复原路径后重新导入。</p>{missingPhotos.map(item => <div key={item.path}><strong>{item.path.split(/[\\/]/).pop()}</strong><small title={item.path}>{item.path}</small><small>{item.reason}</small><button className="button secondary" type="button" disabled={loadState === "loading"} aria-label={`重新定位 ${item.path.split(/[\\/]/).pop()}`} onClick={() => void selectReplacementPhoto(item.path)}><FolderOpen /> 重新定位原图</button><button className="button secondary" type="button" disabled={loadState === "loading"} aria-label={`移除缺失记录 ${item.path.split(/[\\/]/).pop()}`} onClick={() => setPendingRemoval({ ids: [], missingPaths: [item.path] })}>移除记录</button>{relinkError?.path === item.path && <small className="field-message" role="alert">{relinkError.message}</small>}</div>)}</details>}
           <div className="photo-list">
             {!photos.length ? (
               <button className="library-empty" type="button" onClick={() => handleImport()}><ImageSquare /><strong>还没有照片</strong><span>添加照片或导入整个文件夹</span></button>
@@ -894,8 +960,8 @@ function App() {
             ))}
           </div>
           <div className="library-footer">
-            <button className="library-remove-button" type="button" disabled={!selectedCount || loadState === "loading" || exportRunning} onClick={() => setPendingRemovalIds(checkedIds)}><Trash /> 移除已选</button>
-            <button className="library-clear-button" type="button" disabled={!photos.length || loadState === "loading" || exportRunning} onClick={() => setPendingRemovalIds(photos.map((photo) => photo.id))}>清空批次</button>
+            <button className="library-remove-button" type="button" disabled={!selectedCount || loadState === "loading" || exportRunning} onClick={() => setPendingRemoval({ ids: checkedIds, missingPaths: [] })}><Trash /> 移除已选</button>
+            <button className="library-clear-button" type="button" disabled={(!photos.length && !missingPhotos.length) || loadState === "loading" || exportRunning} onClick={() => setPendingRemoval({ ids: photos.map(photo => photo.id), missingPaths: missingPhotos.map(photo => photo.path) })}>清空批次</button>
           </div>
         </aside>
 
@@ -956,7 +1022,15 @@ function App() {
 
       {showTemplateManager && <TemplateManager templates={templates} defaultTemplateId={defaultTemplateId} photo={activePhoto} onClose={() => setShowTemplateManager(false)} onDefaultChange={setDefaultTemplateId} onRename={renameTemplate} onDuplicate={duplicateTemplate} onDelete={deleteTemplate} onReset={resetTemplate} onImport={restoreTemplates} />}
 
-      {pendingRemovalIds && <Modal onClose={() => setPendingRemovalIds(null)}><section className="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-title"><div className="compact-dialog-header"><div><span>照片批次</span><h2 id="remove-title">移除 {pendingRemovalIds.length} 张照片？</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setPendingRemovalIds(null)}><X /></button></div><div className="compact-dialog-body"><p>照片只会从当前批次移除，磁盘上的原图不会删除。这些照片在当前批次中的单独调整也会清除。</p></div><footer><button className="button secondary" type="button" onClick={() => setPendingRemovalIds(null)}>取消</button><button className="button primary" type="button" onClick={() => removePhotos(pendingRemovalIds)}>确认移除</button></footer></section></Modal>}
+      {pendingRelink && <Modal onClose={() => setPendingRelink(null)}><section className="compact-dialog relink-dialog" role="dialog" aria-modal="true" aria-labelledby="relink-title">
+        <div className="compact-dialog-header"><div><span>恢复编辑</span><h2 id="relink-title">确认原图的新位置</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setPendingRelink(null)}><X /></button></div>
+        <div className="compact-dialog-body"><img className="relink-preview" src={pendingRelink.photo.thumbnailDataUrl} alt="所选照片预览" /><p>原路径：<span className="relink-path">{pendingRelink.oldPath}</span></p><p>新路径：<span className="relink-path">{pendingRelink.photo.path}</span></p><p>新照片尺寸：{formatPixels(pendingRelink.photo)} px</p>
+          {restoredSession.current.dimensionsByPath?.[pendingRelink.oldPath] && <p>原照片尺寸：{restoredSession.current.dimensionsByPath[pendingRelink.oldPath].width} × {restoredSession.current.dimensionsByPath[pendingRelink.oldPath].height} px</p>}
+          <p>确认这是原来的照片。原排版、手动文字与勾选状态将保留；如果照片经过裁剪或旋转，请检查水印位置。</p>
+        </div><footer><button data-modal-initial className="button secondary" type="button" onClick={() => setPendingRelink(null)}>取消</button><button className="button primary" type="button" onClick={confirmReplacementPhoto}>使用此照片恢复</button></footer>
+      </section></Modal>}
+
+      {pendingRemoval && <Modal onClose={() => setPendingRemoval(null)}><section className="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-title"><div className="compact-dialog-header"><div><span>照片批次</span><h2 id="remove-title">移除 {pendingRemoval.ids.length + pendingRemoval.missingPaths.length} 张照片？</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setPendingRemoval(null)}><X /></button></div><div className="compact-dialog-body"><p>照片只会从当前批次移除，磁盘上的原图不会删除。这些照片在当前批次中的单独调整也会清除。</p>{!!pendingRemoval.missingPaths.length && <p>包括 {pendingRemoval.missingPaths.length} 张缺失原图的编辑记录；移除后无法通过重新定位找回这些调整。</p>}</div><footer><button className="button secondary" type="button" onClick={() => setPendingRemoval(null)}>取消</button><button className="button primary" type="button" onClick={() => removePhotos(pendingRemoval.ids, pendingRemoval.missingPaths)}>确认移除</button></footer></section></Modal>}
 
       {showTemplateDialog && <Modal onClose={() => setShowTemplateDialog(false)}><section className="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="template-title"><div className="compact-dialog-header"><div><span>模板库</span><h2 id="template-title">另存为新模板</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setShowTemplateDialog(false)}><X /></button></div><div className="compact-dialog-body"><label className="field"><span>模板名称</span><input autoFocus className="text-input" maxLength={maxTemplateNameLength} value={templateName} onChange={(event) => setTemplateName(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") saveNewTemplate(); }} /></label>{templateName && templateNameError(templateName, templates) && <p role="alert">{templateNameError(templateName, templates)}</p>}<p>保存当前方向的相框、四边区域、水印字段、字体和位置，并使用当前照片更新封面。</p></div><footer><button className="button secondary" type="button" onClick={() => setShowTemplateDialog(false)}>取消</button><button className="button primary" type="button" disabled={!!templateNameError(templateName, templates)} onClick={saveNewTemplate}>保存模板</button></footer></section></Modal>}
 
