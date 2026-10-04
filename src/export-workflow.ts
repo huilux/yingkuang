@@ -23,6 +23,14 @@ export type ExportPlan = {
 
 export type ExportRequest = { items: ExportItem[]; settings: ExportSettings };
 
+export function formatElapsed(milliseconds: number): string {
+  const seconds = Math.max(0, Math.floor(Number.isFinite(milliseconds) ? milliseconds / 1000 : 0));
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分 ${seconds % 60} 秒`;
+  return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分 ${seconds % 60} 秒`;
+}
+
 export function createExportRequest(items: ExportItem[], settings: ExportSettings): ExportRequest {
   return structuredClone({ items, settings });
 }
@@ -52,9 +60,11 @@ function outputDimensions(photo: PhotoAsset, document: EditorDocument, settings:
   const height = photoHeight + vertical * 2
     + (document.regions.top.enabled ? document.regions.top.extra * 10 : 0)
     + (document.regions.bottom.enabled ? document.regions.bottom.extra * 10 : 0);
-  const scale = settings.size === "long-edge"
+  const originalScale = photo.width / photoWidth;
+  const requestedScale = settings.size === "long-edge"
     ? settings.longEdge / Math.max(width, height)
-    : photo.width / photoWidth;
+    : originalScale;
+  const scale = settings.size === "long-edge" && settings.noUpscale ? Math.min(requestedScale, originalScale) : requestedScale;
   return {
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),

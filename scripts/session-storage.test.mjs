@@ -10,7 +10,7 @@ test('legacy partial sessions preserve documents, missing paths and manual text'
 });
 
 test('malformed session structure is rejected before reaching editor state', () => {
-  for (const saved of [null, [], { paths: [17] }, { documentsByPath: { 'photo.jpg': {} } }, { overridesByPath: { 'photo.jpg': { camera: 1 } } }, { exportSettings: { format: 'unknown' } }, { exportSettings: { suffix: null } }]) {
+  for (const saved of [null, [], { paths: [17] }, { documentsByPath: { 'photo.jpg': {} } }, { overridesByPath: { 'photo.jpg': { camera: 1 } } }, { exportSettings: { format: 'unknown' } }, { exportSettings: { suffix: null } }, { exportSettings: { noUpscale: 'yes' } }]) {
     assert.throws(() => parseSession(JSON.stringify(saved)));
   }
   assert.throws(() => parseSession('{"paths":'));

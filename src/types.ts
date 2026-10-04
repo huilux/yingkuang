@@ -115,6 +115,7 @@ export interface ExportSettings {
   quality: number;
   size: "original" | "long-edge";
   longEdge: number;
+  noUpscale: boolean;
   metadata: "none" | "basic" | "supported";
   includeGps: boolean;
   range: "current" | "selected" | "all";
@@ -135,6 +136,7 @@ export interface ExportProgress {
 }
 
 export interface ExportSummary {
+  elapsedMs: number;
   total: number;
   succeeded: number;
   failed: number;

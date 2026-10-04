@@ -44,7 +44,7 @@ export function parseSession(source: string | null): SessionSnapshot {
     }
     for (const key of ["directory", "suffix"]) if (settings[key] !== undefined && !string(settings[key])) throw new Error("导出路径或后缀无效");
     for (const key of ["quality", "longEdge"]) if (settings[key] !== undefined && (typeof settings[key] !== "number" || !Number.isFinite(settings[key]))) throw new Error("导出尺寸或质量无效");
-    if (settings.includeGps !== undefined && typeof settings.includeGps !== "boolean") throw new Error("元数据设置无效");
+    for (const key of ["includeGps", "noUpscale"]) if (settings[key] !== undefined && typeof settings[key] !== "boolean") throw new Error("导出开关设置无效");
   }
   return { ...value, paths: value.paths ?? [] } as SessionSnapshot;
 }

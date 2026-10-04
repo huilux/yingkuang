@@ -19,6 +19,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     sync::atomic::{AtomicBool, Ordering},
+    time::Instant,
 };
 use tauri::{AppHandle, Emitter};
 
@@ -49,6 +50,8 @@ struct ExportSettings {
     quality: u8,
     size: String,
     long_edge: u32,
+    #[serde(default)]
+    no_upscale: bool,
     metadata: String,
     include_gps: bool,
     suffix: String,
@@ -156,6 +159,7 @@ pub struct ExportFailure {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportSummary {
+    elapsed_ms: u64,
     total: usize,
     succeeded: usize,
     failed: usize,
@@ -283,6 +287,19 @@ fn calculate_geometry(width: u32, height: u32, document: &EditorDocument) -> Geo
     }
 }
 
+fn output_scale(source_width: u32, geometry: &Geometry, settings: &ExportSettings) -> f32 {
+    let original = source_width as f32 / geometry.photo.width;
+    if settings.size != "long-edge" {
+        return original;
+    }
+    let requested = settings.long_edge as f32 / geometry.width.max(geometry.height);
+    if settings.no_upscale {
+        requested.min(original)
+    } else {
+        requested
+    }
+}
+
 fn output_dimensions(
     width: u32,
     height: u32,
@@ -290,11 +307,7 @@ fn output_dimensions(
     settings: &ExportSettings,
 ) -> (u32, u32) {
     let geometry = calculate_geometry(width, height, document);
-    let scale = if settings.size == "long-edge" {
-        settings.long_edge as f32 / geometry.width.max(geometry.height)
-    } else {
-        width as f32 / geometry.photo.width
-    };
+    let scale = output_scale(width, &geometry, settings);
     (
         (geometry.width * scale).round().max(1.0) as u32,
         (geometry.height * scale).round().max(1.0) as u32,
@@ -1015,12 +1028,7 @@ fn render_item_with_renderer(
     let (source_width, source_height) = source.dimensions();
     exif.dimensions = Some(format!("{source_width} × {source_height}"));
     let geometry = calculate_geometry(source_width, source_height, &item.document);
-    let original_scale = source_width as f32 / geometry.photo.width;
-    let scale = if settings.size == "long-edge" {
-        settings.long_edge as f32 / geometry.width.max(geometry.height)
-    } else {
-        original_scale
-    };
+    let scale = output_scale(source_width, &geometry, settings);
     let canvas_width = (geometry.width * scale).round().max(1.0) as u32;
     let canvas_height = (geometry.height * scale).round().max(1.0) as u32;
     validate_output_dimensions(canvas_width, canvas_height)?;
@@ -1305,6 +1313,7 @@ fn run_export_with_progress(
     cancel: &AtomicBool,
     mut progress: impl FnMut(ExportProgress),
 ) -> Result<ExportSummary, String> {
+    let started = Instant::now();
     let validation_errors = validate_export_request(&request);
     if !validation_errors.is_empty() {
         return Err(validation_errors.join("；"));
@@ -1375,6 +1384,7 @@ fn run_export_with_progress(
     warnings.sort();
     warnings.dedup();
     Ok(ExportSummary {
+        elapsed_ms: started.elapsed().as_millis() as u64,
         total,
         succeeded,
         failed,
@@ -1455,9 +1465,16 @@ mod tests {
             },
         };
         let mut events = Vec::new();
-        let summary =
-            run_export_with_progress(request, &AtomicBool::new(false), |event| events.push(event))
-                .unwrap();
+        let started = Instant::now();
+        let summary = run_export_with_progress(request, &AtomicBool::new(false), |event| {
+            if events.is_empty() {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            events.push(event);
+        })
+        .unwrap();
+        assert!(summary.elapsed_ms >= 20);
+        assert!(u128::from(summary.elapsed_ms) <= started.elapsed().as_millis());
         assert_eq!(
             (
                 summary.total,
@@ -1982,6 +1999,7 @@ mod tests {
                 quality: 92,
                 size: "long-edge".into(),
                 long_edge: 1580,
+                no_upscale: false,
                 metadata: "none".into(),
                 include_gps: false,
                 suffix: "-frame".into(),
@@ -2055,6 +2073,7 @@ mod tests {
             quality: 92,
             size: "long-edge".to_owned(),
             long_edge: 1200,
+            no_upscale: false,
             metadata: "none".to_owned(),
             include_gps: false,
             suffix: "-frame".to_owned(),
@@ -2083,6 +2102,70 @@ mod tests {
         settings.suffix.clear();
         let output = unique_output_path(&input, &settings).unwrap().unwrap();
         assert_eq!(output.file_name().unwrap(), "photo.jpg");
+    }
+
+    #[test]
+    fn no_upscale_matches_preflight_and_encoded_dimensions() {
+        let root = tempfile::tempdir().unwrap();
+        for (width, height, expected) in [
+            (600, 400, (632, 484)),
+            (400, 600, (432, 684)),
+            (400, 400, (432, 484)),
+            (2400, 1600, (1200, 919)),
+        ] {
+            let input = root.path().join(format!("{width}-{height}.png"));
+            RgbaImage::from_pixel(width, height, Rgba([120, 80, 40, 255]))
+                .save(&input)
+                .unwrap();
+            let item = ExportItem {
+                path: input.to_string_lossy().into_owned(),
+                document: test_document(),
+                overrides: HashMap::new(),
+            };
+            let settings = ExportSettings {
+                no_upscale: true,
+                format: "png".into(),
+                ..test_settings(root.path())
+            };
+            let preflight = preflight_export_sync(&ExportRequest {
+                items: vec![item.clone()],
+                settings: settings.clone(),
+            });
+            assert!(preflight.ready, "{:?}", preflight.errors);
+            assert_eq!(
+                (preflight.largest_width, preflight.largest_height),
+                expected
+            );
+            assert_eq!(
+                preflight.estimated_pixels,
+                u64::from(expected.0) * u64::from(expected.1)
+            );
+            let (output, _) = export_one(&item, &settings).unwrap().unwrap();
+            assert_eq!(image::image_dimensions(output).unwrap(), expected);
+            let fixed = ExportSettings {
+                no_upscale: false,
+                ..settings.clone()
+            };
+            let dimensions = output_dimensions(width, height, &item.document, &fixed);
+            assert_eq!(dimensions.0.max(dimensions.1), 1200);
+            let original = ExportSettings {
+                size: "original".into(),
+                ..settings
+            };
+            let original_fixed = ExportSettings {
+                no_upscale: false,
+                ..original.clone()
+            };
+            assert_eq!(
+                output_dimensions(width, height, &item.document, &original),
+                output_dimensions(width, height, &item.document, &original_fixed)
+            );
+        }
+        let legacy: ExportSettings = serde_json::from_value(serde_json::json!({
+            "directory": "/tmp", "format": "jpeg", "quality": 92, "size": "long-edge", "longEdge": 1200,
+            "metadata": "none", "includeGps": false, "suffix": "", "collision": "number"
+        })).unwrap();
+        assert!(!legacy.no_upscale);
     }
 
     #[test]
@@ -2184,6 +2267,7 @@ mod tests {
             quality: 92,
             size: "long-edge".to_owned(),
             long_edge: 240,
+            no_upscale: false,
             metadata: "none".to_owned(),
             include_gps: false,
             suffix: "-frame".to_owned(),
@@ -2522,6 +2606,7 @@ mod tests {
             quality: 90,
             size: "long-edge".to_owned(),
             long_edge: 1200,
+            no_upscale: false,
             metadata: "basic".to_owned(),
             include_gps: false,
             suffix: "-frame".to_owned(),

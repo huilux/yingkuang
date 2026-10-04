@@ -63,3 +63,25 @@ test('oversized canvases are rejected in the export dialog', () => {
   const plan = workflow.buildExportPlan({ photos, documents, activeId: 'a', checkedIds: ['a'], settings: { ...settings, size: 'long-edge', longEdge: 30000 } });
   assert.ok(plan.issues.some(issue => issue.message.includes('像素')));
 });
+
+test('no-upscale caps the photo scale while retaining frames and the long-edge ceiling', () => {
+  for (const [width, height] of [[600, 400], [400, 600], [400, 400], [2400, 1600]]) {
+    const photo = { ...photos[0], width, height };
+    const input = { photos: [photo], documents, activeId: 'a', checkedIds: ['a'], settings };
+    const original = workflow.buildExportPlan(input);
+    const fixed = workflow.buildExportPlan({ ...input, settings: { ...settings, size: 'long-edge', longEdge: 1200 } });
+    const limited = workflow.buildExportPlan({ ...input, settings: { ...settings, size: 'long-edge', longEdge: 1200, noUpscale: true } });
+    const originalEdge = Math.max(...original.sampleDimensions.split(' × ').map(Number));
+    assert.equal(limited.sampleDimensions, originalEdge <= 1200 ? original.sampleDimensions : fixed.sampleDimensions);
+    assert.equal(Math.max(...fixed.sampleDimensions.split(' × ').map(Number)), 1200);
+    const unchanged = workflow.buildExportPlan({ ...input, settings: { ...settings, noUpscale: true } });
+    assert.equal(unchanged.sampleDimensions, original.sampleDimensions);
+  }
+});
+
+test('elapsed time reports seconds, minutes and hours without rounding up', () => {
+  assert.equal(workflow.formatElapsed(999), '0 秒');
+  assert.equal(workflow.formatElapsed(12500), '12 秒');
+  assert.equal(workflow.formatElapsed(61000), '1 分 1 秒');
+  assert.equal(workflow.formatElapsed(3661000), '1 小时 1 分 1 秒');
+});
