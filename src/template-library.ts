@@ -22,6 +22,31 @@ export type ImportDecision = { template: TemplateRecord; conflictId?: string; ch
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const text = (value: unknown, max: number): value is string => typeof value === "string" && value.length <= max;
 
+export const maxTemplateNameLength = 120;
+
+export function templateNameError(name: string, templates: TemplateRecord[], exceptId?: string): string {
+  const normalized = name.trim();
+  if (!normalized) return "模板名称不能为空";
+  if (normalized.length > maxTemplateNameLength) return "模板名称最多 120 个字符";
+  if (templates.some(template => template.id !== exceptId && template.name.trim().toLocaleLowerCase() === normalized.toLocaleLowerCase())) {
+    return "已有同名模板，请换一个名称";
+  }
+  return "";
+}
+
+export function copyTemplateName(name: string, templates: TemplateRecord[]): string {
+  for (let number = 1; ; number++) {
+    const suffix = number === 1 ? " 副本" : ` 副本 ${number}`;
+    let prefix = "";
+    for (const character of name.trim()) {
+      if (prefix.length + character.length + suffix.length > maxTemplateNameLength) break;
+      prefix += character;
+    }
+    const candidate = prefix.trimEnd() + suffix;
+    if (!templates.some(template => template.name.trim().toLocaleLowerCase() === candidate.toLocaleLowerCase())) return candidate;
+  }
+}
+
 function mergeTemplates(builtIns: TemplateRecord[], overrides: unknown[], custom: unknown[]): TemplateRecord[] {
   const builtInIds = new Set(builtIns.map((template) => template.id));
   const byId = new Map(overrides.filter(isValidTemplate).filter((template) => template.builtIn && builtInIds.has(template.id)).map((template) => [template.id, template]));
@@ -31,31 +56,35 @@ function mergeTemplates(builtIns: TemplateRecord[], overrides: unknown[], custom
   ];
 }
 
-export function readTemplates(): TemplateRecord[] {
+export function readTemplateLibrary(): { templates: TemplateRecord[]; canPersist: boolean; issue: string } {
   const builtIns = builtInTemplates();
+  const result = (templates: TemplateRecord[], valid: boolean) => ({ templates, canPersist: valid,
+    issue: valid ? "" : "模板库包含无法读取的内容，原始记录已保留；本次模板修改请导出备份保存。" });
   try {
     const stored = localStorage.getItem(templatesKey);
     if (stored) {
       const saved: unknown = JSON.parse(stored);
-      if (record(saved) && saved.version === 2 && Array.isArray(saved.overrides) && Array.isArray(saved.custom)) {
-        return mergeTemplates(builtIns, saved.overrides, saved.custom);
-      }
+      if (!record(saved) || saved.version !== 2 || !Array.isArray(saved.overrides) || !Array.isArray(saved.custom)) return result(builtIns, false);
+      const entries = [...saved.overrides, ...saved.custom];
+      const valid = entries.every(isValidTemplate) && new Set(entries.map(template => template.id)).size === entries.length;
+      return result(mergeTemplates(builtIns, saved.overrides, saved.custom), valid);
     }
     const legacy: unknown = JSON.parse(localStorage.getItem(legacyTemplatesKey) ?? "[]");
-    if (!Array.isArray(legacy)) return builtIns;
+    if (!Array.isArray(legacy)) return result(builtIns, false);
     const valid = legacy.filter(isValidTemplate);
-    const builtInIds = new Set(builtIns.map((template) => template.id));
-    return mergeTemplates(
-      builtIns,
-      valid.filter((template) => builtInIds.has(template.id) && template.updatedAt > 0),
-      valid.filter((template) => !builtInIds.has(template.id) && (!template.builtIn || template.updatedAt > 0)),
-    );
-  } catch {
-    return builtIns;
-  }
+    const builtInIds = new Set(builtIns.map(template => template.id));
+    return result(mergeTemplates(builtIns,
+      valid.filter(template => builtInIds.has(template.id) && template.updatedAt > 0),
+      valid.filter(template => !builtInIds.has(template.id) && (!template.builtIn || template.updatedAt > 0))), valid.length === legacy.length);
+  } catch { return result(builtIns, false); }
+}
+
+export function readTemplates(): TemplateRecord[] {
+  return readTemplateLibrary().templates;
 }
 
 export function serializeUserTemplates(templates: TemplateRecord[]): string {
+  if (!templates.every(isValidTemplate)) throw new Error("模板字段不完整或超出支持范围，未覆盖已保存的模板库");
   const builtIns = builtInTemplates();
   const builtInIds = new Set(builtIns.map((template) => template.id));
   return JSON.stringify({
@@ -66,8 +95,10 @@ export function serializeUserTemplates(templates: TemplateRecord[]): string {
 }
 
 export function readDefaultTemplateId(templates: TemplateRecord[]): string {
-  const stored = localStorage.getItem(defaultTemplateKey);
-  return templates.some((template) => template.id === stored) ? stored! : builtInDefaultTemplateId();
+  try {
+    const stored = localStorage.getItem(defaultTemplateKey);
+    return templates.some((template) => template.id === stored) ? stored! : builtInDefaultTemplateId();
+  } catch { return builtInDefaultTemplateId(); }
 }
 
 export function documentFromTemplate(template: TemplateRecord, photo: PhotoAsset): EditorDocument {
@@ -126,11 +157,7 @@ export function importTemplates(existing: TemplateRecord[], decisions: ImportDec
     } else {
       incoming.id = (conflictId || next.some((item) => item.id === incoming.id)) ? `template-${crypto.randomUUID()}` : incoming.id;
       if (conflictId) {
-        const base = `${incoming.name} 副本`;
-        let name = base;
-        let suffix = 2;
-        while (next.some((item) => item.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase())) name = `${base} ${suffix++}`;
-        incoming.name = name;
+        incoming.name = copyTemplateName(incoming.name, next);
       }
       incoming.builtIn = false;
       next.push(incoming);

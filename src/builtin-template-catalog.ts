@@ -24,7 +24,7 @@ const knownLayerSources = new Set([
 const validLayerSource = (value: unknown): value is string => typeof value === "string" &&
   (knownLayerSources.has(value) || /^exif:[A-Za-z0-9_ ()/.,+:-]{1,120}$/.test(value));
 
-function validDocument(value: unknown): value is EditorDocument {
+export function isValidEditorDocument(value: unknown): value is EditorDocument {
   if (!record(value) || value.version !== 1 || !record(value.frame) || !record(value.regions) || !Array.isArray(value.layers)) return false;
   const frame = value.frame;
   if ((frame.type !== "blur" && frame.type !== "solid") || !text(frame.color, 32) ||
@@ -52,8 +52,8 @@ export function isValidTemplate(value: unknown): value is TemplateRecord {
       !record(value.layouts) || !finite(value.updatedAt)) return false;
   const layouts = value.layouts;
   return (layouts.landscape !== undefined || layouts.portrait !== undefined) &&
-    (layouts.landscape === undefined || validDocument(layouts.landscape)) &&
-    (layouts.portrait === undefined || validDocument(layouts.portrait));
+    (layouts.landscape === undefined || isValidEditorDocument(layouts.landscape)) &&
+    (layouts.portrait === undefined || isValidEditorDocument(layouts.portrait));
 }
 
 export function parseBuiltInCatalog(value: unknown): BuiltInTemplateCatalog {

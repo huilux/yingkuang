@@ -1,11 +1,11 @@
 {
   "name": "yingkuang",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/version.mjs && tsc && node --test scripts/template-library.test.mjs scripts/metadata-regression.test.mjs scripts/export-workflow.test.mjs && vite build && node --test scripts/bundle-budget.test.mjs",
+    "build": "node scripts/version.mjs && tsc && node --test scripts/template-library.test.mjs scripts/metadata-regression.test.mjs scripts/export-workflow.test.mjs scripts/session-storage.test.mjs && vite build && node --test scripts/bundle-budget.test.mjs",
     "preview": "vite preview",
     "test:camera": "node --test scripts/camera-regression.test.mjs",
     "test:metadata": "node --test scripts/metadata-regression.test.mjs",

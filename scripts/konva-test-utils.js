@@ -44,7 +44,7 @@ export async function centerNode(ctx, node) {
   await frame();
 }
 export async function disableSnap(ctx) {
-  const button = ctx.root.querySelector('button[aria-pressed]');
+  const button = ctx.root.querySelector('.canvas-toolbar button[aria-pressed]');
   if (button.getAttribute('aria-pressed') === 'true') { button.click(); await frame(); }
 }
 export async function fit(ctx) {
@@ -248,11 +248,11 @@ export async function editingCheck() {
   ctx.viewport.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true, bubbles: true, cancelable: true })); await frame();
   near(node.y(), y + 10, 'Shift keyboard nudge'); undo(); await frame();
   const id = node.id();
-  ctx.root.querySelector('button[aria-label="隐藏品牌文字"]').click(); await frame();
+  ctx.root.querySelector('.layer-main[aria-pressed="true"]').parentElement.querySelector('.layer-visibility').click(); await frame();
   assert(!ctx.world.findOne(n => n.id() === id), 'Hidden layer is still rendered/hit-testable');
   undo(); await frame(); node = ctx.world.findOne(n => n.id() === id);
   assert(node, 'Undo did not restore hidden layer');
-  ctx.root.querySelector('button[aria-pressed]').click(); await frame();
+  ctx.root.querySelector('.canvas-toolbar button[aria-pressed]').click(); await frame();
   await zoom(ctx, 100); await centerNode(ctx, node);
   const center = ctx.world.clipWidth() / 2;
   const target = ctx.world.getAbsoluteTransform().point({ x: center, y: node.y() });

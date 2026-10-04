@@ -19,7 +19,7 @@
 - 复现：点击顶部「模板库」→ 按 Tab → 焦点落到背景的「导出当前」；按 Escape 后模板库仍打开。
 - 预期：焦点进入模板库，Tab 在当前弹窗中循环，Escape 关闭当前层并回到触发按钮；确认删除时只关闭最上层。
 - 证据：[操作前](../test-output/audit/screenshots/template-modal-1.png)、[焦点越出](../test-output/audit/screenshots/template-modal-2.png)、[Escape 无效](../test-output/audit/screenshots/template-modal-3.png)、[复现录像](../test-output/audit/videos/template-modal-focus.webm)。这些本机截图和视频不进入 Git。
-- 计划：第三轮统一模板库、另存模板、移除照片和导出结果的弹窗行为，检查快捷键不穿透弹窗。
+- 状态：0.1.3 已修复，统一弹窗焦点与顶层 Escape；两个引擎回归通过。
 
 ### ISSUE-003 · 高 · 超长名称模板显示保存成功，重启后消失
 
@@ -27,13 +27,13 @@
 - 已确认重载后模板数从 4 变回 3。
 - 原因：保存/重命名不限制长度，恢复时校验器会直接丢弃名称超过 120 字符的模板。自定义文字超过 2000 字符、图层超过 100 个等还有同类一致性风险，待逐项验证。
 - 证据：[输入名称](../test-output/audit/screenshots/template-name-1.png)、[保存后存在](../test-output/audit/screenshots/template-name-2.png)、[重载后消失](../test-output/audit/screenshots/template-name-3.png)、[复现录像](../test-output/audit/videos/template-name-loss.webm)。
-- 计划：第三轮统一保存与恢复校验，名称长度与重复名称在输入处反馈；复制模板产生的后缀也遵守长度限制。
+- 状态：0.1.3 已修复；最长名称保存、复制、重启恢复及非法名称阻止均通过。
 
 ### ISSUE-004 · 低 · 模板库备份输入缺少名称，标题语义重复
 
 - axe 4.12.1 实测 2 项：隐藏 JSON 文件输入无标签；弹窗内 header 产生第二个 banner landmark。
 - 主编辑工作台在相同环境中为 0 violation / 0 incomplete。
-- 证据：[模板库截图](../test-output/audit/screenshots/template-a11y.png)。与 ISSUE-002 一起修复。
+- 证据：[模板库截图](../test-output/audit/screenshots/template-a11y.png)。0.1.3 已修复，浅色模板库 axe 为 0 violation / 0 incomplete。
 
 ## 第二轮确认并修复
 
@@ -48,11 +48,19 @@
 
 具体复现和验证矩阵见 [导出可靠性验收](export-reliability-0.1.2.md)。
 
+## 第三轮确认并修复
+
+| 编号 | 问题 | 状态 |
+| --- | --- | --- |
+| ISSUE-011 | 批量套用不能完整撤销，切换照片丢失历史 | 0.1.3 记录全部目标，跨照片撤销/重做通过 |
+| ISSUE-012 | 原图缺失后保存会话丢弃编辑记录 | 0.1.3 保留文档、覆盖值与模板，原路径重新导入恢复 |
+| ISSUE-013 | 损坏会话/模板库被默认内容覆盖，存储失败无稳定提示 | 0.1.3 阻止覆盖，显示持续提示；自动修复另列后续任务 |
+| ISSUE-014 | 缺失原图恢复后自动勾选，改变批量导出范围 | 0.1.3 保留恢复前勾选状态 |
+
+验收与边界见 [0.1.3 用户链路记录](user-workflow-0.1.3.md)。
+
 ## 验证中，尚未定性
 
-- 原图缺失后重启的编辑数据保留与重新定位。
-- 本地存储满或会话 JSON 损坏时的错误反馈与可恢复性。
-- 批量套用后撤销是否完整恢复全部目标照片。
 - 极窄窗口、长文件名和 200 张列表下的键盘可达性。
 
 ## 流程检查结果（持续更新）
@@ -64,8 +72,8 @@
 | 当前画布 → 已选照片 | 两个引擎的批量套用回归通过 |
 | 导出弹窗 | 两个引擎均阻止非法尺寸/后缀，焦点进入和返回、Escape 关闭通过 |
 | 预览与输出 | WebKit/Rust 背景、阴影、文字几何对比通过；后续算法修改继续复测 |
-| 模板库键盘 | ISSUE-002 已复现 |
-| 拖动/多选回归 | 发现测试选择器误操作照片勾选开关；先修复测试，再判断产品行为 |
+| 模板库键盘 | 0.1.3 嵌套确认、Tab 循环、Escape 与返回焦点通过 |
+| 拖动/多选回归 | 已修正过时测试选择器；两个引擎全套通过 |
 
 ## 新增功能候选
 

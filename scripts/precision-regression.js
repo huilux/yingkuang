@@ -1,11 +1,15 @@
 (async () => {
   const t = await import('/scripts/konva-test-utils.js');
   const ctx = await t.context();
-  const brand = ctx.world.findOne(node => node.id() === 'brand');
+  const brand = ctx.world.findOne('.watermark-layer');
+  t.assert(brand, 'Precision test requires a visible watermark layer');
   await t.zoom(ctx,100); await t.centerNode(ctx,brand);
   let start = t.screen(ctx,brand);
   t.mouse(ctx.content,'mousedown',start); t.mouse(window,'mouseup',start,0); await t.frame();
-  document.querySelector('button[aria-label="选择图层 品牌文字"]').click(); await t.frame();
+  await t.frame();
+  const region = [...document.querySelectorAll('label')].find(label => label.textContent.includes('所属区域')).querySelector('select');
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(region, 'canvas');
+  region.dispatchEvent(new Event('change', { bubbles: true })); await t.frame();
   const input = document.querySelector('input[aria-label="X 坐标"]');
   const previous = brand.x();
   input.focus(); t.change(input,42.5); await t.frame(); input.blur(); await t.frame();

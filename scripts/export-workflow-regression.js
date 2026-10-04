@@ -52,7 +52,7 @@
     await t.frame();
     t.assert(submit.disabled, 'Unsafe filename suffix did not block export');
     t.assert(dialog.textContent.includes('系统保留字符'), 'Suffix validation is not visible');
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     await t.waitFor(() => !host.querySelector('.export-dialog'), 'Escape did not close export dialog');
     await t.waitFor(() => document.activeElement === trigger, 'Focus did not return to export trigger');
     return { focusEntered: true, invalidLongEdgeBlocked: true, unsafeSuffixBlocked: true, escapeClosed: true, focusRestored: true };

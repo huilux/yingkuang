@@ -22,6 +22,8 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { EditorWorkspace } from "./EditorWorkspace";
+import { parseSession, type SessionSnapshot } from "./session-storage";
+import { Modal } from "./Modal";
 import { TemplateManager } from "./TemplateManager";
 import { TemplatePreview } from "./TemplatePreview";
 import { builtInDefaultTemplateId } from "./builtin-template-catalog";
@@ -39,7 +41,7 @@ import {
   nextLayer,
   photoOrientation,
 } from "./editor-model";
-import { defaultTemplateKey, documentFromTemplate, importTemplates, readDefaultTemplateId, readTemplates, serializeUserTemplates, templatesKey, type ImportDecision } from "./template-library";
+import { maxTemplateNameLength, templateNameError, copyTemplateName, defaultTemplateKey, documentFromTemplate, importTemplates, readDefaultTemplateId, readTemplateLibrary, serializeUserTemplates, templatesKey, type ImportDecision } from "./template-library";
 import { buildExportPlan, createExportRequest, retryExportRequest, type ExportIssue, type ExportRequest } from "./export-workflow";
 import type {
   EditorDocument,
@@ -94,6 +96,11 @@ const defaultExport: ExportSettings = {
 type LoadState = "idle" | "loading" | "error";
 type InspectorTab = "template" | "frame" | "watermark";
 type Orientation = "landscape" | "portrait";
+type HistoryEntry = {
+  documents: Record<string, EditorDocument>;
+  overrides: Record<string, PhotoAsset["overrides"]>;
+  templates: Record<string, string | undefined>;
+};
 
 type InspectReport = {
   items: PhotoAsset[];
@@ -128,19 +135,18 @@ function initialDocuments() {
 function App() {
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
-  const transactionStart = useRef<EditorDocument | null>(null);
+  const transactionStart = useRef<HistoryEntry | null>(null);
   const currentDocument = useRef<EditorDocument | undefined>(undefined);
-  const exportDialog = useRef<HTMLElement>(null);
-  const exportReturnFocus = useRef<HTMLElement | null>(null);
-  const undoStack = useRef<EditorDocument[]>([]);
-  const redoStack = useRef<EditorDocument[]>([]);
+  const undoStack = useRef<HistoryEntry[]>([]);
+  const redoStack = useRef<HistoryEntry[]>([]);
   const [historyRevision, setHistoryRevision] = useState(0);
   const [photos, setPhotos] = useState<PhotoAsset[]>(isNative ? [] : [demoPhoto]);
   const [activeId, setActiveId] = useState(isNative ? "" : demoPhoto.id);
   const [checkedIds, setCheckedIds] = useState<string[]>(isNative ? [] : [demoPhoto.id]);
   const [documents, setDocuments] = useState<Record<string, EditorDocument>>(initialDocuments);
-  const [templates, setTemplates] = useState<TemplateRecord[]>(readTemplates);
-  const [defaultTemplateId, setDefaultTemplateId] = useState(() => readDefaultTemplateId(readTemplates()));
+  const [initialLibrary] = useState(readTemplateLibrary);
+  const [templates, setTemplates] = useState<TemplateRecord[]>(initialLibrary.templates);
+  const [defaultTemplateId, setDefaultTemplateId] = useState(() => readDefaultTemplateId(initialLibrary.templates));
   const [templateByPhoto, setTemplateByPhoto] = useState<Record<string, string>>(isNative ? {} : { [demoPhoto.id]: builtInDefaultTemplateId() });
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
   const editorRef = useRef<EditorCanvasHandle>(null);
@@ -164,6 +170,14 @@ function App() {
   const importBusy = useRef(false);
   const lastExportRequest = useRef<ExportRequest | null>(null);
   const exportBusy = useRef(false);
+  const restoredSession = useRef<SessionSnapshot>({ paths: [] });
+  const sessionWriteBlocked = useRef(false);
+  const [missingPhotos, setMissingPhotos] = useState<Array<{ path: string; reason: string }>>([]);
+  const [storageErrors, setStorageErrors] = useState<Record<string, string>>({});
+
+  function storageError(scope: string, message: string) {
+    setStorageErrors(current => current[scope] === message ? current : { ...current, [scope]: message });
+  }
 
   useEffect(() => () => releaseBrowserPhotos(), []);
 
@@ -178,11 +192,15 @@ function App() {
   const canRedo = redoStack.current.length > 0 && historyRevision >= 0;
 
   useEffect(() => {
-    try { localStorage.setItem(templatesKey, serializeUserTemplates(templates)); }
-    catch { setMessage("模板库保存失败：本地存储空间不足，请先导出备份"); }
+    if (!initialLibrary.canPersist) { storageError("templates", initialLibrary.issue); return; }
+    try { localStorage.setItem(templatesKey, serializeUserTemplates(templates)); storageError("templates", ""); }
+    catch (error) { storageError("templates", `模板库暂未保存，请先导出备份：${String(error)}`); }
   }, [templates]);
 
-  useEffect(() => { localStorage.setItem(defaultTemplateKey, defaultTemplateId); }, [defaultTemplateId]);
+  useEffect(() => {
+    try { localStorage.setItem(defaultTemplateKey, defaultTemplateId); storageError("defaultTemplate", ""); }
+    catch { storageError("defaultTemplate", "默认模板未能保存，下次启动可能恢复旧设置。"); }
+  }, [defaultTemplateId]);
 
   useEffect(() => {
     if (!isNative) return;
@@ -197,26 +215,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!showExport) return;
-    const frame = requestAnimationFrame(() => {
-      if (!exportDialog.current?.contains(document.activeElement)) {
-        exportDialog.current?.querySelector<HTMLElement>("[data-export-close]")?.focus();
-      }
-    });
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !exportChecking) {
-        event.preventDefault();
-        closeExport();
-      }
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("keydown", handleKey);
-    };
-  }, [exportChecking, showExport]);
-
-  useEffect(() => {
     setExportIssues((current) => current.some((issue) => issue.field === "preflight") ? [] : current);
   }, [exportSettings]);
 
@@ -229,16 +227,8 @@ function App() {
       if (cancelled) return;
       setLoadState("loading");
       try {
-        const saved = JSON.parse(localStorage.getItem(sessionKey) ?? "{}") as {
-          paths?: string[];
-          activePath?: string;
-          checkedPaths?: string[];
-          documentsByPath?: Record<string, EditorDocument>;
-          overridesByPath?: Record<string, PhotoAsset["overrides"]>;
-          exportSettings?: ExportSettings;
-          activeTemplate?: string;
-          templateIdsByPath?: Record<string, string>;
-        };
+        const saved = parseSession(localStorage.getItem(sessionKey));
+        restoredSession.current = saved;
         if (saved.exportSettings) setExportSettings({ ...defaultExport, ...saved.exportSettings });
         if (saved.paths?.length) {
           const paths = [...new Set(saved.paths)];
@@ -261,6 +251,7 @@ function App() {
               if (checkedPaths.has(photo.path)) setCheckedIds(current => [...current, photo.id]);
               restored++;
             }
+            setMissingPhotos(current => [...current, ...report.failures]);
             failed += report.failures.length;
             setMessage(`正在恢复 ${index + 1}/${paths.length} 张照片`);
           }
@@ -271,6 +262,8 @@ function App() {
         setLoadState("idle");
       } catch (error) {
         if (!cancelled) {
+          sessionWriteBlocked.current = true;
+          storageError("session", "上次工作无法完整恢复，原始记录已保留；本次修改暂不自动保存。");
           setLoadState("error");
           setMessage(`无法恢复上次工作：${String(error)}`);
         }
@@ -283,27 +276,38 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!isNative || !sessionReady || loadState === "loading") return;
+    if (!isNative || !sessionReady || loadState === "loading" || sessionWriteBlocked.current) return;
     const checked = new Set(checkedIds);
     const documentsByPath: Record<string, EditorDocument> = {};
     const overridesByPath: Record<string, PhotoAsset["overrides"]> = {};
     const templateIdsByPath: Record<string, string> = {};
+    const saved = restoredSession.current;
+    const unavailable = missingPhotos.filter(item => !photos.some(photo => photo.path === item.path));
+    for (const { path } of unavailable) {
+      if (saved.documentsByPath?.[path]) documentsByPath[path] = saved.documentsByPath[path];
+      if (saved.overridesByPath?.[path]) overridesByPath[path] = saved.overridesByPath[path];
+      if (saved.templateIdsByPath?.[path]) templateIdsByPath[path] = saved.templateIdsByPath[path];
+    }
     for (const photo of photos) {
       if (!photo.path) continue;
       if (documents[photo.id]) documentsByPath[photo.path] = documents[photo.id];
       if (photo.overrides) overridesByPath[photo.path] = photo.overrides;
       if (templateByPhoto[photo.id]) templateIdsByPath[photo.path] = templateByPhoto[photo.id];
     }
-    localStorage.setItem(sessionKey, JSON.stringify({
-      paths: photos.map((photo) => photo.path).filter(Boolean),
+    const order = new Map(saved.paths.map((path, index) => [path, index]));
+    const paths = [...new Set([...photos.map(photo => photo.path).filter(Boolean), ...unavailable.map(item => item.path)])]
+      .sort((a, b) => (order.get(a) ?? Number.MAX_SAFE_INTEGER) - (order.get(b) ?? Number.MAX_SAFE_INTEGER));
+    try { localStorage.setItem(sessionKey, JSON.stringify({
+      paths,
       activePath: activePhoto?.path ?? "",
-      checkedPaths: photos.filter((photo) => checked.has(photo.id)).map((photo) => photo.path),
+      checkedPaths: [...photos.filter(photo => checked.has(photo.id)).map(photo => photo.path), ...unavailable.filter(item => saved.checkedPaths?.includes(item.path)).map(item => item.path)],
       documentsByPath,
       overridesByPath,
       templateIdsByPath,
       exportSettings,
-    }));
-  }, [activePhoto?.path, checkedIds, documents, exportSettings, photos, sessionReady, loadState, templateByPhoto]);
+    })); storageError("session", ""); }
+    catch { storageError("session", "当前工作尚未自动保存，请检查可用存储空间；原有记录仍保留。"); }
+  }, [activePhoto?.path, checkedIds, documents, exportSettings, photos, sessionReady, loadState, templateByPhoto, missingPhotos]);
 
   function clearHistory() {
     undoStack.current = [];
@@ -312,18 +316,50 @@ function App() {
     setHistoryRevision((value) => value + 1);
   }
 
+  function captureHistory(ids: string[]): HistoryEntry {
+    const entry: HistoryEntry = { documents: {}, overrides: {}, templates: {} };
+    for (const id of new Set(ids)) {
+      const photo = photos.find(photo => photo.id === id);
+      const document = id === activeId ? currentDocument.current : documents[id];
+      if (!photo || !document) continue;
+      entry.documents[id] = cloneDocument(document);
+      entry.overrides[id] = structuredClone(photo.overrides);
+      entry.templates[id] = templateByPhoto[id];
+    }
+    return entry;
+  }
+
+  function pushHistory(entry: HistoryEntry) {
+    if (!Object.keys(entry.documents).length) return;
+    undoStack.current.push(entry);
+    if (undoStack.current.length > 80) undoStack.current.shift();
+    redoStack.current = [];
+    setHistoryRevision(value => value + 1);
+  }
+
+  function restoreHistory(entry: HistoryEntry) {
+    if (entry.documents[activeId]) currentDocument.current = cloneDocument(entry.documents[activeId]);
+    setDocuments(current => ({ ...current, ...structuredClone(entry.documents) }));
+    setPhotos(current => current.map(photo => Object.prototype.hasOwnProperty.call(entry.overrides, photo.id)
+      ? { ...photo, overrides: structuredClone(entry.overrides[photo.id]) } : photo));
+    setTemplateByPhoto(current => {
+      const next = { ...current };
+      for (const [id, template] of Object.entries(entry.templates)) {
+        if (template === undefined) delete next[id]; else next[id] = template;
+      }
+      return next;
+    });
+    setSelectedLayerIds(current => current.filter(id => currentDocument.current?.layers.some(layer => layer.id === id)));
+    setHistoryRevision(value => value + 1);
+  }
+
   function replaceActiveDocument(next: EditorDocument, record = true) {
     if (!activeId || !activeDocument) return;
-    if (record) {
-      undoStack.current.push(cloneDocument(currentDocument.current ?? activeDocument));
-      if (undoStack.current.length > 80) undoStack.current.shift();
-      redoStack.current = [];
-    }
-    // A pointerup can follow pointermove before React paints the new document.
-    // Transaction commits must already see that final drag position.
+    if (record) pushHistory(captureHistory([activeId]));
+    // A pointerup can follow pointermove before React paints the final position.
     currentDocument.current = next;
-    setDocuments((current) => ({ ...current, [activeId]: next }));
-    setHistoryRevision((value) => value + 1);
+    setDocuments(current => ({ ...current, [activeId]: next }));
+    setHistoryRevision(value => value + 1);
   }
 
   function updateDocument(mutator: (draft: EditorDocument) => void, record = true) {
@@ -334,37 +370,28 @@ function App() {
   }
 
   function beginTransaction() {
-    if (!transactionStart.current && currentDocument.current) transactionStart.current = cloneDocument(currentDocument.current);
+    if (!transactionStart.current && currentDocument.current) transactionStart.current = captureHistory([activeId]);
   }
 
   function commitTransaction() {
-    const latest = currentDocument.current;
-    if (!transactionStart.current || !latest) return;
-    if (JSON.stringify(transactionStart.current) !== JSON.stringify(latest)) {
-      undoStack.current.push(transactionStart.current);
-      if (undoStack.current.length > 80) undoStack.current.shift();
-      redoStack.current = [];
-      setHistoryRevision((value) => value + 1);
-    }
+    const before = transactionStart.current;
+    if (!before) return;
+    if (JSON.stringify(before) !== JSON.stringify(captureHistory(Object.keys(before.documents)))) pushHistory(before);
     transactionStart.current = null;
   }
 
   function undo() {
     const previous = undoStack.current.pop();
-    if (!previous || !activeDocument || !activeId) return;
-    redoStack.current.push(cloneDocument(currentDocument.current ?? activeDocument));
-    currentDocument.current = previous;
-    setDocuments((current) => ({ ...current, [activeId]: previous }));
-    setHistoryRevision((value) => value + 1);
+    if (!previous) return;
+    redoStack.current.push(captureHistory(Object.keys(previous.documents)));
+    restoreHistory(previous);
   }
 
   function redo() {
     const next = redoStack.current.pop();
-    if (!next || !activeDocument || !activeId) return;
-    undoStack.current.push(cloneDocument(currentDocument.current ?? activeDocument));
-    currentDocument.current = next;
-    setDocuments((current) => ({ ...current, [activeId]: next }));
-    setHistoryRevision((value) => value + 1);
+    if (!next) return;
+    undoStack.current.push(captureHistory(Object.keys(next.documents)));
+    restoreHistory(next);
   }
 
   function updateLayers(patches: LayerPatch[], record = true) {
@@ -387,26 +414,36 @@ function App() {
 
   function addPhotos(next: PhotoAsset[], activate = true) {
     if (!next.length) return;
+    const recovered = new Set(missingPhotos.map(item => item.path));
+    next = next.map(photo => recovered.has(photo.path) ? { ...photo, overrides: restoredSession.current.overridesByPath?.[photo.path] } : photo);
+    setMissingPhotos(current => current.filter(item => !next.some(photo => photo.path === item.path)));
     const selectedTemplate = templates.find((template) => template.id === defaultTemplateId) ?? templates[0];
     setPhotos((current) => {
       const known = new Set(current.map((photo) => photo.path || photo.id));
-      return [...current, ...next.filter((photo) => !known.has(photo.path || photo.id))];
+      const combined = [...current, ...next.filter(photo => !known.has(photo.path || photo.id))];
+      if (next.some(photo => recovered.has(photo.path))) {
+        const order = new Map(restoredSession.current.paths.map((path, index) => [path, index]));
+        combined.sort((a, b) => (order.get(a.path) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.path) ?? Number.MAX_SAFE_INTEGER));
+      }
+      return combined;
     });
     setDocuments((current) => {
       const result = { ...current };
-      for (const photo of next) if (!result[photo.id]) result[photo.id] = selectedTemplate ? documentFromTemplate(selectedTemplate, photo) : createDefaultDocument();
+      for (const photo of next) if (!result[photo.id]) result[photo.id] = recovered.has(photo.path) && restoredSession.current.documentsByPath?.[photo.path]
+        ? cloneDocument(restoredSession.current.documentsByPath[photo.path])
+        : selectedTemplate ? documentFromTemplate(selectedTemplate, photo) : createDefaultDocument();
       return result;
     });
     if (selectedTemplate) setTemplateByPhoto((current) => {
       const result = { ...current };
-      for (const photo of next) if (!result[photo.id]) result[photo.id] = selectedTemplate.id;
+      for (const photo of next) if (!result[photo.id]) result[photo.id] = (recovered.has(photo.path) ? restoredSession.current.templateIdsByPath?.[photo.path] : undefined) ?? selectedTemplate.id;
       return result;
     });
-    setCheckedIds((current) => [...new Set([...current, ...next.map((photo) => photo.id)])]);
+    const toCheck = next.filter(photo => !recovered.has(photo.path) || restoredSession.current.checkedPaths?.includes(photo.path));
+    setCheckedIds((current) => [...new Set([...current, ...toCheck.map(photo => photo.id)])]);
     if (activate) {
       setActiveId(next[0].id);
       setSelectedLayerIds([]);
-      clearHistory();
     }
   }
 
@@ -517,9 +554,10 @@ function App() {
   }
 
   function activatePhoto(id: string) {
+    commitTransaction();
     setActiveId(id);
+    currentDocument.current = documents[id];
     setSelectedLayerIds([]);
-    clearHistory();
   }
 
   function toggleChecked(id: string) {
@@ -547,13 +585,15 @@ function App() {
       const nextPhoto = remaining.find((photo) => photos.indexOf(photo) > firstRemovedIndex) ?? remaining[remaining.length - 1];
       setActiveId(nextPhoto?.id ?? "");
       setSelectedLayerIds([]);
-      clearHistory();
     }
+    clearHistory();
     setMessage(`已从当前批次移除 ${removed.size} 张照片，原图未删除`);
     setPendingRemovalIds(null);
   }
 
   function applyTemplate(template: TemplateRecord, targetIds: string[]) {
+    pushHistory(captureHistory(targetIds));
+    if (activePhoto && targetIds.includes(activeId)) currentDocument.current = documentFromTemplate(template, activePhoto);
     setDocuments((current) => {
       const next = { ...current };
       for (const id of targetIds) {
@@ -565,7 +605,6 @@ function App() {
     });
     setTemplateByPhoto((current) => ({ ...current, ...Object.fromEntries(targetIds.map((id) => [id, template.id])) }));
     setSelectedLayerIds([]);
-    clearHistory();
     setMessage(`已应用“${template.name}”到 ${targetIds.length} 张照片`);
   }
 
@@ -573,6 +612,7 @@ function App() {
     const source = currentDocument.current ?? activeDocument;
     if (!source) return;
     const validIds = new Set(photos.map((photo) => photo.id));
+    pushHistory(captureHistory(targetIds));
     setDocuments((current) => {
       const next = { ...current };
       for (const id of targetIds) {
@@ -583,7 +623,6 @@ function App() {
     if (activeId && targetIds.includes(activeId)) currentDocument.current = cloneDocument(source);
     setTemplateByPhoto((current) => ({ ...current, ...Object.fromEntries(targetIds.filter((id) => validIds.has(id)).map((id) => [id, activeTemplate])) }));
     setSelectedLayerIds([]);
-    clearHistory();
     setMessage(`已将当前画布应用到 ${targetIds.length} 张照片`);
   }
 
@@ -600,10 +639,12 @@ function App() {
   }
 
   function saveNewTemplate() {
-    if (!activePhoto || !activeDocument || !templateName.trim()) return;
+    if (!activePhoto || !activeDocument) return;
+    const issue = templateNameError(templateName, templates);
+    if (issue) { setMessage(issue); return; }
     const orientation: Orientation = photoOrientation(activePhoto);
     const template: TemplateRecord = {
-      id: `template-${Date.now()}`,
+      id: `template-${crypto.randomUUID()}`,
       name: templateName.trim(),
       description: `${orientation === "landscape" ? "横图" : "竖图"}布局，自定义模板`,
       builtIn: false,
@@ -619,6 +660,8 @@ function App() {
   }
 
   function renameTemplate(id: string, name: string) {
+    const issue = templateNameError(name, templates, id);
+    if (issue) { setMessage(issue); return; }
     setTemplates((current) => current.map((template) => template.id === id ? { ...template, name, updatedAt: Date.now() } : template));
     setMessage(`已重命名模板“${name}”`);
   }
@@ -626,10 +669,7 @@ function App() {
   function duplicateTemplate(id: string) {
     const source = templates.find((template) => template.id === id);
     if (!source) return;
-    const base = `${source.name} 副本`;
-    let name = base;
-    let index = 2;
-    while (templates.some((template) => template.name === name)) name = `${base} ${index++}`;
+    const name = copyTemplateName(source.name, templates);
     setTemplates((current) => [...current, { ...structuredClone(source), id: `template-${crypto.randomUUID()}`, name, builtIn: false, updatedAt: Date.now() }]);
     setMessage(`已复制模板“${name}”`);
   }
@@ -656,6 +696,7 @@ function App() {
   }
 
   function addLayer(source: LayerSource) {
+    if ((activeDocument?.layers.length ?? 0) >= 100) { setMessage("每张照片最多支持 100 个文字图层"); return; }
     const added = nextLayer(source, activeDocument?.layers.length ?? 0);
     updateDocument((draft) => { draft.layers.push(added); });
     setSelectedLayerIds([added.id]);
@@ -669,7 +710,8 @@ function App() {
   }
 
   function updatePhotoOverride(source: LayerSource, value?: string) {
-    if (!activePhoto || source === "custom") return;
+    if (!activePhoto || source === "custom" || activePhoto.overrides?.[source] === value) return;
+    pushHistory(captureHistory([activePhoto.id]));
     setPhotos((current) => current.map((photo) => photo.id === activePhoto.id ? { ...photo, overrides: { ...photo.overrides, [source]: value } } : photo));
   }
 
@@ -759,29 +801,12 @@ function App() {
     if (exportChecking) return;
     setShowExport(false);
     setExportIssues([]);
-    requestAnimationFrame(() => exportReturnFocus.current?.focus());
   }
 
   function openExport(range: ExportSettings["range"]) {
-    exportReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setExportSettings((current) => ({ ...current, range }));
     setExportIssues([]);
     setShowExport(true);
-  }
-
-  function handleExportDialogKeyDown(event: React.KeyboardEvent<HTMLElement>) {
-    if (event.key !== "Tab") return;
-    const focusable = [...(exportDialog.current?.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex='-1'])") ?? [])];
-    if (!focusable.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
   }
 
   const exportPlan = useMemo(() => buildExportPlan({
@@ -801,7 +826,7 @@ function App() {
   return (
     <div className="app-shell" onKeyDown={event => {
       const target = event.target as HTMLElement;
-      if (showExport || showTemplateDialog || showTemplateManager || pendingRemovalIds || target.closest("input, textarea, select, [contenteditable=true]")) return;
+      if (showExport || showTemplateDialog || showTemplateManager || pendingRemovalIds || exportRunning || exportResult || target.closest("input, textarea, select, [contenteditable=true]")) return;
       if (editorRef.current?.isInteracting()) return;
       const command = event.ctrlKey || event.metaKey;
       if (command && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
@@ -851,6 +876,8 @@ function App() {
             <button type="button" disabled={!selectedCount} onClick={() => setCheckedIds([])}>取消选择</button>
           </div>
           {activeDocument && checkedIds.some((id) => id !== activeId) && <button className="library-batch-button" type="button" onClick={() => applyCurrentCanvas(checkedIds)}>将当前画布应用到已勾选 {selectedCount} 张</button>}
+          {Object.values(storageErrors).some(Boolean) && <div className="storage-notice" role="alert">{Object.entries(storageErrors).filter(([, error]) => error).map(([scope, error]) => <p key={scope}>{error}</p>)}</div>}
+          {!!missingPhotos.length && <details className="missing-photos"><summary>{missingPhotos.length} 张原图暂不可用，编辑已保留</summary><p>将原图恢复到原路径后重新导入，可继续原来的编辑。</p>{missingPhotos.map(item => <div key={item.path}><strong>{item.path.split(/[\\/]/).pop()}</strong><small>{item.reason}</small></div>)}</details>}
           <div className="photo-list">
             {!photos.length ? (
               <button className="library-empty" type="button" onClick={() => handleImport()}><ImageSquare /><strong>还没有照片</strong><span>添加照片或导入整个文件夹</span></button>
@@ -924,13 +951,13 @@ function App() {
 
       {showTemplateManager && <TemplateManager templates={templates} defaultTemplateId={defaultTemplateId} photo={activePhoto} onClose={() => setShowTemplateManager(false)} onDefaultChange={setDefaultTemplateId} onRename={renameTemplate} onDuplicate={duplicateTemplate} onDelete={deleteTemplate} onReset={resetTemplate} onImport={restoreTemplates} />}
 
-      {pendingRemovalIds && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingRemovalIds(null); }}><section className="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-title"><header><div><span>照片批次</span><h2 id="remove-title">移除 {pendingRemovalIds.length} 张照片？</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setPendingRemovalIds(null)}><X /></button></header><div className="compact-dialog-body"><p>照片只会从当前批次移除，磁盘上的原图不会删除。这些照片在当前批次中的单独调整也会清除。</p></div><footer><button className="button secondary" type="button" onClick={() => setPendingRemovalIds(null)}>取消</button><button className="button primary" type="button" onClick={() => removePhotos(pendingRemovalIds)}>确认移除</button></footer></section></div>}
+      {pendingRemovalIds && <Modal onClose={() => setPendingRemovalIds(null)}><section className="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-title"><div className="compact-dialog-header"><div><span>照片批次</span><h2 id="remove-title">移除 {pendingRemovalIds.length} 张照片？</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setPendingRemovalIds(null)}><X /></button></div><div className="compact-dialog-body"><p>照片只会从当前批次移除，磁盘上的原图不会删除。这些照片在当前批次中的单独调整也会清除。</p></div><footer><button className="button secondary" type="button" onClick={() => setPendingRemovalIds(null)}>取消</button><button className="button primary" type="button" onClick={() => removePhotos(pendingRemovalIds)}>确认移除</button></footer></section></Modal>}
 
-      {showTemplateDialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowTemplateDialog(false); }}><section className="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="template-title"><header><div><span>模板库</span><h2 id="template-title">另存为新模板</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setShowTemplateDialog(false)}><X /></button></header><div className="compact-dialog-body"><label className="field"><span>模板名称</span><input autoFocus className="text-input" value={templateName} onChange={(event) => setTemplateName(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") saveNewTemplate(); }} /></label><p>保存当前方向的相框、四边区域、水印字段、字体和位置，并使用当前照片更新封面。</p></div><footer><button className="button secondary" type="button" onClick={() => setShowTemplateDialog(false)}>取消</button><button className="button primary" type="button" disabled={!templateName.trim()} onClick={saveNewTemplate}>保存模板</button></footer></section></div>}
+      {showTemplateDialog && <Modal onClose={() => setShowTemplateDialog(false)}><section className="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="template-title"><div className="compact-dialog-header"><div><span>模板库</span><h2 id="template-title">另存为新模板</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setShowTemplateDialog(false)}><X /></button></div><div className="compact-dialog-body"><label className="field"><span>模板名称</span><input autoFocus className="text-input" maxLength={maxTemplateNameLength} value={templateName} onChange={(event) => setTemplateName(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") saveNewTemplate(); }} /></label>{templateName && templateNameError(templateName, templates) && <p role="alert">{templateNameError(templateName, templates)}</p>}<p>保存当前方向的相框、四边区域、水印字段、字体和位置，并使用当前照片更新封面。</p></div><footer><button className="button secondary" type="button" onClick={() => setShowTemplateDialog(false)}>取消</button><button className="button primary" type="button" disabled={!!templateNameError(templateName, templates)} onClick={saveNewTemplate}>保存模板</button></footer></section></Modal>}
 
       {showExport && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeExport(); }}>
-          <section ref={exportDialog} className="export-dialog" role="dialog" aria-modal="true" aria-labelledby="export-title" aria-busy={exportChecking} onKeyDown={handleExportDialogKeyDown}>
+        <Modal onClose={exportChecking ? undefined : closeExport}>
+          <section className="export-dialog" role="dialog" aria-modal="true" aria-labelledby="export-title" aria-busy={exportChecking}>
             <div className="export-dialog-header"><div><span>{exportSettings.range === "current" ? "单张导出" : "批量导出"}</span><h2 id="export-title">导出 {exportPlan.items.length} 张照片</h2></div><button data-export-close className="icon-button" type="button" aria-label="关闭" disabled={exportChecking} onClick={closeExport}><X /></button></div>
             <div className="export-body">
               <fieldset className="export-main" disabled={exportChecking}>
@@ -973,11 +1000,11 @@ function App() {
             </div>
             <div className="export-dialog-footer"><span>原图不会被覆盖，设置会随上次工作自动恢复。</span><div><button className="button secondary" type="button" disabled={exportChecking} onClick={closeExport}>取消</button><button className="button primary" type="button" disabled={exportChecking || visibleExportIssues.length > 0} onClick={() => void startExport()}>{exportChecking ? "正在预检…" : isNative ? "预检并开始导出" : "保存设置"}</button></div></div>
           </section>
-        </div>
+        </Modal>
       )}
 
       {exportRunning && exportProgress && (
-        <div className="modal-backdrop">
+        <Modal>
           <section className="progress-dialog" role="dialog" aria-modal="true" aria-labelledby="progress-title" aria-live="polite">
             <div className="progress-dialog-header"><span>批量导出</span><h2 id="progress-title">正在生成成品</h2></div>
             <div className="progress-body">
@@ -989,11 +1016,11 @@ function App() {
             </div>
             <div className="dialog-footer"><button className="button secondary" type="button" disabled={exportCancelling} onClick={() => void cancelExport()}>{exportCancelling ? "正在取消…" : "取消后续任务"}</button></div>
           </section>
-        </div>
+        </Modal>
       )}
 
       {!exportRunning && exportResult && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportResult(null); }}>
+        <Modal onClose={() => setExportResult(null)}>
           <section className="result-dialog" role="dialog" aria-modal="true" aria-labelledby="result-title">
             <div className="result-dialog-header"><div><span>{exportResult.cancelled ? "任务已取消" : "批量导出"}</span><h2 id="result-title">{exportResult.failed ? "导出完成，部分照片需要处理" : "导出完成"}</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setExportResult(null)}><X /></button></div>
             <div className="result-body">
@@ -1007,7 +1034,7 @@ function App() {
               <button className="button primary" type="button" onClick={() => { void openPath(exportResult.outputDirectory).catch((error) => setMessage(`无法打开输出文件夹：${String(error)}`)); }}><FolderSimple /> 打开输出文件夹</button>
             </div>
           </section>
-        </div>
+        </Modal>
       )}
     </div>
   );

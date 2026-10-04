@@ -15,7 +15,7 @@ gi.require_version("WebKit2", "4.1")
 from gi.repository import GLib, Gtk, WebKit2  # noqa: E402
 
 scripts = Path(__file__).resolve().parent
-checks = ["konva-canvas-regression.js", "multi-selection-regression.js", "precision-regression.js", "drag-persistence-regression.js", "current-canvas-batch-regression.js", "export-document-regression.js", "export-workflow-regression.js", "export-retry-regression.js", "photo-detail-regression.js", "browser-import-regression.js", "editor-photo-loading-regression.js", "import-regression.js", "restore-regression.js"]
+checks = ["konva-canvas-regression.js", "multi-selection-regression.js", "precision-regression.js", "drag-persistence-regression.js", "current-canvas-batch-regression.js", "export-document-regression.js", "export-workflow-regression.js", "export-retry-regression.js", "photo-detail-regression.js", "browser-import-regression.js", "editor-photo-loading-regression.js", "import-regression.js", "restore-regression.js", "session-failure-regression.js", "modal-regression.js", "metadata-undo-regression.js", "template-save-regression.js"]
 if len(sys.argv) > 2:
     checks = sys.argv[2:]
 
@@ -65,7 +65,11 @@ def loaded(_view, event):
     sources = json.dumps([{ "name": name, "source": (scripts / name).read_text() } for name in checks])
     javascript = """
     (async () => {
-      while (!document.querySelector('.design-canvas')) await new Promise(r => setTimeout(r, 20));
+      const started = performance.now();
+      while (!document.querySelector('.design-canvas')) {
+        if (performance.now() - started > 10000) throw new Error('Editor not ready: ' + document.body.innerText.slice(0, 500));
+        await new Promise(r => setTimeout(r, 20));
+      }
       const reports = [];
       for (const check of CHECKS) {
         window.webkit.messageHandlers.regression.postMessage(JSON.stringify({running: check.name}));

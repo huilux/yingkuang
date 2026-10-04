@@ -6,21 +6,26 @@
   const { default: { createRoot } } = await import(moduleUrl('react-dom_client'));
   const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const saved = localStorage.getItem('yingkuang-session-v2');
+  const { createDefaultDocument } = await import('/src/editor-model.ts');
+  const missingDocument = createDefaultDocument();
+  missingDocument.frame.paddingX = 17;
   const session = {
     paths: ['first.jpg', 'missing.jpg', 'active.jpg'], activePath: 'active.jpg',
-    checkedPaths: ['first.jpg'], overridesByPath: { 'active.jpg': { camera: 'Restored Camera' } },
+    checkedPaths: ['first.jpg'], documentsByPath: { 'missing.jpg': missingDocument }, overridesByPath: { 'active.jpg': { camera: 'Restored Camera' }, 'missing.jpg': { camera: 'Missing Camera' } },
   };
   localStorage.setItem('yingkuang-session-v2', JSON.stringify(session));
   let release;
   const gate = new Promise(resolve => { release = resolve; });
   const inspections = [];
+  let missingAvailable = false;
   mockIPC(async (command, args) => {
+    if (command === 'plugin:dialog|open') return ['missing.jpg'];
     if (command !== 'inspect_images_resilient') return;
     inspections.push(...args.paths);
     if (args.paths.includes('first.jpg')) await gate;
     return {
-      items: args.paths.filter(path => path !== 'missing.jpg').map(path => ({ id: path, path, fileName: path, width: 6000, height: 4000, megapixels: 24, thumbnailDataUrl: '/demo.jpg', metadata: {} })),
-      failures: args.paths.filter(path => path === 'missing.jpg').map(path => ({ path, reason: 'missing' })),
+      items: args.paths.filter(path => (path !== 'missing.jpg' || missingAvailable)).map(path => ({ id: path, path, fileName: path, width: 6000, height: 4000, megapixels: 24, thumbnailDataUrl: '/demo.jpg', metadata: {} })),
+      failures: args.paths.filter(path => path === 'missing.jpg' && !missingAvailable).map(path => ({ path, reason: 'missing' })),
     };
   }, { shouldMockEvents: true });
   const host = document.createElement('div');
@@ -44,9 +49,16 @@
     if (inspections.join() !== 'active.jpg,first.jpg,missing.jpg') failures.push('StrictMode duplicated decoding');
     if (persisted.activePath !== 'active.jpg' || persisted.checkedPaths.join() !== 'first.jpg' || persisted.overridesByPath['active.jpg'].camera !== 'Restored Camera') failures.push('Restored selection or metadata was lost');
     if (!host.querySelector('.status-bar').textContent.includes('1 张原图已移动')) failures.push('Missing photo was not reported');
+    if (!persisted.paths.includes('missing.jpg') || persisted.documentsByPath['missing.jpg']?.frame.paddingX !== 17 || persisted.overridesByPath['missing.jpg']?.camera !== 'Missing Camera') failures.push('Missing photo edits were overwritten during restoration');
     const report = { activeVisibleEarly, partialSavePrevented, inspections, failures };
     if (failures.length) throw new Error(JSON.stringify(report));
-    return report;
+    missingAvailable = true;
+    host.querySelector('.library-import-actions button').click();
+    for (let attempt = 0; attempt < 100 && host.querySelectorAll('.photo-row').length < 3; attempt++) await frame();
+    const recovered = JSON.parse(localStorage.getItem('yingkuang-session-v2'));
+    if (recovered.documentsByPath['missing.jpg']?.frame.paddingX !== 17 || recovered.overridesByPath['missing.jpg']?.camera !== 'Missing Camera' || host.querySelector('.missing-photos')) throw new Error('Reimport did not recover missing photo edits');
+    if (recovered.checkedPaths.includes('missing.jpg')) throw new Error('Recovering an unchecked missing photo changed the export selection');
+    return { ...report, missingEditsPreserved: true, reimportRecovered: true, recoveredSelectionPreserved: true };
   } finally {
     release(); root.unmount(); host.remove(); clearMocks();
     if (saved === null) localStorage.removeItem('yingkuang-session-v2');

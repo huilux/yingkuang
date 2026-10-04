@@ -49,7 +49,20 @@
     const second = session.documentsByPath['second.jpg'].layers.find(layer => layer.id === 'brand').customValue;
     t.assert(first === 'CURRENT UNSAVED' && second === 'CURRENT UNSAVED',
       `Batch action copied a saved template instead of the canvas: ${first}, ${second}`);
-    return { copiedCurrentCanvas: true, targets: 2 };
+    const undo = host.querySelector('button[aria-label="撤销"]');
+    t.assert(undo && !undo.disabled, 'Batch apply did not create an undo step');
+    host.querySelectorAll('.photo-open-button')[1].click();
+    await t.frame();
+    undo.click();
+    await t.frame();
+    const undone = JSON.parse(localStorage.getItem(key));
+    t.assert(undone.documentsByPath['first.jpg'].layers.find(layer => layer.id === 'brand').customValue === 'CURRENT UNSAVED', 'Undo changed the source document');
+    t.assert(undone.documentsByPath['second.jpg'].layers.find(layer => layer.id === 'brand').customValue === 'SECOND ORIGINAL', 'Undo did not restore the second document after switching photos');
+    host.querySelector('button[aria-label="重做"]').click();
+    await t.frame();
+    const redone = JSON.parse(localStorage.getItem(key));
+    t.assert(redone.documentsByPath['second.jpg'].layers.find(layer => layer.id === 'brand').customValue === 'CURRENT UNSAVED', 'Redo did not restore the batch operation');
+    return { copiedCurrentCanvas: true, targets: 2, undoAfterPhotoSwitch: true, redoBatch: true };
   } finally {
     root.unmount();
     host.remove();

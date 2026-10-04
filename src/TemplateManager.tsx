@@ -2,9 +2,10 @@ import { useRef, useState, type ChangeEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Check, Copy, DownloadSimple, FloppyDisk, PencilSimple, Trash, UploadSimple, X } from "@phosphor-icons/react";
+import { Modal } from "./Modal";
 import { TemplatePreview } from "./TemplatePreview";
 import { builtInTemplateChanges, serializeBuiltInCatalog } from "./builtin-template-catalog";
-import { findTemplateConflict, parseTemplateBackup, serializeTemplateBackup, type ImportChoice, type ImportDecision, type TemplateBackup } from "./template-library";
+import { maxTemplateNameLength, templateNameError, findTemplateConflict, parseTemplateBackup, serializeTemplateBackup, type ImportChoice, type ImportDecision, type TemplateBackup } from "./template-library";
 import type { TemplateChange } from "./template-diff";
 import type { PhotoAsset, TemplateRecord } from "./types";
 
@@ -112,11 +113,8 @@ export function TemplateManager({ templates, defaultTemplateId, photo, onClose, 
 
   function commitRename(template: TemplateRecord) {
     const name = editingName.trim();
-    if (!name) { setError("模板名称不能为空"); return; }
-    if (templates.some((item) => item.id !== template.id && item.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase())) {
-      setError("已有同名模板，请换一个名称");
-      return;
-    }
+    const issue = templateNameError(name, templates, template.id);
+    if (issue) { setError(issue); return; }
     onRename(template.id, name);
     setEditingId("");
     setError("");
@@ -136,14 +134,14 @@ export function TemplateManager({ templates, defaultTemplateId, photo, onClose, 
 
   const unresolved = backup?.templates.some((template, index) => findTemplateConflict(templates, template) && !choices[index]);
 
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  return <Modal onClose={onClose}>
     <section className="template-manager" role="dialog" aria-modal="true" aria-labelledby="manager-title">
-      <header className="template-manager-header"><div><span>可复用的相框与水印布局</span><h2 id="manager-title">模板库</h2></div><button className="icon-button" type="button" aria-label="关闭模板库" onClick={onClose}><X /></button></header>
+      <div className="template-manager-header"><div><span>可复用的相框与水印布局</span><h2 id="manager-title">模板库</h2></div><button className="icon-button" type="button" aria-label="关闭模板库" onClick={onClose}><X /></button></div>
       <div className="template-manager-toolbar">
         <div><strong>{templates.length} 个模板</strong><span>新照片将使用设为默认的模板；已导入照片不会随模板更新而改变。</span></div>
         <div className="template-manager-toolbar-actions"><button className="button secondary" type="button" onClick={() => void openBackup()}><UploadSimple /> 导入备份</button><button className="button secondary" type="button" onClick={() => void exportBackup()}><DownloadSimple /> 导出完整备份</button><button className="button secondary" type="button" onClick={() => void exportBuiltIns()}><DownloadSimple /> 导出内置文件</button></div>
       </div>
-      <input ref={fileInput} className="visually-hidden" type="file" accept=".json,application/json" onChange={(event) => void readBrowserFile(event)} />
+      <input ref={fileInput} className="visually-hidden" type="file" aria-label="导入模板备份文件" tabIndex={-1} accept=".json,application/json" onChange={(event) => void readBrowserFile(event)} />
       {error && <p className="template-manager-error" role="alert">{error}</p>}
       {backup ? <div className="template-manager-body">
         <div className="template-import-heading"><strong>检查导入内容</strong><span>{backup.templates.length} 个模板 · 与现有模板重名或同 ID 时，请逐项选择处理方式</span></div>
@@ -162,7 +160,7 @@ export function TemplateManager({ templates, defaultTemplateId, photo, onClose, 
         return <article className="template-manager-row" key={template.id}>
         <TemplatePreview template={template} photo={photo} />
         <div className="template-manager-copy">
-          {editingId === template.id ? <div className="template-rename"><input autoFocus className="text-input" aria-label="模板名称" value={editingName} onChange={(event) => setEditingName(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") commitRename(template); if (event.key === "Escape") setEditingId(""); }} /><button className="icon-button" type="button" aria-label="保存名称" onClick={() => commitRename(template)}><FloppyDisk /></button></div> : <strong>{template.name}</strong>}
+          {editingId === template.id ? <div className="template-rename"><input autoFocus className="text-input" aria-label="模板名称" maxLength={maxTemplateNameLength} value={editingName} onChange={(event) => setEditingName(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") commitRename(template); if (event.key === "Escape") { event.stopPropagation(); setEditingId(""); } }} /><button className="icon-button" type="button" aria-label="保存名称" onClick={() => commitRename(template)}><FloppyDisk /></button></div> : <strong>{template.name}</strong>}
           <small>{template.description}</small>
           <span>{template.builtIn ? changes.length ? `内置模板 · 本机已修改 ${changes.length} 项` : "内置模板" : "自定义模板"} · {template.layouts.landscape && template.layouts.portrait ? "横竖布局" : template.layouts.landscape ? "横图布局" : "竖图布局"}</span>
         </div>
@@ -173,7 +171,7 @@ export function TemplateManager({ templates, defaultTemplateId, photo, onClose, 
         {changes.length > 0 && <TemplateChanges changes={changes} />}
       </article>;
       })}</div><p className="template-manager-note">发布新版本请使用「导出内置文件」，替换项目的 src/data/builtin-templates.json 并重新构建安装包。「导出完整备份」用于恢复本机模板库，不能替换项目文件。内置文件只包含内置模板，封面使用项目示例图。</p></div>}
-      {pendingAction && <div className="template-confirm" role="alertdialog" aria-modal="true" aria-labelledby="template-confirm-title"><div><strong id="template-confirm-title">{pendingAction.type === "reset" ? "重置内置模板？" : "删除自定义模板？"}</strong><p>{pendingAction.type === "reset" ? "模板会恢复项目文件中的内置样式；已套用到照片的单独调整不会改变。" : "模板将从模板库移除；已套用到照片的内容仍保留。"}</p><div><button className="button secondary" type="button" onClick={() => setPendingAction(null)}>取消</button><button className="button primary" type="button" onClick={() => { pendingAction.type === "reset" ? onReset(pendingAction.id) : onDelete(pendingAction.id); setPendingAction(null); }}>确认</button></div></div></div>}
+      {pendingAction && <Modal className="template-confirm" onClose={() => setPendingAction(null)}><div role="alertdialog" aria-modal="true" aria-labelledby="template-confirm-title"><strong id="template-confirm-title">{pendingAction.type === "reset" ? "重置内置模板？" : "删除自定义模板？"}</strong><p>{pendingAction.type === "reset" ? "模板会恢复项目文件中的内置样式；已套用到照片的单独调整不会改变。" : "模板将从模板库移除；已套用到照片的内容仍保留。"}</p><div><button className="button secondary" type="button" data-modal-initial onClick={() => setPendingAction(null)}>取消</button><button className="button primary" type="button" onClick={() => { pendingAction.type === "reset" ? onReset(pendingAction.id) : onDelete(pendingAction.id); setPendingAction(null); }}>确认</button></div></div></Modal>}
     </section>
-  </div>;
+  </Modal>;
 }

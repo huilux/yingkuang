@@ -25,7 +25,9 @@
   const render = id => root.render(React.createElement(React.StrictMode, null, React.createElement(Probe, { photo: photo(id) })));
   try {
     render('A'); await waitFor(() => pending.has('A'), 'A never requested');
-    if (current.image?.width !== 64 || !current.loading) throw Error('Thumbnail was not shown while loading');
+    // IPC starts immediately after setImage, before React necessarily commits it.
+    // Keep the original pending and assert the visible fallback after that commit.
+    await waitFor(() => current.image?.width === 64 && current.loading, 'Thumbnail was not shown while loading');
     render('B'); await waitFor(() => pending.has('B'), 'B never requested');
     pending.get('B').resolve(high);
     await waitFor(() => current.image?.width === 3200 && !current.loading, 'B original detail not shown');

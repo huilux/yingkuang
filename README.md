@@ -13,6 +13,8 @@
 
 ## 当前里程碑
 
+`0.1.3` 修复弹窗键盘操作、模板长名称丢失、批量撤销、缺失原图的编辑与勾选保留，以及本地存储异常处理。Chromium/WebKit 各 17 项流程检查通过，见 [用户链路验收](docs/user-workflow-0.1.3.md)。
+
 `0.1.2` 修复导出文件竞争、写入失败误报、重试范围、PNG 元数据重新导入和超大成品资源限制。200 张连续导出通过，详见 [可靠性验收](docs/export-reliability-0.1.2.md)；后续功能与验收任务见 [迭代任务](docs/iteration-backlog.md)。
 
 `0.1.1` 已完成第一轮导出性能修复：本机 release 默认模糊模板原尺寸 JPEG 中位数从 4.28s 降至 2.38s，PNG 从 11.87s 降至 3.65s。完整对照、内存、无损 PNG 和 96MP 压力测试边界见 [性能验收](docs/export-performance-0.1.1.md)。持续迭代的分支、提交与版本策略见 [迭代记录](docs/iteration-log.md)，用户问题与新增功能候选见 [流程巡检](docs/user-audit.md)。
@@ -56,7 +58,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 
-发布前使用 `npm run version:set -- 0.1.2`（替换为目标版本）同步 npm、Rust 和 Tauri 的版本；构建会检查这些版本一致。
+发布前使用 `npm run version:set -- 0.1.3`（替换为目标版本）同步 npm、Rust 和 Tauri 的版本；构建会检查这些版本一致。
 
 在干净的 Linux 构建环境中生成 AppImage：
 

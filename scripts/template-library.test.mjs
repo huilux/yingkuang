@@ -5,7 +5,7 @@ import { builtInTemplates, createDefaultDocument } from '../src/editor-model.ts'
 import { builtInDefaultTemplateId, builtInTemplateChanges, isBuiltInModified, parseBuiltInCatalog, serializeBuiltInCatalog } from '../src/builtin-template-catalog.ts';
 import {
   documentFromTemplate, findTemplateConflict, importTemplates,
-  parseTemplateBackup, readTemplates, serializeTemplateBackup, serializeUserTemplates, templatesKey,
+  parseTemplateBackup, readTemplates, readTemplateLibrary, serializeTemplateBackup, serializeUserTemplates, templatesKey,
 } from '../src/template-library.ts';
 
 const builtIns = builtInTemplates();
@@ -150,4 +150,32 @@ test('new photo receives a separate copy of the matching orientation layout', ()
   assert.equal(document.frame.color, '#123456');
   document.frame.color = '#abcdef';
   assert.equal(template.layouts.portrait.frame.color, '#123456');
+});
+
+test('copying a maximum length name produces a unique restorable template', () => {
+  const existing = { ...structuredClone(custom), name: '框'.repeat(120) };
+  const result = importTemplates([existing], [{ template: existing, conflictId: existing.id, choice: 'copy' }]);
+  const backup = serializeTemplateBackup(result.templates, existing.id);
+  assert.doesNotThrow(() => parseTemplateBackup(backup));
+  assert.ok(result.templates[1].name.length <= 120);
+  assert.notEqual(result.templates[1].name, existing.name);
+});
+
+test('invalid templates cannot be silently written into the local library', () => {
+  const invalid = { ...structuredClone(custom), name: 'x'.repeat(121) };
+  assert.throws(() => serializeUserTemplates([invalid]), /名称|模板/);
+});
+
+
+test('unreadable library blocks automatic persistence instead of discarding records', () => {
+  const previous = globalThis.localStorage;
+  try {
+    for (const raw of ['{broken', JSON.stringify({ version: 2, overrides: [], custom: [{ ...custom, name: 'x'.repeat(121) }] })]) {
+      globalThis.localStorage = { getItem: key => key === templatesKey ? raw : null };
+      const result = readTemplateLibrary();
+      assert.equal(result.canPersist, false);
+      assert.match(result.issue, /原始记录已保留/);
+      assert.ok(result.templates.length >= builtIns.length);
+    }
+  } finally { if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous; }
 });

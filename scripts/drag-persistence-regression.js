@@ -28,7 +28,8 @@
     const origin = t.screen(ctx, node);
     t.mouse(ctx.content, 'mousedown', origin); t.mouse(window, 'mouseup', origin, 0); await t.frame();
     for (const name of ['相机型号', '焦距']) {
-      host.querySelector(`button[aria-label="选择图层 ${name}"]`).dispatchEvent(new MouseEvent('click', { bubbles:true, shiftKey:true }));
+      const button = host.querySelector(`button[aria-label="选择图层 ${name}"]`);
+      if (button.getAttribute('aria-pressed') !== 'true') button.dispatchEvent(new MouseEvent('click', { bubbles:true, shiftKey:true }));
       await t.frame();
     }
     const originals = ctx.world.find('.watermark-layer').filter(node => ['brand','camera','focal'].includes(node.id())).map(node => ({id:node.id(),x:node.x()}));
@@ -46,7 +47,7 @@
     originals.forEach(item => t.near(ctx.world.findOne(node => node.id() === item.id).x() - item.x, 24 / ctx.world.scaleX(), 'Group member was not committed'));
     const persisted = JSON.parse(localStorage.getItem(key)).documentsByPath['drag-test.jpg'];
     const region = ctx.world.clipWidth();
-    t.near(persisted.layers[0].x * region, node.x(), 'Saved position differs from visible position', 0.01);
+    t.near(persisted.layers.find(layer => layer.id === node.id()).x * region, node.x(), 'Saved position differs from visible position', 0.01);
     host.querySelector('button[aria-label="撤销"]').click(); await t.frame();
     t.near(node.x(), initial.x, 'Native drag undo', 0.01);
     t.assert(host.querySelector('button[aria-label="撤销"]').disabled, 'One drag created multiple undo steps');
@@ -58,7 +59,7 @@
     try {
       restoredRoot.render(React.createElement(App));
       const restored = await t.context(host);
-      t.near(restored.world.findOne('.watermark-layer').x(), persisted.layers[0].x * region, 'Restart lost committed position', 0.01);
+      t.near(restored.world.findOne(layer => layer.id() === node.id()).x(), persisted.layers.find(layer => layer.id === node.id()).x * region, 'Restart lost committed position', 0.01);
     } finally { restoredRoot.unmount(); }
     return { intermediateWrites: 0, dragCommitWrites: 1, undoRedo: true, restored: true, portrait: true, multiSelection: true };
   } finally {
