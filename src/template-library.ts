@@ -132,7 +132,8 @@ export function parseTemplateBackup(source: string): TemplateBackup {
       !text(value.exportedAt, 100) || value.templates.length > 500) {
     throw new Error("文件不是受支持的映框模板备份");
   }
-  if (!value.templates.every(isValidTemplate)) throw new Error("备份中的模板字段不完整或格式不正确");
+  const invalidIndex = value.templates.findIndex(template => !isValidTemplate(template));
+  if (invalidIndex >= 0) throw new Error(`备份中第 ${invalidIndex + 1} 个模板的字段不完整、重复或超出支持范围`);
   const ids = value.templates.map((item: TemplateRecord) => item.id);
   if (new Set(ids).size !== ids.length) throw new Error("备份中存在重复的模板 ID");
   if (value.defaultTemplateId && !ids.includes(value.defaultTemplateId)) throw new Error("备份中的默认模板不存在");

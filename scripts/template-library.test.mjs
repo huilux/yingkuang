@@ -197,3 +197,33 @@ test('misplaced or duplicate template records cannot be silently normalized away
     assert.throws(() => serializeUserTemplates([...builtIns, custom, custom]), /重复/);
   } finally { if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous; }
 });
+
+test('import rejects values that native export cannot render', () => {
+  const changes = [
+    document => { document.frame.paddingX = -1; },
+    document => { document.frame.blur = 201; },
+    document => { document.frame.color = '#fff'; },
+    document => { document.regions.bottom.extra = 101; },
+    document => { document.layers[0].fontSize = 0; },
+    document => { document.layers[0].fontSize = 1001; },
+    document => { document.layers[0].opacity = 2; },
+    document => { document.layers[0].color = 'red'; },
+    document => { document.layers.push(structuredClone(document.layers[0])); },
+  ];
+  for (const change of changes) {
+    const template = structuredClone(custom);
+    change(template.layouts.landscape);
+    assert.throws(() => parseTemplateBackup(serializeTemplateBackup([template], template.id)), /字段|范围|重复/);
+  }
+});
+
+test('supported native boundary values remain importable', () => {
+  const template = structuredClone(custom);
+  const document = template.layouts.landscape;
+  Object.assign(document.frame, { blur: 200, brightness: 200, paddingX: 100, paddingY: 100, radius: 100, shadow: 100, color: '#ABCDEF' });
+  document.regions.bottom.extra = 100;
+  Object.assign(document.layers[0], { fontSize: 1000, opacity: 1, color: '#abcdef', x: -0.25, y: 1.25 });
+  assert.doesNotThrow(() => parseTemplateBackup(serializeTemplateBackup([template], template.id)));
+  document.layers[0].fontSize = 1; document.layers[0].opacity = 0;
+  assert.doesNotThrow(() => parseTemplateBackup(serializeTemplateBackup([template], template.id)));
+});

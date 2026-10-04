@@ -14,6 +14,8 @@ export type BuiltInTemplateCatalog = {
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+const bounded = (value: unknown, maximum: number, minimum = 0): value is number => finite(value) && value >= minimum && value <= maximum;
+const color = (value: unknown): value is string => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
 const text = (value: unknown, max: number): value is string => typeof value === "string" && value.length <= max;
 const knownLayerSources = new Set([
   "camera", "make", "model", "lens", "focalLength", "aperture", "shutter", "iso",
@@ -27,21 +29,24 @@ const validLayerSource = (value: unknown): value is string => typeof value === "
 export function isValidEditorDocument(value: unknown): value is EditorDocument {
   if (!record(value) || value.version !== 1 || !record(value.frame) || !record(value.regions) || !Array.isArray(value.layers)) return false;
   const frame = value.frame;
-  if ((frame.type !== "blur" && frame.type !== "solid") || !text(frame.color, 32) ||
-      ![frame.blur, frame.brightness, frame.paddingX, frame.paddingY, frame.radius, frame.shadow].every(finite)) return false;
+  if ((frame.type !== "blur" && frame.type !== "solid") || !color(frame.color) ||
+      !bounded(frame.blur, 200) || !bounded(frame.brightness, 200) || !bounded(frame.paddingX, 100) ||
+      !bounded(frame.paddingY, 100) || !bounded(frame.radius, 100) || !bounded(frame.shadow, 100)) return false;
   for (const region of ["top", "bottom", "left", "right"]) {
     const settings = value.regions[region];
-    if (!record(settings) || typeof settings.enabled !== "boolean" || !finite(settings.extra) ||
-        !finite(settings.safePadding) || ![0, 90, -90].includes(settings.direction as number)) return false;
+    if (!record(settings) || typeof settings.enabled !== "boolean" || !bounded(settings.extra, 100) ||
+        !bounded(settings.safePadding, 100) || ![0, 90, -90].includes(settings.direction as number)) return false;
   }
   if (value.layers.length > 100) return false;
-  return value.layers.every((layer) => record(layer) && text(layer.id, 100) && text(layer.name, 120) &&
+  if (new Set(value.layers.map(layer => record(layer) ? layer.id : undefined)).size !== value.layers.length) return false;
+  return value.layers.every((layer) => record(layer) && text(layer.id, 100) && !!layer.id.trim() && text(layer.name, 120) &&
     validLayerSource(layer.source) &&
     text(layer.customValue, 2000) &&
     ["canvas", "top", "bottom", "left", "right"].includes(layer.region as string) &&
-    [layer.x, layer.y, layer.fontSize, layer.opacity].every(finite) &&
+    [layer.x, layer.y].every(value => finite(value) && Number.isFinite(Math.fround(value))) &&
+    bounded(layer.fontSize, 1000, 1) && bounded(layer.opacity, 1) &&
     text(layer.fontFamily, 200) && [400, 500, 600, 700].includes(layer.fontWeight as number) &&
-    text(layer.color, 32) && [0, 90, -90].includes(layer.rotation as number) && typeof layer.visible === "boolean");
+    color(layer.color) && [0, 90, -90].includes(layer.rotation as number) && typeof layer.visible === "boolean");
 }
 
 export function isValidTemplate(value: unknown): value is TemplateRecord {

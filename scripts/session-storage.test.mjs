@@ -35,3 +35,9 @@ test('relocation retains photo order, edits, selection, template and old dimensi
   assert.deepEqual(relocateSessionPath(original, 'old.jpg', 'old.jpg'), original);
   assert.throws(() => parseSession(JSON.stringify({ paths: [], dimensionsByPath: { 'a.jpg': { width: 0, height: 20 } } })));
 });
+
+
+test('invalid stored rendering parameters are retained for recovery instead of being loaded', () => {
+  const document = createDefaultDocument(); document.frame.paddingX = -1;
+  assert.throws(() => parseSession(JSON.stringify({ paths: ['a.jpg'], documentsByPath: { 'a.jpg': document } })), /编辑文档/);
+});
