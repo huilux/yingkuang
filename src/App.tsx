@@ -25,6 +25,7 @@ import { EditorWorkspace } from "./EditorWorkspace";
 import { parseSession, relocateSessionPath, type SessionSnapshot } from "./session-storage";
 import { Modal } from "./Modal";
 import { ExportElapsed } from "./ExportElapsed";
+import { StorageRecoveryDialog, type StorageRecovery } from "./StorageRecoveryDialog";
 import { TemplateManager } from "./TemplateManager";
 import { TemplatePreview } from "./TemplatePreview";
 import { builtInDefaultTemplateId } from "./builtin-template-catalog";
@@ -147,6 +148,7 @@ function App() {
   const [checkedIds, setCheckedIds] = useState<string[]>(isNative ? [] : [demoPhoto.id]);
   const [documents, setDocuments] = useState<Record<string, EditorDocument>>(initialDocuments);
   const [initialLibrary] = useState(readTemplateLibrary);
+  const templateWriteBlocked = useRef(!initialLibrary.canPersist);
   const [templates, setTemplates] = useState<TemplateRecord[]>(initialLibrary.templates);
   const [defaultTemplateId, setDefaultTemplateId] = useState(() => readDefaultTemplateId(initialLibrary.templates));
   const [templateByPhoto, setTemplateByPhoto] = useState<Record<string, string>>(isNative ? {} : { [demoPhoto.id]: builtInDefaultTemplateId() });
@@ -179,6 +181,7 @@ function App() {
   const [pendingRelink, setPendingRelink] = useState<{ oldPath: string; photo: PhotoAsset } | null>(null);
   const [relinkError, setRelinkError] = useState<{ path: string; message: string } | null>(null);
   const [storageErrors, setStorageErrors] = useState<Record<string, string>>({});
+  const [pendingStorageRecovery, setPendingStorageRecovery] = useState<StorageRecovery | null>(null);
 
   function storageError(scope: string, message: string) {
     setStorageErrors(current => current[scope] === message ? current : { ...current, [scope]: message });
@@ -197,7 +200,7 @@ function App() {
   const canRedo = redoStack.current.length > 0 && historyRevision >= 0;
 
   useEffect(() => {
-    if (!initialLibrary.canPersist) { storageError("templates", initialLibrary.issue); return; }
+    if (templateWriteBlocked.current) { storageError("templates", initialLibrary.issue); return; }
     try { localStorage.setItem(templatesKey, serializeUserTemplates(templates)); storageError("templates", ""); }
     catch (error) { storageError("templates", `模板库暂未保存，请先导出备份：${String(error)}`); }
   }, [templates]);
@@ -280,8 +283,7 @@ function App() {
     return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => {
-    if (!isNative || !sessionReady || loadState === "loading" || sessionWriteBlocked.current) return;
+  function captureSession(): SessionSnapshot {
     const checked = new Set(checkedIds);
     const documentsByPath: Record<string, EditorDocument> = {};
     const overridesByPath: Record<string, PhotoAsset["overrides"]> = {};
@@ -315,9 +317,43 @@ function App() {
       dimensionsByPath,
       exportSettings,
     };
+    return snapshot;
+  }
+
+  useEffect(() => {
+    if (!isNative || !sessionReady || loadState === "loading" || sessionWriteBlocked.current) return;
+    const snapshot = captureSession();
     try { localStorage.setItem(sessionKey, JSON.stringify(snapshot)); restoredSession.current = snapshot; storageError("session", ""); }
     catch { storageError("session", "当前工作尚未自动保存，请检查可用存储空间；原有记录仍保留。"); }
   }, [activePhoto?.path, checkedIds, documents, exportSettings, photos, sessionReady, loadState, templateByPhoto, missingPhotos]);
+
+  function retryDefaultTemplateSave() {
+    try { localStorage.setItem(defaultTemplateKey, defaultTemplateId); storageError("defaultTemplate", ""); }
+    catch { storageError("defaultTemplate", "默认模板仍未能保存，请检查可用存储空间后重试。"); }
+  }
+
+  function beginStorageRecovery(scope: "session" | "templates") {
+    if (!sessionReady || loadState === "loading") return;
+    try {
+      const key = scope === "session" ? sessionKey : templatesKey;
+      const keys = scope === "session" ? [key] : [key, "yingkuang-templates-v1"];
+      const currentContent = scope === "session" ? JSON.stringify(captureSession()) : serializeUserTemplates(templates);
+      if (scope === "session") parseSession(currentContent);
+      setPendingStorageRecovery({ scope, key, label: scope === "session" ? "工作记录" : "模板库",
+        description: scope === "session" ? `当前批次有 ${photos.length} 张可用照片和 ${missingPhotos.length} 条缺失记录。` : `当前可读取 ${templates.length} 个模板。`,
+        originalRecords: Object.fromEntries(keys.map(key => [key, localStorage.getItem(key)])), currentContent });
+    } catch (error) { storageError(scope, `无法准备恢复备份，原记录仍保留：${String(error)}`); }
+  }
+
+  function storageRecovered(recovery: StorageRecovery) {
+    if (recovery.scope === "session") {
+      sessionWriteBlocked.current = false;
+      restoredSession.current = parseSession(recovery.currentContent);
+    } else templateWriteBlocked.current = false;
+    storageError(recovery.scope, "");
+    setPendingStorageRecovery(null);
+    setMessage(`${recovery.label}已恢复自动保存，原始记录已备份到所选文件`);
+  }
 
   async function selectReplacementPhoto(oldPath: string) {
     if (importBusy.current || loadState === "loading") return;
@@ -897,7 +933,7 @@ function App() {
   return (
     <div className="app-shell" onKeyDown={event => {
       const target = event.target as HTMLElement;
-      if (showExport || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || exportRunning || exportResult || target.closest("input, textarea, select, [contenteditable=true]")) return;
+      if (showExport || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery || exportRunning || exportResult || target.closest("input, textarea, select, [contenteditable=true]")) return;
       if (editorRef.current?.isInteracting()) return;
       const command = event.ctrlKey || event.metaKey;
       if (command && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
@@ -947,7 +983,7 @@ function App() {
             <button type="button" disabled={!selectedCount} onClick={() => setCheckedIds([])}>取消选择</button>
           </div>
           {activeDocument && checkedIds.some((id) => id !== activeId) && <button className="library-batch-button" type="button" onClick={() => applyCurrentCanvas(checkedIds)}>将当前画布应用到已勾选 {selectedCount} 张</button>}
-          {Object.values(storageErrors).some(Boolean) && <div className="storage-notice" role="alert">{Object.entries(storageErrors).filter(([, error]) => error).map(([scope, error]) => <p key={scope}>{error}</p>)}</div>}
+          {Object.values(storageErrors).some(Boolean) && <div className="storage-notice" role="alert">{Object.entries(storageErrors).filter(([, error]) => error).map(([scope, error]) => <div key={scope}><p>{error}</p>{isNative && (scope === "session" || scope === "templates") && <button className="button secondary" type="button" disabled={!sessionReady || loadState === "loading"} onClick={() => beginStorageRecovery(scope)}>备份并恢复{scope === "session" ? "工作记录" : "模板库"}</button>}{scope === "defaultTemplate" && <button className="button secondary" type="button" onClick={retryDefaultTemplateSave}>重试保存默认模板</button>}</div>)}</div>}
           {!!missingPhotos.length && <details className="missing-photos"><summary>{missingPhotos.length} 张原图暂不可用，编辑已保留</summary><p>选择移动后的原图，或恢复原路径后重新导入。</p>{missingPhotos.map(item => <div key={item.path}><strong>{item.path.split(/[\\/]/).pop()}</strong><small title={item.path}>{item.path}</small><small>{item.reason}</small><button className="button secondary" type="button" disabled={loadState === "loading"} aria-label={`重新定位 ${item.path.split(/[\\/]/).pop()}`} onClick={() => void selectReplacementPhoto(item.path)}><FolderOpen /> 重新定位原图</button><button className="button secondary" type="button" disabled={loadState === "loading"} aria-label={`移除缺失记录 ${item.path.split(/[\\/]/).pop()}`} onClick={() => setPendingRemoval({ ids: [], missingPaths: [item.path] })}>移除记录</button>{relinkError?.path === item.path && <small className="field-message" role="alert">{relinkError.message}</small>}</div>)}</details>}
           <div className="photo-list">
             {!photos.length ? (
@@ -1021,6 +1057,8 @@ function App() {
       </main>
 
       {showTemplateManager && <TemplateManager templates={templates} defaultTemplateId={defaultTemplateId} photo={activePhoto} onClose={() => setShowTemplateManager(false)} onDefaultChange={setDefaultTemplateId} onRename={renameTemplate} onDuplicate={duplicateTemplate} onDelete={deleteTemplate} onReset={resetTemplate} onImport={restoreTemplates} />}
+
+      {pendingStorageRecovery && <StorageRecoveryDialog recovery={pendingStorageRecovery} onClose={() => setPendingStorageRecovery(null)} onRecovered={storageRecovered} />}
 
       {pendingRelink && <Modal onClose={() => setPendingRelink(null)}><section className="compact-dialog relink-dialog" role="dialog" aria-modal="true" aria-labelledby="relink-title">
         <div className="compact-dialog-header"><div><span>恢复编辑</span><h2 id="relink-title">确认原图的新位置</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setPendingRelink(null)}><X /></button></div>

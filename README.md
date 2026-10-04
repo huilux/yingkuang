@@ -13,6 +13,8 @@
 
 ## 当前里程碑
 
+`0.4.0` 新增损坏会话与模板库的原始备份和自动保存恢复入口；取消、写入失败、空间不足及并发修改均有保护。见 [存储恢复验收](docs/storage-recovery-0.4.0.md)。
+
 `0.3.0` 新增缺失原图重新定位，恢复原排版、文字、勾选与模板关联；支持移除缺失记录，修复全部原图缺失时无法清空批次。见 [恢复流程验收](docs/photo-recovery-0.3.0.md)。
 
 `0.2.0` 新增指定长边下的“小图不放大”、导出已用时间与结果耗时，并明确取消后未处理数量。详见 [导出体验验收](docs/export-workflow-0.2.0.md)。
@@ -62,7 +64,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 
-发布前使用 `npm run version:set -- 0.3.0`（替换为目标版本）同步 npm、Rust 和 Tauri 的版本；构建会检查这些版本一致。
+发布前使用 `npm run version:set -- 0.4.0`（替换为目标版本）同步 npm、Rust 和 Tauri 的版本；构建会检查这些版本一致。
 
 在干净的 Linux 构建环境中生成 AppImage：
 

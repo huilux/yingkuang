@@ -179,3 +179,21 @@ test('unreadable library blocks automatic persistence instead of discarding reco
     }
   } finally { if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous; }
 });
+
+test('misplaced or duplicate template records cannot be silently normalized away', () => {
+  const previous = globalThis.localStorage;
+  try {
+    for (const saved of [
+      { version: 2, overrides: [custom], custom: [] },
+      { version: 2, overrides: [], custom: [builtIns[0]] },
+      { version: 2, overrides: [], custom: [custom, custom] },
+      { version: 2, overrides: [{ ...builtIns[0], id: 'unknown-builtin' }], custom: [] },
+    ]) {
+      globalThis.localStorage = { getItem: key => key === templatesKey ? JSON.stringify(saved) : null };
+      const result = readTemplateLibrary();
+      assert.equal(result.canPersist, false);
+      assert.doesNotThrow(() => serializeUserTemplates(result.templates));
+    }
+    assert.throws(() => serializeUserTemplates([...builtIns, custom, custom]), /重复/);
+  } finally { if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous; }
+});

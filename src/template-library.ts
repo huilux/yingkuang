@@ -50,9 +50,10 @@ export function copyTemplateName(name: string, templates: TemplateRecord[]): str
 function mergeTemplates(builtIns: TemplateRecord[], overrides: unknown[], custom: unknown[]): TemplateRecord[] {
   const builtInIds = new Set(builtIns.map((template) => template.id));
   const byId = new Map(overrides.filter(isValidTemplate).filter((template) => template.builtIn && builtInIds.has(template.id)).map((template) => [template.id, template]));
+  const customById = new Map(custom.filter(isValidTemplate).filter(template => !builtInIds.has(template.id)).map(template => [template.id, { ...template, builtIn: false }]));
   return [
     ...builtIns.map((template) => byId.get(template.id) ?? template),
-    ...custom.filter(isValidTemplate).filter((template) => !builtInIds.has(template.id)).map((template) => ({ ...template, builtIn: false })),
+    ...customById.values(),
   ];
 }
 
@@ -66,7 +67,10 @@ export function readTemplateLibrary(): { templates: TemplateRecord[]; canPersist
       const saved: unknown = JSON.parse(stored);
       if (!record(saved) || saved.version !== 2 || !Array.isArray(saved.overrides) || !Array.isArray(saved.custom)) return result(builtIns, false);
       const entries = [...saved.overrides, ...saved.custom];
-      const valid = entries.every(isValidTemplate) && new Set(entries.map(template => template.id)).size === entries.length;
+      const builtInIds = new Set(builtIns.map(template => template.id));
+      const valid = saved.overrides.every(template => isValidTemplate(template) && template.builtIn && builtInIds.has(template.id)) &&
+        saved.custom.every(template => isValidTemplate(template) && !template.builtIn && !builtInIds.has(template.id)) &&
+        new Set(entries.map(template => template.id)).size === entries.length;
       return result(mergeTemplates(builtIns, saved.overrides, saved.custom), valid);
     }
     const legacy: unknown = JSON.parse(localStorage.getItem(legacyTemplatesKey) ?? "[]");
@@ -75,7 +79,7 @@ export function readTemplateLibrary(): { templates: TemplateRecord[]; canPersist
     const builtInIds = new Set(builtIns.map(template => template.id));
     return result(mergeTemplates(builtIns,
       valid.filter(template => builtInIds.has(template.id) && template.updatedAt > 0),
-      valid.filter(template => !builtInIds.has(template.id) && (!template.builtIn || template.updatedAt > 0))), valid.length === legacy.length);
+      valid.filter(template => !builtInIds.has(template.id) && (!template.builtIn || template.updatedAt > 0))), valid.length === legacy.length && new Set(valid.map(template => template.id)).size === valid.length);
   } catch { return result(builtIns, false); }
 }
 
@@ -85,6 +89,7 @@ export function readTemplates(): TemplateRecord[] {
 
 export function serializeUserTemplates(templates: TemplateRecord[]): string {
   if (!templates.every(isValidTemplate)) throw new Error("模板字段不完整或超出支持范围，未覆盖已保存的模板库");
+  if (new Set(templates.map(template => template.id)).size !== templates.length) throw new Error("模板 ID 重复，未覆盖已保存的模板库");
   const builtIns = builtInTemplates();
   const builtInIds = new Set(builtIns.map((template) => template.id));
   return JSON.stringify({

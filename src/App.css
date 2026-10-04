@@ -524,3 +524,10 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .relink-dialog .compact-dialog-header, .relink-dialog footer { flex-shrink: 0; }
 .relink-preview { display: block; width: 100%; height: 150px; object-fit: contain; background: var(--bg-raised); border-radius: var(--control-radius); }
 .relink-path { overflow-wrap: anywhere; }
+.storage-recovery-dialog { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
+.storage-recovery-dialog .compact-dialog-body { min-height: 0; overflow-y: auto; }
+.storage-recovery-dialog .compact-dialog-body p { margin-top: 8px; font-size: 11px; line-height: 1.6; }
+.storage-recovery-dialog .compact-dialog-header, .storage-recovery-dialog footer { flex-shrink: 0; }
+.recovery-backup-path { overflow-wrap: anywhere; }
+.storage-notice > div + div { margin-top: 10px; }
+.storage-notice { min-height: 0; max-height: 240px; overflow-y: auto; }

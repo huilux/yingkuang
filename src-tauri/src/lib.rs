@@ -508,6 +508,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn recovery_backup_keeps_raw_content_and_cleans_failed_writes() {
+        let root = tempfile::tempdir().unwrap();
+        let destination = root.path().join("recovery.json");
+        let content = "{broken original\n原始记录".to_owned();
+        tauri::async_runtime::block_on(write_template_backup(
+            destination.to_string_lossy().into_owned(),
+            content.clone(),
+        ))
+        .unwrap();
+        assert_eq!(fs::read_to_string(&destination).unwrap(), content);
+        let blocked = root.path().join("existing-directory");
+        fs::create_dir(&blocked).unwrap();
+        fs::write(blocked.join("keep.txt"), "existing contents").unwrap();
+        assert!(
+            tauri::async_runtime::block_on(write_template_backup(
+                blocked.to_string_lossy().into_owned(),
+                "replacement".into()
+            ))
+            .is_err()
+        );
+        assert_eq!(
+            fs::read_to_string(blocked.join("keep.txt")).unwrap(),
+            "existing contents"
+        );
+        assert_eq!(fs::read_to_string(destination).unwrap(), content);
+        assert_eq!(
+            fs::read_dir(root.path()).unwrap().count(),
+            2,
+            "failed backup left a temporary file"
+        );
+    }
+
+    #[test]
     fn folder_import_lists_supported_images_including_subfolders() {
         let directory = tempfile::tempdir().unwrap();
         for name in ["b.PNG", "a.jpg", "notes.txt"] {
