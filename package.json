@@ -1,7 +1,7 @@
 {
   "name": "yingkuang",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.4.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,8 @@
     "test:templates": "node --test scripts/template-library.test.mjs",
     "tauri": "node scripts/tauri.mjs",
     "version:check": "node scripts/version.mjs",
-    "version:set": "node scripts/version.mjs"
+    "version:set": "node scripts/version.mjs",
+    "build:appimage": "node scripts/build-appimage.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

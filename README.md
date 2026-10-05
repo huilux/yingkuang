@@ -13,6 +13,8 @@
 
 ## 当前里程碑
 
+`0.4.2` 提供可重复的 AppImage 构建入口，修复 Arch 上旧版 strip 和第三方私有 GTK 库导致的打包失败。真实安装包已验证原片导入、导出及升级恢复。见 [安装包验收](docs/portable-build-0.4.2.md)。
+
 `0.4.1` 在模板导入时校验原生渲染支持范围并拒绝重复图层 ID，避免到导出时才发现无效参数。见 [参数边界验收](docs/template-boundaries-0.4.1.md)。
 
 `0.4.0` 新增损坏会话与模板库的原始备份和自动保存恢复入口；取消、写入失败、空间不足及并发修改均有保护。见 [存储恢复验收](docs/storage-recovery-0.4.0.md)。
@@ -66,15 +68,15 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 
-发布前使用 `npm run version:set -- 0.4.0`（替换为目标版本）同步 npm、Rust 和 Tauri 的版本；构建会检查这些版本一致。
+发布前使用 `npm run version:set -- 0.4.2`（替换为目标版本）同步 npm、Rust 和 Tauri 的版本；构建会检查这些版本一致。
 
-在干净的 Linux 构建环境中生成 AppImage：
+在 Linux 构建环境中生成 AppImage：
 
 ```bash
-npm run tauri build -- --bundles appimage
+npm run build:appimage
 ```
 
-当前 Arch 开发机可生成并启动 release 二进制；AppImage 封装仍受本机 VMware 私有 GTK 库干扰，具体状态记录在 [开发状态](docs/development-status.md)。正式分发包应在隔离的构建环境中生成并复测。
+构建入口使用项目内打包工具缓存、固定版本 GTK 插件和校验值，避免误收集第三方私有库；首次需要联网。当前 Arch x86_64 已生成并实际运行 AppImage，正式分发前仍需干净系统兼容性验收。详见 [构建与验收](docs/portable-build-0.4.2.md)。
 
 `assets/image/` 和 `assets/origin/` 是本地设计参考与原尺寸测试照片，不进入版本库。正式界面使用压缩后的 `public/demo.jpg` 提供无原图环境下的演示内容。
 
