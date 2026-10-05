@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
-export function NumericInput({ label, value, min, max, step = 1, onCommit, disabled = false }: {
-  label: string; value: number; min?: number; max?: number; step?: number; disabled?: boolean; onCommit: (value: number) => void;
+export function NumericInput({ label, value, min, max, step = 1, onCommit, disabled = false, isValid }: {
+  label: string; value: number; min?: number; max?: number; step?: number; disabled?: boolean; isValid?: (value: number) => boolean; onCommit: (value: number) => void;
 }) {
   const [draft, setDraft] = useState(String(value));
   const editing = useRef(false);
@@ -12,6 +12,7 @@ export function NumericInput({ label, value, min, max, step = 1, onCommit, disab
     const parsed = Number(draft);
     if (cancelled.current || !draft.trim() || !Number.isFinite(parsed)) { setDraft(String(value)); cancelled.current = false; return; }
     const next = Math.min(max ?? Infinity, Math.max(min ?? -Infinity, parsed));
+    if (isValid && !isValid(next)) { setDraft(String(value)); return; }
     setDraft(String(next));
     if (next !== value) onCommit(next);
   }

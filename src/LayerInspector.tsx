@@ -7,6 +7,9 @@ import { NumericInput } from "./NumericInput";
 import { positionPatch, type AlignReference, type ArrangeAction, type LayerPatch } from "./selection-model";
 import type { EditorDocument, LayerSource, PhotoAsset, RegionId, WatermarkLayer } from "./types";
 
+// Coordinate percentages become f32 normalized positions in the native renderer.
+const isValidCoordinate = (percent: number) => Number.isFinite(Math.fround(percent / 100));
+
 type Props = {
   document: EditorDocument;
   photo?: PhotoAsset;
@@ -96,7 +99,7 @@ export function LayerInspector({ document: design, photo, selectedIds, onSelect,
       {mixed("opacity") && <p className="selection-note">透明度不同；调整后统一。</p>}
       <SliderRow label="透明度" value={Math.round(first.opacity * 100)} min={0} max={100} suffix="%" onStart={onStart} onEnd={onEnd} onChange={value => patch({ opacity: value / 100 }, false)} />
       <Segmented label="文字方向" value={mixed("rotation") ? "" : String(first.rotation)} options={[{ value: "0", label: "横排" }, { value: "-90", label: "左转" }, { value: "90", label: "右转" }]} onChange={value => patch({ rotation: Number(value) as WatermarkLayer["rotation"] })} />
-      {single && <><div className="coordinate-inputs"><label>X · 区域 %<NumericInput key={`${first.id}-x`} label="X 坐标" value={Number((first.x * 100).toFixed(2))} step={0.1} onCommit={value => patch({ x: value / 100 })} /></label><label>Y · 区域 %<NumericInput key={`${first.id}-y`} label="Y 坐标" value={Number((first.y * 100).toFixed(2))} step={0.1} onCommit={value => patch({ y: value / 100 })} /></label></div><div className="coordinate-readout"><span>X {(first.x * 100).toFixed(1)}%</span><span>Y {(first.y * 100).toFixed(1)}%</span></div>{(first.x < 0 || first.x > 1 || first.y < 0 || first.y > 1) && <p className="selection-note">元素已移出所属区域；仍随该区域布局，可对齐居中找回。</p>}</>}
+      {single && <><div className="coordinate-inputs"><label>X · 区域 %<NumericInput key={`${first.id}-x`} label="X 坐标" isValid={isValidCoordinate} value={Number((first.x * 100).toFixed(2))} step={0.1} onCommit={value => patch({ x: value / 100 })} /></label><label>Y · 区域 %<NumericInput key={`${first.id}-y`} label="Y 坐标" isValid={isValidCoordinate} value={Number((first.y * 100).toFixed(2))} step={0.1} onCommit={value => patch({ y: value / 100 })} /></label></div><div className="coordinate-readout"><span>X {(first.x * 100).toFixed(1)}%</span><span>Y {(first.y * 100).toFixed(1)}%</span></div>{(first.x < 0 || first.x > 1 || first.y < 0 || first.y > 1) && <p className="selection-note">元素已移出所属区域；仍随该区域布局，可对齐居中找回。</p>}</>}
     </section> : <section className="inspector-section muted-section"><strong>选择画布中的文字</strong><p>Shift 点选多个元素，可整体拖动、对齐或等间距分布。拖动时按 Ctrl 临时关闭吸附。</p></section>}
   </div>;
 }

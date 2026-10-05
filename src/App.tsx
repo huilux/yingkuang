@@ -932,6 +932,7 @@ function App() {
 
   return (
     <div className="app-shell" onKeyDown={event => {
+      if (event.defaultPrevented) return;
       const target = event.target as HTMLElement;
       if (showExport || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery || exportRunning || exportResult || target.closest("input, textarea, select, [contenteditable=true]")) return;
       if (editorRef.current?.isInteracting()) return;
