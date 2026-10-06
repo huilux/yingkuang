@@ -153,12 +153,25 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 
 .library-heading strong { display: flex; align-items: center; gap: 8px; }
 .library-heading em { font: 600 10px ui-monospace, monospace; color: var(--accent); font-style: normal; }
+.library-heading, .library-footer { flex-shrink: 0; }
+.library-controls { flex: 0 1 auto; min-height: 0; max-height: calc(100% - 64px - 57px - 140px); overflow-y: auto; scrollbar-color: var(--line-strong) transparent; }
 .library-import-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 13px 12px 15px; }
 .library-import-actions .button { min-width: 0; padding: 0 5px; font-size: 10px; }
 .library-import-actions svg { width: 15px; height: 15px; flex: 0 0 auto; }
 .library-template-select { display: grid; gap: 7px; margin: 0 10px 18px; padding: 13px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg-raised); color: var(--text-secondary); font-size: 10px; }
 .library-template-select select { width: 100%; height: 35px; padding: 0 9px; border: 1px solid var(--line); border-radius: var(--control-radius); background: var(--bg-input); color: var(--text); font-size: 11px; }
 .library-template-select small { color: var(--text-tertiary); font-size: 9px; }
+.photo-filters { margin: 0 10px 10px; padding: 9px; border: 1px solid var(--line); border-radius: var(--control-radius); color: var(--text-secondary); font-size: 12px; }
+.photo-filters summary { cursor: pointer; }
+.photo-filter-fields { display: grid; grid-template-columns: minmax(0, 1fr) 90px; gap: 8px; margin-top: 10px; }
+.photo-filter-fields label { display: grid; min-width: 0; gap: 5px; }
+.photo-filter-fields input, .photo-filter-fields select { min-width: 0; width: 100%; height: 34px; padding: 0 7px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--bg-input); color: var(--text); font: inherit; }
+.photo-filter-status { display: flex; align-items: flex-start; gap: 8px; margin: 0 12px 10px; font-size: 12px; color: var(--text-secondary); }
+.photo-filter-status p { flex: 1; margin: 0; line-height: 1.5; }
+.photo-filter-status button { flex: none; min-height: 28px; padding: 2px 4px; border: 0; border-radius: 4px; background: var(--bg-raised); color: var(--text); cursor: pointer; font-size: 12px; }
+.photo-filter-empty { padding: 18px 6px; font-size: 12px; color: var(--text-secondary); }
+.photo-filter-empty p { line-height: 1.5; }
+.export-filter-notice { font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
 .photo-selection-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; padding: 0 15px 10px; }
 .photo-selection-summary strong { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .photo-selection-summary span { color: var(--text-tertiary); font-size: 9px; }

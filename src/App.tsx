@@ -24,6 +24,7 @@ import {
 import { EditorWorkspace } from "./EditorWorkspace";
 import { parseSession, relocateSessionPath, type SessionSnapshot } from "./session-storage";
 import { Modal } from "./Modal";
+import { emptyPhotoFilter, filterPhotos, selectVisiblePhotos, type PhotoDirection, type PhotoFilter } from "./photo-filter";
 import { ExportElapsed } from "./ExportElapsed";
 import { StorageRecoveryDialog, type StorageRecovery } from "./StorageRecoveryDialog";
 import { TemplateManager } from "./TemplateManager";
@@ -144,6 +145,7 @@ function App() {
   const redoStack = useRef<HistoryEntry[]>([]);
   const [historyRevision, setHistoryRevision] = useState(0);
   const [photos, setPhotos] = useState<PhotoAsset[]>(isNative ? [] : [demoPhoto]);
+  const [photoFilter, setPhotoFilter] = useState<PhotoFilter>(emptyPhotoFilter);
   const [activeId, setActiveId] = useState(isNative ? "" : demoPhoto.id);
   const [checkedIds, setCheckedIds] = useState<string[]>(isNative ? [] : [demoPhoto.id]);
   const [documents, setDocuments] = useState<Record<string, EditorDocument>>(initialDocuments);
@@ -196,6 +198,13 @@ function App() {
   const selectedLayers = activeDocument?.layers.filter(item => selectedLayerIds.includes(item.id)) ?? [];
   const selectedCount = checkedIds.length;
   const checkedSet = useMemo(() => new Set(checkedIds), [checkedIds]);
+  const visiblePhotos = useMemo(() => filterPhotos(photos, photoFilter), [photos, photoFilter]);
+  const visiblePhotoIds = new Set(visiblePhotos.map(photo => photo.id));
+  const visiblePhotoPaths = new Set(visiblePhotos.map(photo => photo.path));
+  const filtersActive = !!photoFilter.query.trim() || photoFilter.direction !== "all";
+  const visibleSelectedCount = visiblePhotos.filter(photo => checkedSet.has(photo.id)).length;
+  const hiddenSelectedCount = selectedCount - visibleSelectedCount;
+  const pendingHiddenCount = pendingRemoval?.ids.filter(id => !visiblePhotoIds.has(id)).length ?? 0;
   const canUndo = undoStack.current.length > 0 && historyRevision >= 0;
   const canRedo = redoStack.current.length > 0 && historyRevision >= 0;
 
@@ -395,6 +404,7 @@ function App() {
       if (saved.checkedPaths?.includes(photo.path)) setCheckedIds(current => [...new Set([...current, photo.id])]);
       setMissingPhotos(current => current.filter(item => item.path !== oldPath));
       setActiveId(photo.id);
+      setPhotoFilter(emptyPhotoFilter);
       setSelectedLayerIds([]);
       setPendingRelink(null);
       setMessage(`已重新定位 ${photo.fileName}，原排版和手动文字已恢复，请检查画面`);
@@ -537,6 +547,7 @@ function App() {
     const toCheck = next.filter(photo => !recovered.has(photo.path) || restoredSession.current.checkedPaths?.includes(photo.path));
     setCheckedIds((current) => [...new Set([...current, ...toCheck.map(photo => photo.id)])]);
     if (activate) {
+      setPhotoFilter(emptyPhotoFilter);
       setActiveId(next[0].id);
       setSelectedLayerIds([]);
     }
@@ -674,6 +685,7 @@ function App() {
     setMissingPhotos(current => current.filter(photo => !removedPaths.has(photo.path)));
     for (const id of removed) releaseBrowserPhoto(id);
     setPhotos(remaining);
+    if (!remaining.length) setPhotoFilter(emptyPhotoFilter);
     setCheckedIds((current) => current.filter((id) => !removed.has(id)));
     setTemplateByPhoto((current) => {
       const next = { ...current };
@@ -923,6 +935,7 @@ function App() {
     checkedIds,
     settings: exportSettings,
   }), [activeId, checkedIds, documents, exportSettings, photos]);
+  const hiddenExportCount = filtersActive ? exportPlan.items.filter(item => !visiblePhotoPaths.has(item.path)).length : 0;
   const visibleExportIssues = [
     ...exportPlan.issues,
     ...exportIssues.filter((issue) => issue.field === "preflight"),
@@ -972,27 +985,37 @@ function App() {
           <div className="panel-heading library-heading">
             <div><span>当前工作集</span><strong>照片 <em>{photos.length}</em></strong></div>
           </div>
-          <div className="library-import-actions">
-            <button className="button secondary" type="button" onClick={() => handleImport()} disabled={loadState === "loading"}><Plus /> 添加照片</button>
-            <button className="button secondary" type="button" onClick={() => handleImport("folder")} disabled={loadState === "loading"}><FolderOpen /> 导入文件夹</button>
+          <div className="library-controls">
+            <div className="library-import-actions">
+              <button className="button secondary" type="button" onClick={() => handleImport()} disabled={loadState === "loading"}><Plus /> 添加照片</button>
+              <button className="button secondary" type="button" onClick={() => handleImport("folder")} disabled={loadState === "loading"}><FolderOpen /> 导入文件夹</button>
+            </div>
+            <label className="library-template-select"><span>新照片使用模板</span><select aria-label="新照片使用模板" value={defaultTemplateId} onChange={(event) => setDefaultTemplateId(event.currentTarget.value)}>{templates.map((template) => <option value={template.id} key={template.id}>{template.name}</option>)}</select><small>仅影响之后导入的照片</small></label>
+            {!!photos.length && <details className="photo-filters">
+              <summary>查找与筛选{filtersActive ? ` · ${visiblePhotos.length}/${photos.length}` : ""}</summary>
+              <div className="photo-filter-fields">
+                <label>文件名<input type="search" aria-label="搜索照片文件名" placeholder="输入文件名" value={photoFilter.query} onChange={event => { const query = event.currentTarget.value; setPhotoFilter(current => ({ ...current, query })); }} /></label>
+                <label>方向<select aria-label="筛选照片方向" value={photoFilter.direction} onChange={event => { const direction = event.currentTarget.value as PhotoDirection; setPhotoFilter(current => ({ ...current, direction })); }}><option value="all">全部方向</option><option value="landscape">横图</option><option value="portrait">竖图</option><option value="square">方图</option></select></label>
+              </div>
+            </details>}
+            {filtersActive && <div className="photo-filter-status"><p role="status">显示 {visiblePhotos.length} / {photos.length} 张{activePhoto && !visiblePhotoIds.has(activePhoto.id) ? "，当前编辑照片在筛选外" : ""}</p><button type="button" onClick={() => setPhotoFilter(emptyPhotoFilter)}>清除筛选</button></div>}
+            <div className="photo-selection-summary"><strong>已勾选 {selectedCount} / {photos.length}</strong><span>{hiddenSelectedCount ? `含筛选外 ${hiddenSelectedCount} 张` : "用于批量应用与导出"}</span></div>
+            <div className="photo-selection-actions" role="group" aria-label="照片批量选择">
+              <button type="button" disabled={!visiblePhotos.length} onClick={() => setCheckedIds(current => selectVisiblePhotos(current, visiblePhotos.map(photo => photo.id), "all"))}>{filtersActive ? "全选结果" : "全选"}</button>
+              <button type="button" disabled={!visiblePhotos.length} onClick={() => setCheckedIds(current => selectVisiblePhotos(current, visiblePhotos.map(photo => photo.id), "invert"))}>{filtersActive ? "反选结果" : "反选"}</button>
+              <button type="button" disabled={!visibleSelectedCount} onClick={() => setCheckedIds(current => selectVisiblePhotos(current, visiblePhotos.map(photo => photo.id), "none"))}>{filtersActive ? "取消结果" : "取消选择"}</button>
+            </div>
+            {activeDocument && checkedIds.some((id) => id !== activeId) && <button className="library-batch-button" type="button" onClick={() => applyCurrentCanvas(checkedIds)}>将当前画布应用到已勾选 {selectedCount} 张</button>}
+            {Object.values(storageErrors).some(Boolean) && <div className="storage-notice" role="alert">{Object.entries(storageErrors).filter(([, error]) => error).map(([scope, error]) => <div key={scope}><p>{error}</p>{isNative && (scope === "session" || scope === "templates") && <button className="button secondary" type="button" disabled={!sessionReady || loadState === "loading"} onClick={() => beginStorageRecovery(scope)}>备份并恢复{scope === "session" ? "工作记录" : "模板库"}</button>}{scope === "defaultTemplate" && <button className="button secondary" type="button" onClick={retryDefaultTemplateSave}>重试保存默认模板</button>}</div>)}</div>}
+            {!!missingPhotos.length && <details className="missing-photos"><summary>{missingPhotos.length} 张原图暂不可用，编辑已保留</summary><p>选择移动后的原图，或恢复原路径后重新导入。</p>{missingPhotos.map(item => <div key={item.path}><strong>{item.path.split(/[\\/]/).pop()}</strong><small title={item.path}>{item.path}</small><small>{item.reason}</small><button className="button secondary" type="button" disabled={loadState === "loading"} aria-label={`重新定位 ${item.path.split(/[\\/]/).pop()}`} onClick={() => void selectReplacementPhoto(item.path)}><FolderOpen /> 重新定位原图</button><button className="button secondary" type="button" disabled={loadState === "loading"} aria-label={`移除缺失记录 ${item.path.split(/[\\/]/).pop()}`} onClick={() => setPendingRemoval({ ids: [], missingPaths: [item.path] })}>移除记录</button>{relinkError?.path === item.path && <small className="field-message" role="alert">{relinkError.message}</small>}</div>)}</details>}
           </div>
-          <label className="library-template-select"><span>新照片使用模板</span><select aria-label="新照片使用模板" value={defaultTemplateId} onChange={(event) => setDefaultTemplateId(event.currentTarget.value)}>{templates.map((template) => <option value={template.id} key={template.id}>{template.name}</option>)}</select><small>仅影响之后导入的照片</small></label>
-          <div className="photo-selection-summary"><strong>已勾选 {selectedCount} / {photos.length}</strong><span>用于批量应用与导出</span></div>
-          <div className="photo-selection-actions" role="group" aria-label="照片批量选择">
-            <button type="button" disabled={!photos.length} onClick={() => setCheckedIds(photos.map((photo) => photo.id))}>全选</button>
-            <button type="button" disabled={!photos.length} onClick={() => setCheckedIds(photos.filter((photo) => !checkedSet.has(photo.id)).map((photo) => photo.id))}>反选</button>
-            <button type="button" disabled={!selectedCount} onClick={() => setCheckedIds([])}>取消选择</button>
-          </div>
-          {activeDocument && checkedIds.some((id) => id !== activeId) && <button className="library-batch-button" type="button" onClick={() => applyCurrentCanvas(checkedIds)}>将当前画布应用到已勾选 {selectedCount} 张</button>}
-          {Object.values(storageErrors).some(Boolean) && <div className="storage-notice" role="alert">{Object.entries(storageErrors).filter(([, error]) => error).map(([scope, error]) => <div key={scope}><p>{error}</p>{isNative && (scope === "session" || scope === "templates") && <button className="button secondary" type="button" disabled={!sessionReady || loadState === "loading"} onClick={() => beginStorageRecovery(scope)}>备份并恢复{scope === "session" ? "工作记录" : "模板库"}</button>}{scope === "defaultTemplate" && <button className="button secondary" type="button" onClick={retryDefaultTemplateSave}>重试保存默认模板</button>}</div>)}</div>}
-          {!!missingPhotos.length && <details className="missing-photos"><summary>{missingPhotos.length} 张原图暂不可用，编辑已保留</summary><p>选择移动后的原图，或恢复原路径后重新导入。</p>{missingPhotos.map(item => <div key={item.path}><strong>{item.path.split(/[\\/]/).pop()}</strong><small title={item.path}>{item.path}</small><small>{item.reason}</small><button className="button secondary" type="button" disabled={loadState === "loading"} aria-label={`重新定位 ${item.path.split(/[\\/]/).pop()}`} onClick={() => void selectReplacementPhoto(item.path)}><FolderOpen /> 重新定位原图</button><button className="button secondary" type="button" disabled={loadState === "loading"} aria-label={`移除缺失记录 ${item.path.split(/[\\/]/).pop()}`} onClick={() => setPendingRemoval({ ids: [], missingPaths: [item.path] })}>移除记录</button>{relinkError?.path === item.path && <small className="field-message" role="alert">{relinkError.message}</small>}</div>)}</details>}
           <div className="photo-list">
             {!photos.length ? (
               <button className="library-empty" type="button" onClick={() => handleImport()}><ImageSquare /><strong>还没有照片</strong><span>添加照片或导入整个文件夹</span></button>
-            ) : photos.map((photo) => (
+            ) : !visiblePhotos.length ? <div className="photo-filter-empty"><strong>没有匹配的照片</strong><p>试试缩短文件名，或清除方向筛选。</p></div> : visiblePhotos.map((photo) => (
               <div key={photo.id} className={`photo-row ${photo.id === activePhoto?.id ? "active" : ""} ${checkedSet.has(photo.id) ? "checked" : ""}`}>
                 <button type="button" className="photo-check-button" aria-label={`${checkedSet.has(photo.id) ? "取消勾选" : "勾选"} ${photo.fileName}`} aria-pressed={checkedSet.has(photo.id)} onClick={() => toggleChecked(photo.id)}><span className="check-control">{checkedSet.has(photo.id) && <Check weight="bold" />}</span></button>
-                <button type="button" className="photo-open-button" aria-label={`预览 ${photo.fileName}`} aria-current={photo.id === activePhoto?.id ? "true" : undefined} onClick={() => activatePhoto(photo.id)}><img src={photo.thumbnailDataUrl} alt="" /><span className="photo-row-copy"><strong>{photo.fileName}</strong><small>{formatPixels(photo)}</small></span></button>
+                <button type="button" className="photo-open-button" aria-label={`预览 ${photo.fileName}`} aria-current={photo.id === activePhoto?.id ? "true" : undefined} onClick={() => activatePhoto(photo.id)}><img src={photo.thumbnailDataUrl} alt="" /><span className="photo-row-copy"><strong title={photo.fileName}>{photo.fileName}</strong><small>{formatPixels(photo)}</small></span></button>
               </div>
             ))}
           </div>
@@ -1069,7 +1092,7 @@ function App() {
         </div><footer><button data-modal-initial className="button secondary" type="button" onClick={() => setPendingRelink(null)}>取消</button><button className="button primary" type="button" onClick={confirmReplacementPhoto}>使用此照片恢复</button></footer>
       </section></Modal>}
 
-      {pendingRemoval && <Modal onClose={() => setPendingRemoval(null)}><section className="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-title"><div className="compact-dialog-header"><div><span>照片批次</span><h2 id="remove-title">移除 {pendingRemoval.ids.length + pendingRemoval.missingPaths.length} 张照片？</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setPendingRemoval(null)}><X /></button></div><div className="compact-dialog-body"><p>照片只会从当前批次移除，磁盘上的原图不会删除。这些照片在当前批次中的单独调整也会清除。</p>{!!pendingRemoval.missingPaths.length && <p>包括 {pendingRemoval.missingPaths.length} 张缺失原图的编辑记录；移除后无法通过重新定位找回这些调整。</p>}</div><footer><button className="button secondary" type="button" onClick={() => setPendingRemoval(null)}>取消</button><button className="button primary" type="button" onClick={() => removePhotos(pendingRemoval.ids, pendingRemoval.missingPaths)}>确认移除</button></footer></section></Modal>}
+      {pendingRemoval && <Modal onClose={() => setPendingRemoval(null)}><section className="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-title"><div className="compact-dialog-header"><div><span>照片批次</span><h2 id="remove-title">移除 {pendingRemoval.ids.length + pendingRemoval.missingPaths.length} 张照片？</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setPendingRemoval(null)}><X /></button></div><div className="compact-dialog-body"><p>照片只会从当前批次移除，磁盘上的原图不会删除。这些照片在当前批次中的单独调整也会清除。</p>{pendingHiddenCount > 0 && <p>其中 {pendingHiddenCount} 张照片在当前筛选结果之外。</p>}{!!pendingRemoval.missingPaths.length && <p>包括 {pendingRemoval.missingPaths.length} 张缺失原图的编辑记录；移除后无法通过重新定位找回这些调整。</p>}</div><footer><button className="button secondary" type="button" onClick={() => setPendingRemoval(null)}>取消</button><button className="button primary" type="button" onClick={() => removePhotos(pendingRemoval.ids, pendingRemoval.missingPaths)}>确认移除</button></footer></section></Modal>}
 
       {showTemplateDialog && <Modal onClose={() => setShowTemplateDialog(false)}><section className="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="template-title"><div className="compact-dialog-header"><div><span>模板库</span><h2 id="template-title">另存为新模板</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setShowTemplateDialog(false)}><X /></button></div><div className="compact-dialog-body"><label className="field"><span>模板名称</span><input autoFocus className="text-input" maxLength={maxTemplateNameLength} value={templateName} onChange={(event) => setTemplateName(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") saveNewTemplate(); }} /></label>{templateName && templateNameError(templateName, templates) && <p role="alert">{templateNameError(templateName, templates)}</p>}<p>保存当前方向的相框、四边区域、水印字段、字体和位置，并使用当前照片更新封面。</p></div><footer><button className="button secondary" type="button" onClick={() => setShowTemplateDialog(false)}>取消</button><button className="button primary" type="button" disabled={!!templateNameError(templateName, templates)} onClick={saveNewTemplate}>保存模板</button></footer></section></Modal>}
 
@@ -1082,6 +1105,7 @@ function App() {
                 <section className="export-section">
                   <h3>输出位置与范围</h3>
                   <Segmented label="导出范围" value={exportSettings.range} options={[{ value: "current", label: "当前" }, { value: "selected", label: `已选 ${selectedCount}` }, { value: "all", label: `全部 ${photos.length}` }]} onChange={(range) => setExportSettings((value) => ({ ...value, range }))} />
+                  {hiddenExportCount > 0 && <p className="export-filter-notice">本次包括筛选结果之外的 {hiddenExportCount} 张照片；筛选仅改变列表显示。</p>}
                   <label className={`field ${exportPlan.issues.some((issue) => issue.field === "directory") ? "field-error" : ""}`}><span>输出文件夹</span><button className="directory-picker" type="button" aria-label="选择输出文件夹" onClick={() => void selectOutputDirectory()}><FolderOpen /><span>{exportSettings.directory || "选择本地文件夹"}</span></button></label>
                 </section>
                 <section className="export-section">
