@@ -59,7 +59,7 @@
   t.assert(Math.abs(ys[0]) > 100, 'Photo alignment was clamped to bottom region');
   document.querySelector('button[aria-label="撤销"]').click(); await t.frame();
   // Batch styling is one undo step and leaves each metadata value intact.
-  const weight = [...document.querySelectorAll('select')].find(select => select.parentElement.textContent.includes('字重'));
+  const weight = document.querySelector('select[aria-label="字重"]');
   weight.value = '700'; weight.dispatchEvent(new Event('change', {bubbles:true})); await t.frame();
   nodes.forEach(node => t.assert(node.findOne('Text').fontStyle() === '700', 'Batch weight missed a layer'));
   document.querySelector('button[aria-label="撤销"]').click(); await t.frame();

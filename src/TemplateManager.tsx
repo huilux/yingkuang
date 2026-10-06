@@ -1,3 +1,4 @@
+import { SelectControl } from "./SelectControl";
 import { useRef, useState, type ChangeEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -150,7 +151,7 @@ export function TemplateManager({ templates, defaultTemplateId, photo, onClose, 
           return <div className="template-import-row" key={`${template.id}-${index}`}>
             <TemplatePreview template={template} photo={photo} />
             <div className="template-import-copy"><strong>{template.name}</strong><small>{conflict ? `与现有“${conflict.name}”冲突` : "新增模板"}</small></div>
-            {conflict ? <select aria-label={`处理 ${template.name}`} value={choices[index] ?? ""} onChange={(event) => { const choice = event.currentTarget.value as ImportChoice; setChoices((current) => ({ ...current, [index]: choice })); }}><option value="">选择处理方式</option><option value="overwrite">覆盖现有</option><option value="copy">保留副本</option><option value="skip">跳过</option></select> : <span className="template-import-new"><Check /> 新增</span>}
+            {conflict ? <SelectControl aria-label={`处理 ${template.name}`} value={choices[index] ?? ""} onChange={(event) => { const choice = event.currentTarget.value as ImportChoice; setChoices((current) => ({ ...current, [index]: choice })); }}><option value="">选择处理方式</option><option value="overwrite">覆盖现有</option><option value="copy">保留副本</option><option value="skip">跳过</option></SelectControl> : <span className="template-import-new"><Check /> 新增</span>}
           </div>;
         })}</div>
         <label className="template-restore-default"><input type="checkbox" checked={restoreDefault} onChange={(event) => setRestoreDefault(event.currentTarget.checked)} /><span>同时恢复备份中的新照片默认模板</span></label>

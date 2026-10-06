@@ -1,3 +1,4 @@
+import { SelectControl } from "./SelectControl";
 import { useState } from "react";
 import { Eye, EyeSlash, TextT, Trash } from "@phosphor-icons/react";
 import { calculateGeometry, metadataOptionForSource, metadataValue, resolveLayerText } from "./editor-model";
@@ -71,24 +72,24 @@ export function LayerInspector({ document: design, photo, selectedIds, onSelect,
       <div className="section-heading"><strong>{single ? first.name : `已选择 ${layers.length} 个元素`}</strong><button type="button" className="danger-action" onClick={onDelete}><Trash /> 删除</button></div>
       {single && (first.source === "custom" ? <label className="field"><span>文字内容</span><input className="text-input" maxLength={2000} value={first.customValue} onChange={event => patch({ customValue: event.currentTarget.value })} /></label> : <div className="field"><label><span>当前照片显示值</span><input className="text-input" maxLength={2000} value={photo.overrides?.[first.source] ?? metadataValue(photo, first.source) ?? ""} placeholder="未读取到，可手动补充" onChange={event => onOverride(first.source, event.currentTarget.value)} /></label>{selectedSource && <small className="metadata-source">来源：{selectedSource.sourceLabel}</small>}<button className="restore-field" type="button" disabled={photo.overrides?.[first.source] === undefined} onClick={() => onOverride(first.source)}>恢复原值</button></div>)}
       {!single && <p className="selection-note">样式修改应用到全部所选元素；内容保留各自的值。</p>}
-      <label className="field"><span>所属区域</span><select value={mixed("region") ? "" : first.region} onChange={event => assignRegion(event.currentTarget.value as RegionId)}>
+      <label className="field"><span>所属区域</span><SelectControl aria-label="所属区域" value={mixed("region") ? "" : first.region} onChange={event => assignRegion(event.currentTarget.value as RegionId)}>
         {mixed("region") && <option value="" disabled>多个区域</option>}
         {(Object.keys(regionNames) as RegionId[]).map(id => <option key={id} value={id} disabled={!available(id)}>{regionNames[id]}{id !== "canvas" && !design.regions[id].enabled ? "（未启用）" : ""}</option>)}
-      </select></label>
-      <label className="field"><span>对齐参照</span><select aria-label="对齐参照" value={reference} onChange={event => setReference(event.currentTarget.value as AlignReference | "region")}>
+      </SelectControl></label>
+      <label className="field"><span>对齐参照</span><SelectControl aria-label="对齐参照" value={reference} onChange={event => setReference(event.currentTarget.value as AlignReference | "region")}>
         <option value="region">所属区域（混选时为画布）</option><option value="selection">所选元素</option><option value="canvas">整个画布</option><option value="photo">照片</option>
         {(["top", "bottom", "left", "right"] as const).map(id => <option key={id} value={id} disabled={!available(id)}>{regionNames[id]}</option>)}
-      </select></label>
+      </SelectControl></label>
       <div className="align-grid">
         {([["left", "左对齐"], ["right", "右对齐"], ["center-x", "水平居中"], ["center-y", "垂直居中"], ["top", "顶部对齐"], ["bottom", "底部对齐"]] as const).map(([action, label]) => <button key={action} type="button" disabled={!canArrange} onClick={() => arrange(action)}>{label}</button>)}
         <button type="button" disabled={!canArrange} onClick={() => arrange("third-1")}>第 1 {verticalThirds ? "列" : "行"} · 1/3</button><button type="button" disabled={!canArrange} onClick={() => arrange("third-2")}>第 2 {verticalThirds ? "列" : "行"} · 2/3</button>
         <button type="button" disabled={!canArrange || layers.length < 3} title="至少选择三个元素，保持两端位置并均分文字边界间的空隙" onClick={() => arrange("distribute-x")}>横向等间距</button><button type="button" disabled={!canArrange || layers.length < 3} title="至少选择三个元素，保持两端位置并均分文字边界间的空隙" onClick={() => arrange("distribute-y")}>纵向等间距</button>
       </div>
       <p className="selection-note">{reference === "selection" ? "逐项对齐到所选元素的共同边界。" : "整体对齐到参照，保持元素间相对位置。"}{!canArrange ? "隐藏元素或关闭的区域不参与画布排版。" : ""}</p>
-      <label className="field"><span>字体</span><select value={mixed("fontFamily") ? "" : first.fontFamily} onChange={event => patch({ fontFamily: event.currentTarget.value })}>{mixed("fontFamily") && <option value="" disabled>多种字体</option>}<option value="Noto Sans CJK SC, sans-serif">Noto Sans 思源黑体</option><option value="Noto Serif CJK SC, serif">Noto Serif 思源宋体</option><option value="DejaVu Sans, sans-serif">DejaVu Sans</option><option value="Liberation Sans, sans-serif">Liberation Sans</option><option value="monospace">等宽字体</option></select></label>
+      <label className="field"><span>字体</span><SelectControl aria-label="字体" value={mixed("fontFamily") ? "" : first.fontFamily} onChange={event => patch({ fontFamily: event.currentTarget.value })}>{mixed("fontFamily") && <option value="" disabled>多种字体</option>}<option value="Noto Sans CJK SC, sans-serif">Noto Sans 思源黑体</option><option value="Noto Serif CJK SC, serif">Noto Serif 思源宋体</option><option value="DejaVu Sans, sans-serif">DejaVu Sans</option><option value="Liberation Sans, sans-serif">Liberation Sans</option><option value="monospace">等宽字体</option></SelectControl></label>
       {mixed("fontSize") && <p className="selection-note">字号不同；调整后统一。</p>}
       <SliderRow label="字号" value={first.fontSize} min={8} max={120} onStart={onStart} onEnd={onEnd} onChange={value => patch({ fontSize: value }, false)} />
-      <label className="field"><span>字重</span><select value={mixed("fontWeight") ? "" : first.fontWeight} onChange={event => patch({ fontWeight: Number(event.currentTarget.value) as WatermarkLayer["fontWeight"] })}>{mixed("fontWeight") && <option value="" disabled>多种字重</option>}<option value="400">常规</option><option value="500">中等</option><option value="600">半粗</option><option value="700">粗体</option></select></label>
+      <label className="field"><span>字重</span><SelectControl aria-label="字重" value={mixed("fontWeight") ? "" : first.fontWeight} onChange={event => patch({ fontWeight: Number(event.currentTarget.value) as WatermarkLayer["fontWeight"] })}>{mixed("fontWeight") && <option value="" disabled>多种字重</option>}<option value="400">常规</option><option value="500">中等</option><option value="600">半粗</option><option value="700">粗体</option></SelectControl></label>
       <label className="field color-field"><span>文字颜色{mixed("color") ? " · 多种" : ""}</span><span className="color-input-wrap"><input type="color" value={first.color} onChange={event => patch({ color: event.currentTarget.value })} /><code>{mixed("color") ? "多种颜色" : first.color.toUpperCase()}</code></span></label>
       {mixed("opacity") && <p className="selection-note">透明度不同；调整后统一。</p>}
       <SliderRow label="透明度" value={Math.round(first.opacity * 100)} min={0} max={100} suffix="%" onStart={onStart} onEnd={onEnd} onChange={value => patch({ opacity: value / 100 }, false)} />

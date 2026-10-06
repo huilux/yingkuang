@@ -1,3 +1,5 @@
+import { WindowChrome } from "./WindowChrome";
+import { SelectControl } from "./SelectControl";
 import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -62,6 +64,11 @@ import "./App.css";
 
 const isNative = "__TAURI_INTERNALS__" in window;
 const sessionKey = "yingkuang-session-v2";
+// GTK file filters use case-sensitive globs; camera extensions often arrive uppercase.
+const imageExtensions = ["jpg", "jpeg", "png"].flatMap(extension =>
+  Array.from({ length: 2 ** extension.length }, (_, mask) =>
+    [...extension].map((letter, index) => mask & (1 << index) ? letter.toUpperCase() : letter).join("")));
+
 
 const demoPhoto: PhotoAsset = {
   id: "demo-pana9448",
@@ -372,7 +379,7 @@ function App() {
     setRelinkError(null);
     setLoadState("loading");
     try {
-      const path = await open({ multiple: false, directory: false, title: "重新定位原图", filters: [{ name: "摄影图片", extensions: ["jpg", "jpeg", "png"] }] });
+      const path = await open({ multiple: false, directory: false, title: "重新定位原图", filters: [{ name: "摄影图片", extensions: imageExtensions }] });
       if (typeof path !== "string") return;
       if (photos.some(photo => photo.path === path) || missingPhotos.some(photo => photo.path === path && path !== oldPath)) throw new Error("所选照片已在当前批次中，请选择对应的原图");
       const report = await invoke<InspectReport>("inspect_images_resilient", { paths: [path] });
@@ -562,7 +569,7 @@ function App() {
     try {
       const selection = source === "folder"
         ? await open({ directory: true, multiple: false, title: "选择照片文件夹" })
-        : await open({ multiple: true, directory: false, filters: [{ name: "摄影图片", extensions: ["jpg", "jpeg", "png"] }] });
+        : await open({ multiple: true, directory: false, filters: [{ name: "摄影图片", extensions: imageExtensions }] });
       const selectedPaths = source === "folder" && typeof selection === "string"
         ? await invoke<string[]>("list_image_files", { directory: selection })
         : selection ? (Array.isArray(selection) ? selection : [selection]) : [];
@@ -946,14 +953,14 @@ function App() {
   const activeTemplateRecord = templates.find((item) => item.id === activeTemplate);
 
   return (
-    <div className="app-shell" onKeyDown={event => {
+    <div className={`app-shell ${isNative ? "native-window" : ""}`} onKeyDown={event => {
       if (event.defaultPrevented) return;
       const target = event.target as HTMLElement;
       if (showExport || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery || exportRunning || exportResult) return;
       if (editorRef.current?.isInteracting()) return;
       const command = event.ctrlKey || event.metaKey;
       const rangeUndo = target.closest('input[type="range"]') && command && ["z", "y"].includes(event.key.toLowerCase());
-      if (target.closest("input, textarea, select, [contenteditable=true]") && !rangeUndo) return;
+      if (target.closest("input, textarea, select, [role=combobox], [contenteditable=true]") && !rangeUndo) return;
       if (rangeUndo) commitTransaction();
       if (command && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
       if (command && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); return; }
@@ -970,11 +977,12 @@ function App() {
         updateLayers(moveSelection(selectedLayers.filter(layer => isVisible(layer, activeDocument.regions)), calculateGeometry(activePhoto, activeDocument), { x: direction[0] * step, y: direction[1] * step }));
       }
     }}>
-      <header className="app-header">
+      <WindowChrome enabled={isNative} />
+      <header className="app-header" data-window-drag={isNative ? "" : undefined}>
         <input ref={fileInput} className="visually-hidden" type="file" aria-label="选择照片文件" accept="image/jpeg,image/png" multiple onChange={(event) => void importBrowserPhotos(event)} />
         <input ref={(node) => { folderInput.current = node; node?.setAttribute("webkitdirectory", ""); }} className="visually-hidden" type="file" aria-label="选择照片文件夹" accept="image/jpeg,image/png" multiple onChange={(event) => void importBrowserPhotos(event)} />
-        <div className="brand-block"><span className="brand-mark"><FrameCorners weight="bold" /></span><div><h1>映框</h1><span>摄影水印与相框</span></div></div>
-        <div className="project-title"><span>正在编辑</span><strong title={activePhoto?.fileName}>{activePhoto?.fileName ?? "未导入照片"}</strong></div>
+        <div className="brand-block"><span className="brand-mark"><FrameCorners weight="bold" /></span><h1>映框</h1></div>
+        <div className="project-title"><strong title={activePhoto?.fileName}>{activePhoto?.fileName ?? "未导入照片"}</strong></div>
         <div className="header-actions">
           <button className="icon-button" type="button" aria-label="撤销" disabled={!canUndo} onClick={undo}><ArrowCounterClockwise /></button>
           <button className="icon-button" type="button" aria-label="重做" disabled={!canRedo} onClick={redo}><ArrowClockwise /></button>
@@ -995,12 +1003,12 @@ function App() {
               <button className="button secondary" type="button" onClick={() => handleImport()} disabled={loadState === "loading"}><Plus /> 添加照片</button>
               <button className="button secondary" type="button" onClick={() => handleImport("folder")} disabled={loadState === "loading"}><FolderOpen /> 导入文件夹</button>
             </div>
-            <label className="library-template-select"><span>新照片使用模板</span><select aria-label="新照片使用模板" value={defaultTemplateId} onChange={(event) => setDefaultTemplateId(event.currentTarget.value)}>{templates.map((template) => <option value={template.id} key={template.id}>{template.name}</option>)}</select><small>仅影响之后导入的照片</small></label>
+            <label className="library-template-select"><span>新照片使用模板</span><SelectControl aria-label="新照片使用模板" value={defaultTemplateId} onChange={(event) => setDefaultTemplateId(event.currentTarget.value)}>{templates.map((template) => <option value={template.id} key={template.id}>{template.name}</option>)}</SelectControl><small>仅影响之后导入的照片</small></label>
             {!!photos.length && <details className="photo-filters">
               <summary>查找与筛选{filtersActive ? ` · ${visiblePhotos.length}/${photos.length}` : ""}</summary>
               <div className="photo-filter-fields">
                 <label>文件名<input type="search" aria-label="搜索照片文件名" placeholder="输入文件名" value={photoFilter.query} onChange={event => { const query = event.currentTarget.value; setPhotoFilter(current => ({ ...current, query })); }} /></label>
-                <label>方向<select aria-label="筛选照片方向" value={photoFilter.direction} onChange={event => { const direction = event.currentTarget.value as PhotoDirection; setPhotoFilter(current => ({ ...current, direction })); }}><option value="all">全部方向</option><option value="landscape">横图</option><option value="portrait">竖图</option><option value="square">方图</option></select></label>
+                <label>方向<SelectControl aria-label="筛选照片方向" value={photoFilter.direction} onChange={event => { const direction = event.currentTarget.value as PhotoDirection; setPhotoFilter(current => ({ ...current, direction })); }}><option value="all">全部方向</option><option value="landscape">横图</option><option value="portrait">竖图</option><option value="square">方图</option></SelectControl></label>
               </div>
             </details>}
             {filtersActive && <div className="photo-filter-status"><p role="status">显示 {visiblePhotos.length} / {photos.length} 张{activePhoto && !visiblePhotoIds.has(activePhoto.id) ? "，当前编辑照片在筛选外" : ""}</p><button type="button" onClick={() => setPhotoFilter(emptyPhotoFilter)}>清除筛选</button></div>}
@@ -1116,8 +1124,8 @@ function App() {
                 <section className="export-section">
                   <h3>文件与尺寸</h3>
                   <div className="export-grid">
-                    <label className="field"><span>格式</span><select value={exportSettings.format} onChange={(event) => { const format = event.currentTarget.value as "jpeg" | "png"; setExportSettings((value) => ({ ...value, format })); }}><option value="jpeg">JPEG</option><option value="png">PNG</option></select></label>
-                    <label className="field"><span>成品尺寸</span><select value={exportSettings.size} onChange={(event) => { const size = event.currentTarget.value as "original" | "long-edge"; setExportSettings((value) => ({ ...value, size })); }}><option value="original">保持主照片像素</option><option value="long-edge">指定成品长边</option></select></label>
+                    <label className="field"><span>格式</span><SelectControl aria-label="格式" value={exportSettings.format} onChange={(event) => { const format = event.currentTarget.value as "jpeg" | "png"; setExportSettings((value) => ({ ...value, format })); }}><option value="jpeg">JPEG</option><option value="png">PNG</option></SelectControl></label>
+                    <label className="field"><span>成品尺寸</span><SelectControl aria-label="成品尺寸" value={exportSettings.size} onChange={(event) => { const size = event.currentTarget.value as "original" | "long-edge"; setExportSettings((value) => ({ ...value, size })); }}><option value="original">保持主照片像素</option><option value="long-edge">指定成品长边</option></SelectControl></label>
                   </div>
                   {exportSettings.size === "long-edge" && <label className={`field ${exportPlan.issues.some((issue) => issue.field === "longEdge") ? "field-error" : ""}`}><span>成品长边像素</span><input className="text-input" type="number" min="800" max="30000" step="1" value={exportSettings.longEdge} aria-invalid={exportPlan.issues.some((issue) => issue.field === "longEdge")} onChange={(event) => { const longEdge = Number(event.currentTarget.value); setExportSettings((value) => ({ ...value, longEdge })); }} />{exportPlan.issues.filter((issue) => issue.field === "longEdge").map((issue) => <small className="field-message" key={issue.message}>{issue.message}</small>)}</label>}
                   {exportSettings.size === "long-edge" && <label className="check-field"><input type="checkbox" checked={exportSettings.noUpscale} onChange={event => { const noUpscale = event.currentTarget.checked; setExportSettings(value => ({ ...value, noUpscale })); }} /><span><strong>不放大小图</strong><small>主照片保持原像素或缩小，含边框的成品不超过指定长边</small></span></label>}
@@ -1128,12 +1136,12 @@ function App() {
                   )}
                   <div className="export-grid">
                     <label className={`field ${exportPlan.issues.some((issue) => issue.field === "suffix") ? "field-error" : ""}`}><span>文件名后缀</span><input className="text-input" value={exportSettings.suffix} aria-invalid={exportPlan.issues.some((issue) => issue.field === "suffix")} onChange={(event) => { const suffix = event.currentTarget.value; setExportSettings((value) => ({ ...value, suffix })); }} /><small className="field-hint">可留空；不能含 /、\ 或系统保留字符</small>{exportPlan.issues.filter((issue) => issue.field === "suffix").map((issue) => <small className="field-message" key={issue.message}>{issue.message}</small>)}</label>
-                    <label className="field"><span>重名处理</span><select value={exportSettings.collision} onChange={(event) => { const collision = event.currentTarget.value as ExportSettings["collision"]; setExportSettings((value) => ({ ...value, collision })); }}><option value="number">自动编号</option><option value="skip">跳过</option></select></label>
+                    <label className="field"><span>重名处理</span><SelectControl aria-label="重名处理" value={exportSettings.collision} onChange={(event) => { const collision = event.currentTarget.value as ExportSettings["collision"]; setExportSettings((value) => ({ ...value, collision })); }}><option value="number">自动编号</option><option value="skip">跳过</option></SelectControl></label>
                   </div>
                 </section>
                 <section className="export-section">
                   <h3>隐私与元数据</h3>
-                  <label className="field"><span>元数据</span><select value={exportSettings.metadata} onChange={(event) => { const metadata = event.currentTarget.value as ExportSettings["metadata"]; setExportSettings((value) => ({ ...value, metadata })); }}><option value="none">不保留</option><option value="basic">保留基础拍摄信息</option><option value="supported">尽可能保留受支持信息</option></select></label>
+                  <label className="field"><span>元数据</span><SelectControl aria-label="元数据" value={exportSettings.metadata} onChange={(event) => { const metadata = event.currentTarget.value as ExportSettings["metadata"]; setExportSettings((value) => ({ ...value, metadata })); }}><option value="none">不保留</option><option value="basic">保留基础拍摄信息</option><option value="supported">尽可能保留受支持信息</option></SelectControl></label>
                   <label className={`check-field ${exportSettings.metadata === "none" ? "disabled" : ""}`}><input type="checkbox" checked={exportSettings.includeGps} disabled={exportSettings.metadata === "none"} onChange={(event) => { const includeGps = event.currentTarget.checked; setExportSettings((value) => ({ ...value, includeGps })); }} /><span><strong>保留 GPS 位置</strong><small>默认关闭，避免在分享照片时暴露拍摄地点</small></span></label>
                 </section>
               </fieldset>

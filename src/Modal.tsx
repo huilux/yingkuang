@@ -26,7 +26,7 @@ export function Modal({ children, onClose, className = "modal-backdrop" }: {
     const siblings: HTMLElement[] = [];
     for (let node: HTMLElement | null = modal; node?.parentElement; node = node.parentElement) {
       for (const sibling of node.parentElement.children) {
-        if (sibling === node || !(sibling instanceof HTMLElement)) continue;
+        if (sibling === node || !(sibling instanceof HTMLElement) || sibling.hasAttribute("data-window-chrome")) continue;
         const owner = inertOwners.get(sibling) ?? { count: 0, original: sibling.inert };
         owner.count++;
         inertOwners.set(sibling, owner);

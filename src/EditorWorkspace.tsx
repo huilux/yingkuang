@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, type RefObject } from "react";
-import { FileImage, Magnet, Minus, Plus, SlidersHorizontal, UploadSimple } from "@phosphor-icons/react";
+import { FileImage, Magnet, Minus, Plus, UploadSimple } from "@phosphor-icons/react";
 import type { EditorCanvasHandle, EditorCanvasProps } from "./EditorCanvas";
 import { NumericInput } from "./NumericInput";
 import type { EditorDocument, PhotoAsset } from "./types";
@@ -20,7 +20,7 @@ export function EditorWorkspace({ photo, document, loading, onImport, onToggleSn
   const { snapEnabled } = canvasProps;
   return <>
     <div className="canvas-toolbar">
-      <div className="toolbar-group"><button className="tool-button selected" type="button"><SlidersHorizontal /> 编辑</button><button className={`tool-button ${snapEnabled ? "selected" : ""}`} type="button" aria-pressed={snapEnabled} onClick={onToggleSnap}><Magnet /> 吸附</button></div>
+      <div className="toolbar-group"><button className={`tool-button ${snapEnabled ? "selected" : ""}`} type="button" aria-pressed={snapEnabled} title="拖动水印时对齐区域边缘与中心线" onClick={onToggleSnap}><Magnet /> 吸附</button><span className="canvas-interaction-hint">空格 + 拖动平移</span></div>
       <div className="zoom-control">
         <button type="button" aria-label="缩小" onClick={() => canvasRef.current?.setZoom(zoom - 10)}><Minus /></button><input aria-label="画布缩放" type="range" min="10" max="300" step="any" value={zoom} onChange={event => { const value = Number(event.currentTarget.value); setZoom(value); canvasRef.current?.setZoom(value); }} /><label className="zoom-number"><NumericInput label="缩放比例" value={Math.round(zoom)} min={10} max={300} onCommit={value => { setZoom(value); canvasRef.current?.setZoom(value); }} /><span>%</span></label><button type="button" aria-label="放大" onClick={() => canvasRef.current?.setZoom(zoom + 10)}><Plus /></button><button className="fit-button" type="button" onClick={() => canvasRef.current?.fit()}>适应</button>
       </div>

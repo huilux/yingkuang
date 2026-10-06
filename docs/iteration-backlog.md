@@ -6,11 +6,11 @@
 
 | 优先级/目标版本 | 分支与提交说明 | 可落地任务与验收 |
 | --- | --- | --- |
-| P1 / 0.6.0 | `codex/iteration-17-batch-relink`；`feat(recovery): relink missing photos from a folder` | 用户选择新素材根目录，按名称和尺寸提出匹配；歧义逐项确认，预览后一次确认。保留顺序、编辑、模板及勾选；取消、错误和重复路径不改变旧记录。验证 200 条记录及重启恢复。 |
-| P2 / 0.7.0 | `codex/iteration-18-export-presets`；`feat(export): save named output presets` | 分享图/原尺寸交付的命名预设，版本化独立 schema；默认保留当前输出目录，用户可选择是否保存目录。切换不执行导出；非法/损坏预设保留原始备份，配套容量和名称限制。 |
-| P2 / 0.8.0 | `codex/iteration-19-export-history`；`feat(export): retain recent results and filter failed photos` | 本地保留最近 20 次结果及失败路径，提供明确清除；历史失败可选入当前批次，重新导出前核对当前文档和设置。成功后更新状态，筛选保持隐藏勾选；不保存照片像素或 GPS 内容。 |
+| P1 / 0.6.0 | `codex/iteration-18-batch-relink`；`feat(recovery): relink missing photos from a folder` | 用户选择新素材根目录，按名称和尺寸提出匹配；歧义逐项确认，预览后一次确认。保留顺序、编辑、模板及勾选；取消、错误和重复路径不改变旧记录。验证 200 条记录及重启恢复。 |
+| P2 / 0.7.0 | `codex/iteration-19-export-presets`；`feat(export): save named output presets` | 分享图/原尺寸交付的命名预设，版本化独立 schema；默认保留当前输出目录，用户可选择是否保存目录。切换不执行导出；非法/损坏预设保留原始备份，配套容量和名称限制。 |
+| P2 / 0.8.0 | `codex/iteration-20-export-history`；`feat(export): retain recent results and filter failed photos` | 本地保留最近 20 次结果及失败路径，提供明确清除；历史失败可选入当前批次，重新导出前核对当前文档和设置。成功后更新状态，筛选保持隐藏勾选；不保存照片像素或 GPS 内容。 |
 | P2 / 修复版本按实测确定 | `codex/audit-numeric-control-ranges`；确认后使用 `fix(editor): ...` | 独立复现合法模板高字号、模糊与留白在控件中的显示和修改范围；校验读数、微调、撤销与实际输出，不能通过收紧数据模型掩盖界面范围差异。当前只是审查候选。 |
-| 发布前验证 | `codex/validation-clean-linux`，基于 `v0.5.6`；有修复再递增补丁版本 | 干净系统双击 AppImage、首次启动/重启、JPEG/PNG、目录选择与字体验证；扩展真实相机素材和真实 96MP 原片，按失败证据决定后续修复。 |
+| 发布前验证 | `codex/validation-clean-linux`，基于 `v0.5.7`；有修复再递增补丁版本 | 干净系统双击 AppImage、首次启动/重启、JPEG/PNG、目录选择与字体验证；扩展真实相机素材和真实 96MP 原片，按失败证据决定后续修复。 |
 
 后续迭代仍沿用上一验收提交建分支、Conventional Commits、统一五处版本号、验证通过后打带说明标签；不得把以上计划版本当作已交付。
 

@@ -26,7 +26,7 @@
   const baselineMs=Math.round(performance.now()-started);
   const button=text=>[...host.querySelectorAll('button')].find(button=>button.textContent.trim()===text);
   host.querySelector('.photo-filters summary').click();await t.frame();
-  const direction=host.querySelector('[aria-label="筛选照片方向"]');
+  const direction=host.querySelector('select[aria-label="筛选照片方向"]');
   const query=host.querySelector('[aria-label="搜索照片文件名"]');
   const setDirection=async value=>{Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(direction,value);direction.dispatchEvent(new Event('change',{bubbles:true}));await t.frame();};
   await setDirection('portrait');

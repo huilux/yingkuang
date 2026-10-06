@@ -5,6 +5,7 @@ Requires system PyGObject, WebKitGTK 4.1 and a running Vite dev server:
     xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422
 """
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -15,7 +16,7 @@ gi.require_version("WebKit2", "4.1")
 from gi.repository import GLib, Gtk, WebKit2  # noqa: E402
 
 scripts = Path(__file__).resolve().parent
-checks = ["konva-canvas-regression.js", "multi-selection-regression.js", "precision-regression.js", "drag-persistence-regression.js", "current-canvas-batch-regression.js", "export-document-regression.js", "export-workflow-regression.js", "export-retry-regression.js", "photo-detail-regression.js", "browser-import-regression.js", "editor-photo-loading-regression.js", "import-regression.js", "restore-regression.js", "session-failure-regression.js", "modal-regression.js", "metadata-undo-regression.js", "template-save-regression.js", "export-improvements-regression.js", "photo-relink-regression.js", "missing-photo-removal-regression.js", "storage-recovery-regression.js", "template-import-regression.js", "editing-guards-regression.js", "batch-filter-regression.js", "export-filename-regression.js", "parameter-picker-regression.js", "export-feedback-regression.js", "slider-undo-regression.js"]
+checks = ["konva-canvas-regression.js", "multi-selection-regression.js", "precision-regression.js", "drag-persistence-regression.js", "current-canvas-batch-regression.js", "export-document-regression.js", "export-workflow-regression.js", "export-retry-regression.js", "photo-detail-regression.js", "browser-import-regression.js", "editor-photo-loading-regression.js", "import-regression.js", "restore-regression.js", "session-failure-regression.js", "modal-regression.js", "metadata-undo-regression.js", "template-save-regression.js", "export-improvements-regression.js", "photo-relink-regression.js", "missing-photo-removal-regression.js", "storage-recovery-regression.js", "template-import-regression.js", "editing-guards-regression.js", "batch-filter-regression.js", "export-filename-regression.js", "parameter-picker-regression.js", "export-feedback-regression.js", "slider-undo-regression.js", "interface-controls-regression.js"]
 if len(sys.argv) > 2:
     checks = sys.argv[2:]
 
@@ -54,7 +55,7 @@ def received(_manager, message):
 manager.connect("script-message-received::regression", received)
 view = WebKit2.WebView(user_content_manager=manager)
 window = Gtk.Window()
-window.set_default_size(1440, 920)
+window.set_default_size(int(os.environ.get("WATERMARK_TEST_WIDTH", "1440")), int(os.environ.get("WATERMARK_TEST_HEIGHT", "920")))
 window.add(view)
 window.show_all()
 
