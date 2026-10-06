@@ -13,7 +13,7 @@ use lcms2::{Intent, PixelFormat, Profile, Transform};
 use little_exif::{exif_tag::ExifTag, ifd::ExifTagGroup, metadata::Metadata};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     io::{BufWriter, ErrorKind, Read, Write},
     path::{Path, PathBuf},
@@ -458,6 +458,7 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
     let mut largest_width = 0;
     let mut largest_height = 0;
     let mut largest_file_name = String::new();
+    let mut reserved_outputs = HashSet::new();
     for item in &request.items {
         if errors.len() >= 20 {
             errors.truncate(20);
@@ -473,9 +474,15 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
             errors.push(format!("{file_name}：原图不存在或不可读取"));
             continue;
         }
-        if let Err(error) = unique_output_path(path, &request.settings) {
-            errors.push(format!("{file_name}：{error}"));
-            continue;
+        match unique_output_path_with_reserved(path, &request.settings, &reserved_outputs) {
+            Ok(Some(output)) => {
+                reserved_outputs.insert(output);
+            }
+            Ok(None) => {}
+            Err(error) => {
+                errors.push(format!("{file_name}：{error}"));
+                continue;
+            }
         }
         let (mut width, mut height) = match image::image_dimensions(path) {
             Ok(dimensions) => dimensions,
@@ -1094,6 +1101,14 @@ fn render_item(
 }
 
 fn unique_output_path(input: &Path, settings: &ExportSettings) -> Result<Option<PathBuf>, String> {
+    unique_output_path_with_reserved(input, settings, &HashSet::new())
+}
+
+fn unique_output_path_with_reserved(
+    input: &Path,
+    settings: &ExportSettings,
+    reserved: &HashSet<PathBuf>,
+) -> Result<Option<PathBuf>, String> {
     let directory = Path::new(&settings.directory);
     let stem = input
         .file_stem()
@@ -1106,7 +1121,7 @@ fn unique_output_path(input: &Path, settings: &ExportSettings) -> Result<Option<
     };
     let suffix = &settings.suffix;
     let candidate = directory.join(format!("{stem}{suffix}.{extension}"));
-    if !path_occupied(&candidate)? && candidate != input {
+    if !reserved.contains(&candidate) && !path_occupied(&candidate)? && candidate != input {
         return Ok(Some(candidate));
     }
     if settings.collision == "skip" {
@@ -1114,7 +1129,7 @@ fn unique_output_path(input: &Path, settings: &ExportSettings) -> Result<Option<
     }
     for number in 2..=9999 {
         let path = directory.join(format!("{stem}{suffix}-{number}.{extension}"));
-        if !path_occupied(&path)? && path != input {
+        if !reserved.contains(&path) && !path_occupied(&path)? && path != input {
             return Ok(Some(path));
         }
     }
@@ -2142,6 +2157,133 @@ mod tests {
                     .iter()
                     .any(|error| error.contains("输出文件"))
             );
+        }
+    }
+
+    fn same_name_batch(root: &Path, stem: &str, count: usize, format: &str) -> ExportRequest {
+        let output = root.join("exports");
+        fs::create_dir(&output).unwrap();
+        let mut document = test_document();
+        document.layers.clear();
+        let items = (0..count)
+            .map(|index| {
+                let directory = root.join(format!("source-{index}"));
+                fs::create_dir(&directory).unwrap();
+                let input = directory.join(format!("{stem}.png"));
+                RgbaImage::from_pixel(8, 8, Rgba([120, 80, 40, 255]))
+                    .save(&input)
+                    .unwrap();
+                ExportItem {
+                    path: input.to_string_lossy().into_owned(),
+                    document: document.clone(),
+                    overrides: HashMap::new(),
+                }
+            })
+            .collect();
+        ExportRequest {
+            items,
+            settings: ExportSettings {
+                suffix: String::new(),
+                size: "original".into(),
+                format: format.into(),
+                ..test_settings(&output)
+            },
+        }
+    }
+
+    #[test]
+    fn preflight_rejects_batch_numbering_that_exceeds_filename_limit() {
+        for format in ["png", "jpeg"] {
+            let root = tempfile::tempdir().unwrap();
+            let request = same_name_batch(root.path(), &"a".repeat(249), 10, format);
+            let preflight = preflight_export_sync(&request);
+            assert_eq!(
+                fs::read_dir(&request.settings.directory).unwrap().count(),
+                0
+            );
+            let summary =
+                run_export_with_progress(request, &AtomicBool::new(false), |_| {}).unwrap();
+            assert_eq!((summary.succeeded, summary.failed), (9, 1));
+            assert!(summary.failures[0].reason.contains("请缩短"));
+            assert!(
+                !preflight.ready,
+                "Preflight accepted a batch that exports nine files then fails at -10"
+            );
+            assert!(preflight.errors[0].contains("请缩短"));
+        }
+    }
+
+    #[test]
+    fn preflight_matches_numbered_and_skipped_same_name_batches() {
+        for collision in ["number", "skip"] {
+            let root = tempfile::tempdir().unwrap();
+            let mut request = same_name_batch(root.path(), "same-photo", 200, "png");
+            request.settings.collision = collision.into();
+            let directory = PathBuf::from(&request.settings.directory);
+            let originals: Vec<_> = request
+                .items
+                .iter()
+                .map(|item| (item.path.clone(), fs::read(&item.path).unwrap()))
+                .collect();
+            let preflight = preflight_export_sync(&request);
+            assert!(preflight.ready, "{:?}", preflight.errors);
+            assert_eq!(preflight.total, 200);
+            assert_eq!(fs::read_dir(&directory).unwrap().count(), 0);
+            let summary =
+                run_export_with_progress(request.clone(), &AtomicBool::new(false), |_| {}).unwrap();
+            assert_eq!(summary.failed, 0);
+            let expected = if collision == "number" {
+                (200, 0)
+            } else {
+                (1, 199)
+            };
+            assert_eq!((summary.succeeded, summary.skipped), expected);
+            assert_eq!(fs::read_dir(&directory).unwrap().count(), expected.0);
+            for (path, bytes) in originals {
+                assert_eq!(fs::read(path).unwrap(), bytes);
+            }
+            for entry in fs::read_dir(&directory).unwrap() {
+                assert!(image::image_dimensions(entry.unwrap().path()).is_ok());
+            }
+            if collision == "number" {
+                assert!(directory.join("same-photo-200.png").is_file());
+            } else {
+                assert!(preflight_export_sync(&request).ready);
+                let existing = fs::read(directory.join("same-photo.png")).unwrap();
+                let repeated =
+                    run_export_with_progress(request, &AtomicBool::new(false), |_| {}).unwrap();
+                assert_eq!(
+                    (repeated.succeeded, repeated.skipped, repeated.failed),
+                    (0, 200, 0)
+                );
+                assert_eq!(
+                    fs::read(directory.join("same-photo.png")).unwrap(),
+                    existing
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn preflight_accepts_shortened_batch_names_and_long_name_skip() {
+        for format in ["png", "jpeg"] {
+            for collision in ["number", "skip"] {
+                let root = tempfile::tempdir().unwrap();
+                let stem = "a".repeat(if collision == "number" { 248 } else { 249 });
+                let mut request = same_name_batch(root.path(), &stem, 10, format);
+                request.settings.collision = collision.into();
+                let preflight = preflight_export_sync(&request);
+                assert!(preflight.ready, "{:?}", preflight.errors);
+                let summary =
+                    run_export_with_progress(request, &AtomicBool::new(false), |_| {}).unwrap();
+                let expected = if collision == "number" {
+                    (10, 0)
+                } else {
+                    (1, 9)
+                };
+                assert_eq!((summary.succeeded, summary.skipped), expected);
+                assert_eq!(summary.failed, 0);
+            }
         }
     }
 
