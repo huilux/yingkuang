@@ -459,6 +459,11 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
     let mut largest_height = 0;
     let mut largest_file_name = String::new();
     for item in &request.items {
+        if errors.len() >= 20 {
+            errors.truncate(20);
+            errors.push("其余预检错误已省略，请先处理以上项目".to_owned());
+            break;
+        }
         let path = Path::new(&item.path);
         let file_name = path
             .file_name()
@@ -466,6 +471,10 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
             .unwrap_or("未命名照片");
         if !path.is_file() {
             errors.push(format!("{file_name}：原图不存在或不可读取"));
+            continue;
+        }
+        if let Err(error) = unique_output_path(path, &request.settings) {
+            errors.push(format!("{file_name}：{error}"));
             continue;
         }
         let (mut width, mut height) = match image::image_dimensions(path) {
@@ -489,10 +498,6 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
             largest_width = output_width;
             largest_height = output_height;
             largest_file_name = file_name.to_owned();
-        }
-        if errors.len() >= 20 {
-            errors.push("其余预检错误已省略，请先处理以上项目".to_owned());
-            break;
         }
     }
     let mut warnings = Vec::new();
@@ -1120,6 +1125,9 @@ fn path_occupied(path: &Path) -> Result<bool, String> {
     match fs::symlink_metadata(path) {
         Ok(_) => Ok(true),
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+        Err(error) if error.kind() == ErrorKind::InvalidFilename => Err(format!(
+            "输出文件名或路径过长或无效，请缩短原文件名、后缀或输出目录路径（{error}）"
+        )),
         Err(error) => Err(format!("无法检查输出文件：{error}")),
     }
 }
@@ -2102,6 +2110,111 @@ mod tests {
         settings.suffix.clear();
         let output = unique_output_path(&input, &settings).unwrap().unwrap();
         assert_eq!(output.file_name().unwrap(), "photo.jpg");
+    }
+
+    #[test]
+    fn preflight_rejects_names_that_the_filesystem_cannot_create() {
+        let root = tempfile::tempdir().unwrap();
+        for stem in ["a".repeat(249), "图".repeat(83), "📷".repeat(62)] {
+            let input = root.path().join(format!("{stem}.png"));
+            RgbaImage::from_pixel(8, 8, Rgba([120, 80, 40, 255]))
+                .save(&input)
+                .unwrap();
+            let settings = test_settings(root.path());
+            let item = ExportItem {
+                path: input.to_string_lossy().into_owned(),
+                document: test_document(),
+                overrides: HashMap::new(),
+            };
+            let output_error = unique_output_path(&input, &settings).unwrap_err();
+            assert!(output_error.contains("请缩短"), "{output_error}");
+            let preflight = preflight_export_sync(&ExportRequest {
+                items: vec![item],
+                settings,
+            });
+            assert!(
+                !preflight.ready,
+                "Preflight accepted an output filename rejected by the filesystem"
+            );
+            assert!(
+                preflight
+                    .errors
+                    .iter()
+                    .any(|error| error.contains("输出文件"))
+            );
+        }
+    }
+
+    #[test]
+    fn preflight_bounds_errors_when_every_original_is_missing() {
+        let root = tempfile::tempdir().unwrap();
+        let request = ExportRequest {
+            items: (0..200)
+                .map(|index| ExportItem {
+                    path: root
+                        .path()
+                        .join(format!("missing-{index}.png"))
+                        .to_string_lossy()
+                        .into_owned(),
+                    document: test_document(),
+                    overrides: HashMap::new(),
+                })
+                .collect(),
+            settings: test_settings(root.path()),
+        };
+        let preflight = preflight_export_sync(&request);
+        assert!(!preflight.ready);
+        assert_eq!(preflight.errors.len(), 21);
+        assert!(preflight.errors.last().unwrap().contains("省略"));
+    }
+
+    #[test]
+    fn preflight_checks_collision_number_length_and_preserves_skip() {
+        let root = tempfile::tempdir().unwrap();
+        let stem = "a".repeat(245);
+        let input = root.path().join(format!("{stem}.png"));
+        RgbaImage::from_pixel(8, 8, Rgba([120, 80, 40, 255]))
+            .save(&input)
+            .unwrap();
+        let settings = test_settings(root.path());
+        let candidate = unique_output_path(&input, &settings).unwrap().unwrap();
+        fs::write(&candidate, b"existing export").unwrap();
+        let mut request = ExportRequest {
+            items: vec![ExportItem {
+                path: input.to_string_lossy().into_owned(),
+                document: test_document(),
+                overrides: HashMap::new(),
+            }],
+            settings,
+        };
+        let preflight = preflight_export_sync(&request);
+        assert!(!preflight.ready);
+        assert!(preflight.errors[0].contains("请缩短"));
+        request.settings.collision = "skip".into();
+        assert!(preflight_export_sync(&request).ready);
+        assert!(
+            export_one(&request.items[0], &request.settings)
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(fs::read(candidate).unwrap(), b"existing export");
+        request.settings.collision = "number".into();
+        request.settings.suffix.clear();
+        assert!(preflight_export_sync(&request).ready);
+        request.settings.format = "png".into();
+        let (output, _) = export_one(&request.items[0], &request.settings)
+            .unwrap()
+            .unwrap();
+        assert_ne!(output, input);
+        assert!(
+            output
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .ends_with("-2.png")
+        );
+        assert!(image::image_dimensions(output).is_ok());
+        assert_eq!(image::image_dimensions(input).unwrap(), (8, 8));
     }
 
     #[test]
