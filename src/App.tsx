@@ -947,9 +947,12 @@ function App() {
     <div className="app-shell" onKeyDown={event => {
       if (event.defaultPrevented) return;
       const target = event.target as HTMLElement;
-      if (showExport || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery || exportRunning || exportResult || target.closest("input, textarea, select, [contenteditable=true]")) return;
+      if (showExport || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery || exportRunning || exportResult) return;
       if (editorRef.current?.isInteracting()) return;
       const command = event.ctrlKey || event.metaKey;
+      const rangeUndo = target.closest('input[type="range"]') && command && ["z", "y"].includes(event.key.toLowerCase());
+      if (target.closest("input, textarea, select, [contenteditable=true]") && !rangeUndo) return;
+      if (rangeUndo) commitTransaction();
       if (command && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
       if (command && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); return; }
       if (command && event.key.toLowerCase() === "a" && activeDocument) {
