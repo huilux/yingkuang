@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Eye, EyeSlash, Plus, TextT, Trash } from "@phosphor-icons/react";
-import { calculateGeometry, metadataOptionForSource, metadataOptionsForPhoto, metadataValue, resolveLayerText } from "./editor-model";
+import { Eye, EyeSlash, TextT, Trash } from "@phosphor-icons/react";
+import { calculateGeometry, metadataOptionForSource, metadataValue, resolveLayerText } from "./editor-model";
 import { isVisible, regionNames } from "./canvas-camera";
 import { SliderRow, Segmented } from "./EditorControls";
 import { NumericInput } from "./NumericInput";
+import { ParameterPicker } from "./ParameterPicker";
 import { positionPatch, type AlignReference, type ArrangeAction, type LayerPatch } from "./selection-model";
 import type { EditorDocument, LayerSource, PhotoAsset, RegionId, WatermarkLayer } from "./types";
 
@@ -26,8 +27,6 @@ type Props = {
 };
 
 export function LayerInspector({ document: design, photo, selectedIds, onSelect, onSelectionChange, onPatch, onAdd, onDelete, onStart, onEnd, onOverride, onArrange }: Props) {
-  const [showMenu, setShowMenu] = useState(false);
-  const [metadataQuery, setMetadataQuery] = useState("");
   const [reference, setReference] = useState<AlignReference | "region">("region");
   const layers = design.layers.filter(layer => selectedIds.includes(layer.id));
   const first = layers[0];
@@ -40,11 +39,6 @@ export function LayerInspector({ document: design, photo, selectedIds, onSelect,
   const canArrange = layers.length > 0 && layers.every(layer => isVisible(layer, design.regions)) && (actualReference === "photo" || actualReference === "selection" || available(actualReference));
   const verticalThirds = actualReference === "left" || actualReference === "right";
   const arrange = (action: ArrangeAction) => onArrange(action, actualReference);
-  const addOptions = metadataOptionsForPhoto(photo);
-  const visibleAddOptions = addOptions.filter(option => {
-    const query = metadataQuery.trim().toLocaleLowerCase();
-    return !query || `${option.label} ${option.sourceLabel} ${option.value ?? ""}`.toLocaleLowerCase().includes(query);
-  });
   const selectedSource = single && first.source !== "custom" ? metadataOptionForSource(first.source) : null;
 
   function assignRegion(region: RegionId) {
@@ -66,7 +60,7 @@ export function LayerInspector({ document: design, photo, selectedIds, onSelect,
 
   return <div className="inspector-scroll" id="panel-watermark" role="tabpanel" aria-labelledby="tab-watermark">
     <section className="inspector-section layer-section">
-      <div className="section-heading layer-heading"><strong>水印图层</strong><div className="layer-add-wrap"><button type="button" onClick={() => { setShowMenu(value => !value); setMetadataQuery(""); }}><Plus /> 添加参数</button>{showMenu && <div className="layer-add-menu"><input autoFocus aria-label="搜索元数据参数" placeholder="搜索参数或 EXIF 标签" value={metadataQuery} onChange={event => setMetadataQuery(event.currentTarget.value)} /> <div className="layer-add-options">{visibleAddOptions.map(option => <button type="button" key={option.source} onClick={() => { onAdd(option.source); setShowMenu(false); }}><strong>{option.label}</strong><small>{option.sourceLabel}{option.value ? ` · ${option.value}` : " · 未读取到"}</small></button>)}</div>{!visibleAddOptions.length && <p>没有匹配的参数</p>}</div>}</div></div>
+      <div className="section-heading layer-heading"><strong>水印图层</strong><ParameterPicker photo={photo} onAdd={onAdd} /></div>
       <div className="selection-toolbar"><span>Shift 点选多选{layers.length > 0 ? ` · 已选 ${layers.length} 项` : ""}</span><button type="button" onClick={() => onSelectionChange(design.layers.filter(layer => isVisible(layer, design.regions)).map(layer => layer.id))}>全选</button><button type="button" disabled={!layers.length} onClick={() => onSelectionChange([])}>清除</button></div>
       <div className="layer-list">{design.layers.map(item => <div className={`layer-row ${selectedIds.includes(item.id) ? "selected" : ""}`} key={item.id}>
         <button className="layer-main" type="button" aria-pressed={selectedIds.includes(item.id)} aria-label={`选择图层 ${item.name}`} onClick={event => onSelect(item.id, event.shiftKey)}><TextT /><span><strong>{item.name}</strong><small>{item.region !== "canvas" && !design.regions[item.region].enabled ? "区域已关闭 · 开启后恢复" : photo ? resolveLayerText(item, photo) : ""}</small></span></button>
