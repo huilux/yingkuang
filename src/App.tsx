@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -137,6 +137,8 @@ function initialDocuments() {
 }
 
 function App() {
+  const exportDirectoryId = useId();
+  const exportBody = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const transactionStart = useRef<HistoryEntry | null>(null);
@@ -1103,13 +1105,13 @@ function App() {
         <Modal onClose={exportChecking ? undefined : closeExport}>
           <section className="export-dialog" role="dialog" aria-modal="true" aria-labelledby="export-title" aria-busy={exportChecking}>
             <div className="export-dialog-header"><div><span>{exportSettings.range === "current" ? "单张导出" : "批量导出"}</span><h2 id="export-title">导出 {exportPlan.items.length} 张照片</h2></div><button data-export-close className="icon-button" type="button" aria-label="关闭" disabled={exportChecking} onClick={closeExport}><X /></button></div>
-            <div className="export-body">
+            <div className="export-body" ref={exportBody}>
               <fieldset className="export-main" disabled={exportChecking}>
                 <section className="export-section">
                   <h3>输出位置与范围</h3>
                   <Segmented label="导出范围" value={exportSettings.range} options={[{ value: "current", label: "当前" }, { value: "selected", label: `已选 ${selectedCount}` }, { value: "all", label: `全部 ${photos.length}` }]} onChange={(range) => setExportSettings((value) => ({ ...value, range }))} />
                   {hiddenExportCount > 0 && <p className="export-filter-notice">本次包括筛选结果之外的 {hiddenExportCount} 张照片；筛选仅改变列表显示。</p>}
-                  <label className={`field ${exportPlan.issues.some((issue) => issue.field === "directory") ? "field-error" : ""}`}><span>输出文件夹</span><button className="directory-picker" type="button" aria-label="选择输出文件夹" onClick={() => void selectOutputDirectory()}><FolderOpen /><span>{exportSettings.directory || "选择本地文件夹"}</span></button></label>
+                  <label className={`field ${exportPlan.issues.some((issue) => issue.field === "directory") ? "field-error" : ""}`}><span>输出文件夹</span><button className="directory-picker" type="button" aria-label="选择输出文件夹" aria-describedby={exportDirectoryId} title={exportSettings.directory || undefined} onClick={() => void selectOutputDirectory()}><FolderOpen /><span id={exportDirectoryId}>{exportSettings.directory || "选择本地文件夹"}</span></button></label>
                 </section>
                 <section className="export-section">
                   <h3>文件与尺寸</h3>
@@ -1140,11 +1142,11 @@ function App() {
                 <div><span>文件名示例</span><code>{exportPlan.sampleFileName}</code></div>
                 {exportPlan.sampleDimensions && <div><span>样例成品</span><strong>{exportPlan.sampleDimensions} px</strong></div>}
                 {!!exportPlan.estimatedPixels && <small>预计处理 {(exportPlan.estimatedPixels / 1_000_000).toFixed(1)} 百万像素；实际耗时还受格式与磁盘速度影响。</small>}
-                {!!visibleExportIssues.length && <div className="export-issues" role="alert"><strong><WarningCircle /> 请先处理</strong>{visibleExportIssues.map((issue) => <small key={`${issue.field}-${issue.message}`}>{issue.message}</small>)}</div>}
+                {!!visibleExportIssues.length && <div className="export-issues" role="alert"><strong><WarningCircle /> 请先处理</strong>{visibleExportIssues.map((issue, index) => <small key={`${issue.field}-${index}`}>{issue.message}</small>)}</div>}
                 {!visibleExportIssues.length && <div className="export-ready"><Check /> 设置可用，开始前还会检查原图与输出目录。</div>}
               </aside>
             </div>
-            <div className="export-dialog-footer"><span>原图不会被覆盖，设置会随上次工作自动恢复。</span><div><button className="button secondary" type="button" disabled={exportChecking} onClick={closeExport}>取消</button><button className="button primary" type="button" disabled={exportChecking || visibleExportIssues.length > 0} onClick={() => void startExport()}>{exportChecking ? "正在预检…" : isNative ? "预检并开始导出" : "保存设置"}</button></div></div>
+            <div className="export-dialog-footer"><span>原图不会被覆盖，设置会随上次工作自动恢复。</span><div>{!!visibleExportIssues.length && <button className="button secondary" type="button" disabled={exportChecking} onClick={() => { exportBody.current?.scrollTo({ top: 0 }); exportBody.current?.querySelector<HTMLButtonElement>(".directory-picker")?.focus({ preventScroll: true }); }}>返回修改设置</button>}<button className="button secondary" type="button" disabled={exportChecking} onClick={closeExport}>取消</button><button className="button primary" type="button" disabled={exportChecking || visibleExportIssues.length > 0} onClick={() => void startExport()}>{exportChecking ? "正在预检…" : isNative ? "预检并开始导出" : "保存设置"}</button></div></div>
           </section>
         </Modal>
       )}

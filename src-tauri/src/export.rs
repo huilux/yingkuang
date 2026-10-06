@@ -459,6 +459,14 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
     let mut largest_height = 0;
     let mut largest_file_name = String::new();
     let mut reserved_outputs = HashSet::new();
+    let mut file_name_counts = HashMap::new();
+    for item in &request.items {
+        let name = Path::new(&item.path)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("未命名照片");
+        *file_name_counts.entry(name).or_insert(0_usize) += 1;
+    }
     for item in &request.items {
         if errors.len() >= 20 {
             errors.truncate(20);
@@ -470,8 +478,13 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
             .file_name()
             .and_then(|value| value.to_str())
             .unwrap_or("未命名照片");
+        let error_name = if file_name_counts[file_name] > 1 {
+            item.path.as_str()
+        } else {
+            file_name
+        };
         if !path.is_file() {
-            errors.push(format!("{file_name}：原图不存在或不可读取"));
+            errors.push(format!("{error_name}：原图不存在或不可读取"));
             continue;
         }
         match unique_output_path_with_reserved(path, &request.settings, &reserved_outputs) {
@@ -480,14 +493,14 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
             }
             Ok(None) => {}
             Err(error) => {
-                errors.push(format!("{file_name}：{error}"));
+                errors.push(format!("{error_name}：{error}"));
                 continue;
             }
         }
         let (mut width, mut height) = match image::image_dimensions(path) {
             Ok(dimensions) => dimensions,
             Err(error) => {
-                errors.push(format!("{file_name}：无法读取图片尺寸（{error}）"));
+                errors.push(format!("{error_name}：无法读取图片尺寸（{error}）"));
                 continue;
             }
         };
@@ -497,7 +510,7 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
         let (output_width, output_height) =
             output_dimensions(width, height, &item.document, &request.settings);
         if let Err(error) = validate_output_dimensions(output_width, output_height) {
-            errors.push(format!("{file_name}：{error}"));
+            errors.push(format!("{error_name}：{error}"));
         }
         let pixels = output_width as u64 * output_height as u64;
         estimated_pixels = estimated_pixels.saturating_add(pixels);
@@ -2189,6 +2202,31 @@ mod tests {
                 ..test_settings(&output)
             },
         }
+    }
+
+    #[test]
+    fn preflight_identifies_each_same_name_original() {
+        let root = tempfile::tempdir().unwrap();
+        let mut request = same_name_batch(root.path(), "same-photo", 2, "png");
+        for item in &request.items {
+            fs::write(&item.path, b"corrupt image").unwrap();
+        }
+        let preflight = preflight_export_sync(&request);
+        assert!(!preflight.ready);
+        assert_eq!(preflight.errors.len(), 2);
+        for item in &request.items {
+            assert!(
+                preflight
+                    .errors
+                    .iter()
+                    .any(|error| error.contains(&item.path)),
+                "The user cannot identify which same-photo.png original failed: {:?}",
+                preflight.errors
+            );
+        }
+        request.items.pop();
+        let single = preflight_export_sync(&request);
+        assert!(single.errors[0].starts_with("same-photo.png："));
     }
 
     #[test]

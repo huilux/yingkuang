@@ -22,7 +22,7 @@
     if (command === 'preflight_export') {
       preflights++;
       const ready=args.request.settings.suffix==='';
-      return {ready,total:1,warnings:[],errors:ready?[]:['a'.repeat(249)+'.png：输出文件名或路径过长或无效，请缩短原文件名、后缀或输出目录路径']};
+      return {ready,total:1,warnings:[],errors:ready?[]:Array.from({length:20},(_,index)=>`/photos/source-${index}/${'a'.repeat(249)}.png：输出文件名或路径过长或无效，请缩短原文件名、后缀或输出目录路径`)};
     }
     if (command === 'export_images') {
       requests.push(structuredClone(args.request));
@@ -47,14 +47,25 @@
     const issues=host.querySelector('.export-issues');
     t.assert(issues.getBoundingClientRect().right<=host.querySelector('.export-body').getBoundingClientRect().right,'Filename error is clipped outside the visible summary');
     t.assert(issues.scrollWidth<=issues.clientWidth+1,'Long filename overflows the preflight error panel');
+    t.assert(issues.querySelectorAll('small').length===20,'Preflight lost a same-name source error');
+    t.assert(issues.textContent.includes('/source-0/')&&issues.textContent.includes('/source-19/'),'Same-name sources are not distinguishable');
+    const body=host.querySelector('.export-body');
+    body.scrollTop=body.scrollHeight;await t.frame();
+    const last=issues.querySelector('small:last-child').getBoundingClientRect();
+    t.assert(last.bottom<=body.getBoundingClientRect().bottom+1&&last.bottom>body.getBoundingClientRect().top,'Last preflight error cannot be reached by scrolling');
+    const footer=host.querySelector('.export-dialog-footer').getBoundingClientRect();
+    t.assert(footer.bottom<=innerHeight-23&&footer.top>=0,'Long preflight errors displaced the action footer');
+    button('返回修改设置').click();await t.frame();
+    t.assert(body.scrollTop===0&&document.activeElement.classList.contains('directory-picker'),'Return to settings did not restore the top and keyboard focus');
     t.assert(requests.length===0 && !host.querySelector('.progress-dialog'),'Failed preflight started image processing');
     const suffix=[...host.querySelectorAll('.export-dialog label')].find(label=>label.textContent.includes('文件名后缀')).querySelector('input');
+    suffix.scrollIntoView({block:'center'});await t.frame();
     t.change(suffix,'');await t.frame();
     t.assert(!button('预检并开始导出').disabled,'Correcting suffix does not enable retry');
     button('预检并开始导出').click();
     await t.waitFor(()=>host.querySelector('.result-dialog'),'Corrected settings did not export');
     t.assert(preflights===2 && requests.length===1 && requests[0].settings.suffix==='','Corrected request was not rechecked');
-    return {filenameErrorVisible:true,noExportBeforePreflight:true,correctedSuffixRetried:true,preflights};
+    return {filenameErrorVisible:true,noExportBeforePreflight:true,correctedSuffixRetried:true,preflights,distinctSourceErrors:20,lastErrorReachable:true,footerVisible:true,returnToSettings:true};
   } finally {
     root.unmount(); host.remove(); clearMocks();
     if (saved === null) localStorage.removeItem(key); else localStorage.setItem(key, saved);

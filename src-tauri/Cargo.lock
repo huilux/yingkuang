@@ -5356,7 +5356,7 @@ dependencies = [
 
 [[package]]
 name = "yingkuang"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "ab_glyph",
  "base64 0.23.1",
