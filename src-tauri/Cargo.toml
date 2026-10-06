@@ -1,6 +1,6 @@
 [package]
 name = "yingkuang"
-version = "0.5.2"
+version = "0.5.3"
 description = "Local photography watermark and frame editor"
 authors = ["Ming"]
 edition = "2024"

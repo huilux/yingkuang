@@ -1151,9 +1151,9 @@ function App() {
           <section className="progress-dialog" role="dialog" aria-modal="true" aria-labelledby="progress-title" aria-live="polite">
             <div className="progress-dialog-header"><span>批量导出</span><h2 id="progress-title">正在生成成品</h2></div>
             <div className="progress-body">
-              <div className="progress-count"><strong>{exportProgress.current} / {exportProgress.total}</strong><span>{exportProgress.fileName}</span></div>
+              <div className="progress-count"><strong>{exportProgress.current} / {exportProgress.total}</strong><span title={exportProgress.fileName}>{exportProgress.fileName}</span></div>
               <div className="progress-stage">{exportStageLabels[exportProgress.stage]} · <ExportElapsed startedAt={exportStartedAt} /></div>
-              <progress max={exportProgress.total || 1} value={exportProgress.completed} />
+              <progress aria-label="已处理照片" max={exportProgress.total || 1} value={exportProgress.completed} />
               <div className="progress-stats"><span>成功 {exportProgress.succeeded}</span><span>失败 {exportProgress.failed}</span><span>跳过 {exportProgress.skipped}</span></div>
               <p>按原图顺序逐张处理。取消会停止后续照片，已经完成的文件会保留。</p>
             </div>
@@ -1170,8 +1170,8 @@ function App() {
               <p className="export-elapsed">处理用时 {formatElapsed(exportResult.elapsedMs)}</p>
               {exportResult.cancelled && <p>未处理 {Math.max(0, exportResult.total - exportResult.succeeded - exportResult.failed - exportResult.skipped)} 张；已经完成的文件已保留。</p>}
               <div className="result-stats"><div><strong>{exportResult.succeeded}</strong><span>成功</span></div><div><strong>{exportResult.failed}</strong><span>失败</span></div><div><strong>{exportResult.skipped}</strong><span>跳过</span></div></div>
-              {!!exportResult.failures.length && <div className="result-list"><strong><WarningCircle /> 失败项目</strong>{exportResult.failures.map((failure) => <div key={`${failure.fileName}-${failure.reason}`}><span>{failure.fileName}</span><small>{failure.reason}</small></div>)}</div>}
-              {!!exportResult.warnings.length && <div className="result-list warning-list"><strong><WarningCircle /> 导出提示</strong>{exportResult.warnings.map((warning) => <small key={warning}>{warning}</small>)}</div>}
+              {!!exportResult.failures.length && <details className="result-list" open><summary><WarningCircle /> 失败项目 · {exportResult.failures.length} 项</summary>{exportResult.failures.map((failure, index) => <div key={`${failure.path}-${index}`}><span title={failure.path || failure.fileName}>{failure.fileName}</span><small>{failure.reason}</small>{failure.path && <small className="result-source-path"><span>原图：</span><code>{failure.path}</code></small>}</div>)}</details>}
+              {!!exportResult.warnings.length && <details className="result-list warning-list" open><summary><WarningCircle /> 导出提示 · {exportResult.warnings.length} 项</summary>{exportResult.warnings.map((warning) => <small key={warning}>{warning}</small>)}</details>}
             </div>
             <div className="dialog-footer">
               <button className="button secondary" type="button" onClick={() => setExportResult(null)}>关闭</button>
