@@ -30,7 +30,7 @@ export async function rasterize(source: string, frame: FrameSettings, geometry: 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}" viewBox="0 0 ${width} ${height}">
     <defs>
       <filter color-interpolation-filters="linearRGB" id="blur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${frame.blur}"/><feComponentTransfer>${["R", "G", "B"].map(channel => `<feFunc${channel} type="linear" slope="${frame.brightness / 100}"/>`).join("")}</feComponentTransfer></filter>
-      <filter id="shadow-only" color-interpolation-filters="sRGB" x="-30%" y="-30%" width="160%" height="170%"><feGaussianBlur in="SourceAlpha" stdDeviation="${frame.shadow * 0.42}"/><feOffset dy="${frame.shadow * 0.28}" result="offset"/><feFlood flood-color="#070909" flood-opacity="${Math.min(0.4, frame.shadow / 100)}"/><feComposite in2="offset" operator="in"/></filter>
+      <filter id="shadow-only" color-interpolation-filters="sRGB" x="${photo.x - frame.shadow * 1.68}" y="${photo.y - frame.shadow * 1.68}" width="${photo.width + frame.shadow * 3.36}" height="${photo.height + frame.shadow * 3.64}" filterUnits="userSpaceOnUse"><feGaussianBlur in="SourceAlpha" stdDeviation="${frame.shadow * 0.42}"/><feOffset dy="${frame.shadow * 0.28}" result="offset"/><feFlood flood-color="#070909" flood-opacity="${Math.min(0.9, frame.shadow / 100)}"/><feComposite in2="offset" operator="in"/></filter>
       <clipPath id="photo"><rect x="${photo.x}" y="${photo.y}" width="${photo.width}" height="${photo.height}" rx="${frame.radius * 2}"/></clipPath>
     </defs>
     <rect width="${width}" height="${height}" fill="${escapeXml(frame.color)}"/>

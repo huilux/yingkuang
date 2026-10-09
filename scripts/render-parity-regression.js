@@ -27,6 +27,8 @@
     { ...common, type: 'blur' }, (x, y) => x >= 80 && x < 600 && y >= 480 && y < 560);
   const shadow = await compare('shadow', { width: 680, height: 580, photo: { x: 80, y: 80, width: 520, height: 360 } },
     { ...common, type: 'solid', radius: 12, shadow: 40 }, (x, y) => x >= 80 && x < 600 && y >= 444 && y < 480);
+  const strongShadow = await compare('strong_shadow', { width: 680, height: 580, photo: { x: 80, y: 80, width: 520, height: 360 } },
+    { ...common, type: 'solid', radius: 12, shadow: 100 }, (x, y) => x >= 80 && x < 600 && y >= 444 && y < 540);
   const scaled = await compare('scaled_background', { width: 680, height: 580, photo: { x: 40, y: 40, width: 600, height: 400 } },
     { ...common, type: 'blur' }, (x, y) => x >= 80 && x < 600 && y >= 480 && y < 560);
   async function textBounds(name, rotation) {
@@ -64,5 +66,5 @@
   }
   const text = await textBounds('text', 0);
   const textRotated = await textBounds('text_rotated', 90);
-  return { background, shadow, scaled, text, textRotated };
+  return { background, shadow, strongShadow, scaled, text, textRotated };
 })();

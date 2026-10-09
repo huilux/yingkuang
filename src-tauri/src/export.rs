@@ -815,7 +815,8 @@ fn draw_soft_shadow(canvas: &mut RgbaImage, rect: Rect, scale: f32, amount: f32,
         image::Luma([(coverage as f32 * 255.0 / 4.0).round() as u8])
     });
     let mask = imageops::blur(&mask, (amount * 0.42 * s).max(0.1));
-    let opacity = (amount / 100.0).min(0.4);
+    // Keep subtle presets unchanged, but let the upper range deepen the shadow.
+    let opacity = (amount / 100.0).min(0.9);
     composite_shadow(canvas, &mask, work_scale, opacity);
 }
 
@@ -1931,6 +1932,36 @@ mod tests {
     }
 
     #[test]
+    fn maximum_shadow_is_deep_and_zero_disables_it() {
+        let render = |amount| {
+            let mut canvas = RgbaImage::from_pixel(680, 580, Rgba([255, 255, 255, 255]));
+            draw_soft_shadow(
+                &mut canvas,
+                Rect {
+                    x: 80.0,
+                    y: 80.0,
+                    width: 520.0,
+                    height: 360.0,
+                },
+                1.0,
+                amount,
+                24.0,
+            );
+            canvas.get_pixel(340, 465).0[0]
+        };
+        assert_eq!(render(0.0), 255);
+        let medium = render(40.0);
+        let strong = render(64.0);
+        let maximum = render(100.0);
+        assert!(medium > strong && strong > maximum);
+        assert!(maximum < 170, "maximum shadow stayed too faint: {maximum}");
+        assert!(
+            strong - maximum > 20,
+            "upper range must visibly deepen the shadow"
+        );
+    }
+
+    #[test]
     #[ignore = "writes fixtures for scripts/render-parity.py"]
     fn preview_parity_fixtures() {
         let root = PathBuf::from(std::env::var("YINGKUANG_PARITY_DIR").expect("fixture directory"));
@@ -1965,6 +1996,20 @@ mod tests {
             24.0,
         );
         shadow.save(root.join("shadow.png")).unwrap();
+        let mut strong_shadow = RgbaImage::from_pixel(680, 580, Rgba([255, 255, 255, 255]));
+        draw_soft_shadow(
+            &mut strong_shadow,
+            Rect {
+                x: 80.0,
+                y: 80.0,
+                width: 520.0,
+                height: 360.0,
+            },
+            1.0,
+            100.0,
+            24.0,
+        );
+        strong_shadow.save(root.join("strong_shadow.png")).unwrap();
         let text_geometry = Geometry {
             width: 600.0,
             height: 400.0,
