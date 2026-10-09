@@ -40,6 +40,7 @@ export function parseSession(source: string | null): SessionSnapshot {
     const enums: Record<string, string[]> = {
       format: ["jpeg", "png"], size: ["original", "long-edge"], metadata: ["none", "basic", "supported"],
       range: ["current", "selected", "all"], collision: ["number", "skip"], pngCompression: ["fast", "standard", "small"],
+      suffixMode: ["custom", "template"],
     };
     for (const [key, choices] of Object.entries(enums)) {
       if (settings[key] !== undefined && !choices.includes(settings[key] as string)) throw new Error("导出设置包含不支持的选项");

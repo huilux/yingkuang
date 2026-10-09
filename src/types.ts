@@ -120,6 +120,7 @@ export interface ExportSettings {
   includeGps: boolean;
   range: "current" | "selected" | "all";
   suffix: string;
+  suffixMode?: "custom" | "template";
   collision: "number" | "skip";
   pngCompression: "fast" | "standard" | "small";
 }

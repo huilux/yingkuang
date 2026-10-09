@@ -100,6 +100,7 @@ const defaultExport: ExportSettings = {
   includeGps: false,
   range: "selected",
   suffix: "-相框",
+  suffixMode: "template",
   collision: "number",
   pngCompression: "standard",
 };
@@ -255,7 +256,7 @@ function App() {
       try {
         const saved = parseSession(localStorage.getItem(sessionKey));
         restoredSession.current = saved;
-        if (saved.exportSettings) setExportSettings({ ...defaultExport, ...saved.exportSettings });
+        if (saved.exportSettings) setExportSettings({ ...defaultExport, ...saved.exportSettings, suffixMode: saved.exportSettings.suffixMode ?? "custom" });
         if (saved.paths?.length) {
           const paths = [...new Set(saved.paths)];
           const order = new Map(paths.map((path, index) => [path, index]));
@@ -852,7 +853,7 @@ function App() {
 
   async function startExport(retryPaths?: Set<string>) {
     if (exportBusy.current) return;
-    const plan = buildExportPlan({ photos, documents, activeId, checkedIds, settings: exportSettings });
+    const plan = buildExportPlan({ photos, documents, activeId, checkedIds, settings: exportSettings, templates, templateByPhoto });
     const retry = retryPaths && lastExportRequest.current
       ? retryExportRequest(lastExportRequest.current, retryPaths) : null;
     const request = retry ?? createExportRequest(plan.items, exportSettings);
@@ -943,7 +944,9 @@ function App() {
     activeId,
     checkedIds,
     settings: exportSettings,
-  }), [activeId, checkedIds, documents, exportSettings, photos]);
+    templates,
+    templateByPhoto,
+  }), [activeId, checkedIds, documents, exportSettings, photos, templates, templateByPhoto]);
   const hiddenExportCount = filtersActive ? exportPlan.items.filter(item => !visiblePhotoPaths.has(item.path)).length : 0;
   const visibleExportIssues = [
     ...exportPlan.issues,
@@ -1134,8 +1137,14 @@ function App() {
                   ) : (
                     <Segmented label="PNG 压缩" value={exportSettings.pngCompression} options={[{ value: "fast", label: "快速" }, { value: "standard", label: "标准" }, { value: "small", label: "更小" }]} onChange={(pngCompression) => setExportSettings((value) => ({ ...value, pngCompression }))} />
                   )}
+                  <label className="check-field"><input type="checkbox" checked={exportSettings.suffixMode === "template"} onChange={event => { const suffixMode = event.currentTarget.checked ? "template" : "custom"; setExportSettings(value => ({ ...value, suffixMode })); }} /><span>使用相框名称</span></label>
                   <div className="export-grid">
-                    <label className={`field ${exportPlan.issues.some((issue) => issue.field === "suffix") ? "field-error" : ""}`}><span>文件名后缀</span><input className="text-input" value={exportSettings.suffix} aria-invalid={exportPlan.issues.some((issue) => issue.field === "suffix")} onChange={(event) => { const suffix = event.currentTarget.value; setExportSettings((value) => ({ ...value, suffix })); }} /><small className="field-hint">可留空；不能含 /、\ 或系统保留字符</small>{exportPlan.issues.filter((issue) => issue.field === "suffix").map((issue) => <small className="field-message" key={issue.message}>{issue.message}</small>)}</label>
+                    <label className={`field ${exportPlan.issues.some((issue) => issue.field === "suffix") ? "field-error" : ""}`}>
+                      <span>文件名后缀</span>
+                      <input className="text-input" readOnly={exportSettings.suffixMode === "template"} value={exportSettings.suffixMode === "template" ? exportPlan.items[0]?.outputSuffix ?? "-相框" : exportSettings.suffix} aria-invalid={exportPlan.issues.some((issue) => issue.field === "suffix")} onChange={event => { const suffix = event.currentTarget.value; setExportSettings(value => ({ ...value, suffix })); }} />
+                      <small className="field-hint">{exportSettings.suffixMode === "template" ? "按每张照片的模板命名；保留字符替换为下划线，过长名称自动截短" : "可留空；不能含 /、\\ 或系统保留字符"}</small>
+                      {exportPlan.issues.filter((issue) => issue.field === "suffix").map((issue) => <small className="field-message" key={issue.message}>{issue.message}</small>)}
+                    </label>
                     <label className="field"><span>重名处理</span><SelectControl aria-label="重名处理" value={exportSettings.collision} onChange={(event) => { const collision = event.currentTarget.value as ExportSettings["collision"]; setExportSettings((value) => ({ ...value, collision })); }}><option value="number">自动编号</option><option value="skip">跳过</option></SelectControl></label>
                   </div>
                 </section>

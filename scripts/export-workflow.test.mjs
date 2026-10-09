@@ -43,6 +43,23 @@ test('an intentionally empty suffix matches the backend filename behavior', () =
   assert.equal(plan.issues.length, 0);
 });
 
+test('template suffixes follow each photo, sanitize names and survive retries', () => {
+  const templates = [{ id: 'wide', name: '旅行 / 白框' }, { id: 'tall', name: '竖图:*' }];
+  const plan = workflow.buildExportPlan({ photos, documents, activeId: 'a', checkedIds: ['a', 'b'],
+    templates, templateByPhoto: { a: 'wide', b: 'tall' }, settings: { ...settings, suffixMode: 'template', suffix: '../unused' } });
+  assert.deepEqual(plan.items.map(item => item.outputSuffix), ['-旅行 _ 白框', '-竖图__']);
+  assert.equal(plan.sampleFileName, 'a-旅行 _ 白框.jpg');
+  assert.equal(plan.issues.length, 0);
+  const request = workflow.createExportRequest(plan.items, { ...settings, suffixMode: 'template', suffix: '../unused' });
+  templates[1].name = '重命名';
+  assert.equal(request.settings.suffix, '');
+  assert.equal(workflow.retryExportRequest(request, new Set(['/photos/b.jpg'])).items[0].outputSuffix, '-竖图__');
+  assert.equal([...workflow.templateExportSuffix('😀'.repeat(120))].length, 80);
+  assert.equal(workflow.templateExportSuffix('  '), '-相框');
+  const fallback = workflow.buildExportPlan({ photos, documents, activeId: 'a', checkedIds: ['a'], settings: { ...settings, suffixMode: 'template' } });
+  assert.equal(fallback.sampleFileName, 'a-相框.jpg');
+});
+
 test('retry uses the original request after selection, edits and settings change', () => {
   const mutableSettings = structuredClone(settings);
   const mutableDocuments = structuredClone(documents);

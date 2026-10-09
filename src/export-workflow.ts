@@ -1,4 +1,4 @@
-import type { EditorDocument, ExportSettings, PhotoAsset } from "./types";
+import type { EditorDocument, ExportSettings, PhotoAsset, TemplateRecord } from "./types";
 
 export type ExportIssueField = "range" | "directory" | "longEdge" | "suffix" | "quality" | "preflight";
 
@@ -11,6 +11,7 @@ export type ExportItem = {
   path: string;
   document: EditorDocument;
   overrides: NonNullable<PhotoAsset["overrides"]>;
+  outputSuffix?: string;
 };
 
 export type ExportPlan = {
@@ -32,7 +33,7 @@ export function formatElapsed(milliseconds: number): string {
 }
 
 export function createExportRequest(items: ExportItem[], settings: ExportSettings): ExportRequest {
-  return structuredClone({ items, settings });
+  return structuredClone({ items, settings: settings.suffixMode === "template" ? { ...settings, suffix: "" } : settings });
 }
 
 export function retryExportRequest(request: ExportRequest, paths: Set<string>): ExportRequest {
@@ -45,8 +46,16 @@ type BuildExportPlanInput = {
   activeId: string;
   checkedIds: string[];
   settings: ExportSettings;
+  templates?: Pick<TemplateRecord, "id" | "name">[];
+  templateByPhoto?: Record<string, string>;
   retryPaths?: Set<string>;
 };
+
+export function templateExportSuffix(name: string): string {
+  // Reserve one character for the separator; never split a Unicode code point.
+  const safeName = name.replace(/[<>:"/\\|?*\u0000-\u001f\u007f-\u009f]/gu, "_").trim();
+  return `-${[...(safeName || "相框")].slice(0, 79).join("")}`;
+}
 
 function outputDimensions(photo: PhotoAsset, document: EditorDocument, settings: ExportSettings) {
   const ratio = photo.width / photo.height;
@@ -84,7 +93,7 @@ function validate(settings: ExportSettings, itemCount: number): ExportIssue[] {
   if (settings.size === "long-edge" && (!Number.isInteger(settings.longEdge) || settings.longEdge < 800 || settings.longEdge > 30000)) {
     issues.push({ field: "longEdge", message: "成品长边须为 800–30000 之间的整数" });
   }
-  if ([...settings.suffix].length > 80 || /[<>:"/\\|?*\u0000-\u001f]/u.test(settings.suffix)) {
+  if (settings.suffixMode !== "template" && ([...settings.suffix].length > 80 || /[<>:"/\\|?*\u0000-\u001f]/u.test(settings.suffix))) {
     issues.push({ field: "suffix", message: "文件名后缀不能包含路径或系统保留字符，且最多 80 个字符" });
   }
   if (!Number.isInteger(settings.quality) || settings.quality < 1 || settings.quality > 100) {
@@ -106,6 +115,9 @@ export function buildExportPlan(input: BuildExportPlanInput): ExportPlan {
     path: photo.path,
     document: structuredClone(document),
     overrides: structuredClone(photo.overrides ?? {}),
+    ...(input.settings.suffixMode === "template" ? {
+      outputSuffix: templateExportSuffix(input.templates?.find(template => template.id === input.templateByPhoto?.[photo.id])?.name ?? "相框"),
+    } : {}),
   }));
   const issues = validate(input.settings, items.length);
   const sample = selectedPhotos[0];
@@ -123,7 +135,7 @@ export function buildExportPlan(input: BuildExportPlanInput): ExportPlan {
   return {
     items,
     issues,
-    sampleFileName: `${stem}${input.settings.suffix}.${extension}`,
+    sampleFileName: `${stem}${items[0]?.outputSuffix ?? input.settings.suffix}.${extension}`,
     sampleDimensions: dimensions ? `${dimensions.width} × ${dimensions.height}` : "",
     estimatedPixels,
   };

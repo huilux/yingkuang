@@ -40,6 +40,8 @@ struct ExportItem {
     document: EditorDocument,
     #[serde(default)]
     overrides: HashMap<String, String>,
+    #[serde(default)]
+    output_suffix: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -433,6 +435,11 @@ fn validate_export_request(request: &ExportRequest) -> Vec<String> {
         errors.push("当前范围没有可导出的本地照片".to_owned());
     }
     for item in &request.items {
+        if let Some(suffix) = &item.output_suffix {
+            let mut settings = request.settings.clone();
+            settings.suffix.clone_from(suffix);
+            errors.extend(validate_export_settings(&settings));
+        }
         if let Err(error) = validate_document(&item.document) {
             errors.push(format!(
                 "{}：{error}",
@@ -487,7 +494,11 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
             errors.push(format!("{error_name}：原图不存在或不可读取"));
             continue;
         }
-        match unique_output_path_with_reserved(path, &request.settings, &reserved_outputs) {
+        let mut item_settings = request.settings.clone();
+        if let Some(suffix) = &item.output_suffix {
+            item_settings.suffix.clone_from(suffix);
+        }
+        match unique_output_path_with_reserved(path, &item_settings, &reserved_outputs) {
             Ok(Some(output)) => {
                 reserved_outputs.insert(output);
             }
@@ -1290,6 +1301,11 @@ fn export_one_with_renderer(
     renderer: &mut ExportRenderer,
     mut on_stage: impl FnMut(&'static str),
 ) -> Result<Option<(PathBuf, Vec<String>)>, String> {
+    let mut item_settings = settings.clone();
+    if let Some(suffix) = &item.output_suffix {
+        item_settings.suffix.clone_from(suffix);
+    }
+    let settings = &item_settings;
     let input = Path::new(&item.path);
     if !input.is_file() {
         return Err("原图不存在或不可读取".to_owned());
@@ -1479,6 +1495,7 @@ mod tests {
             path: input.to_string_lossy().into_owned(),
             document: test_document(),
             overrides: HashMap::new(),
+            output_suffix: None,
         };
         let request = ExportRequest {
             items: vec![
@@ -1550,6 +1567,7 @@ mod tests {
                 path: input.to_string_lossy().into_owned(),
                 document: test_document(),
                 overrides: HashMap::new(),
+                output_suffix: None,
             };
             let request = ExportRequest {
                 items: vec![item; total],
@@ -1586,6 +1604,7 @@ mod tests {
             path: input.to_string_lossy().into_owned(),
             document: test_document(),
             overrides: HashMap::new(),
+            output_suffix: None,
         };
         let settings = ExportSettings {
             size: "original".into(),
@@ -1609,6 +1628,7 @@ mod tests {
             path: String::new(),
             document,
             overrides: HashMap::new(),
+            output_suffix: None,
         };
         let error = draw_layers(
             &mut RgbaImage::new(10, 10),
@@ -1631,6 +1651,7 @@ mod tests {
             path: input.to_string_lossy().into_owned(),
             document: test_document(),
             overrides: HashMap::new(),
+            output_suffix: None,
         };
         let settings = ExportSettings {
             long_edge: 30_000,
@@ -1652,6 +1673,7 @@ mod tests {
                 path: "photo.png".into(),
                 document: test_document(),
                 overrides: HashMap::new(),
+                output_suffix: None,
             }],
             settings: test_settings(root.path()),
         };
@@ -1680,6 +1702,7 @@ mod tests {
                 path: input.to_string_lossy().into_owned(),
                 document: test_document(),
                 overrides: HashMap::new(),
+                output_suffix: None,
             }],
             settings: ExportSettings {
                 long_edge: 30_000,
@@ -1706,6 +1729,7 @@ mod tests {
                 path: input.to_string_lossy().into_owned(),
                 document: test_document(),
                 overrides: HashMap::new(),
+                output_suffix: None,
             };
             let settings = ExportSettings {
                 size: "original".into(),
@@ -1981,6 +2005,7 @@ mod tests {
             path: String::new(),
             document: text_document,
             overrides: HashMap::new(),
+            output_suffix: None,
         };
         draw_layers(
             &mut text_canvas,
@@ -1998,6 +2023,7 @@ mod tests {
             path: String::new(),
             document: rotated_document,
             overrides: HashMap::new(),
+            output_suffix: None,
         };
         let mut rotated_canvas = RgbaImage::new(600, 400);
         draw_layers(
@@ -2028,6 +2054,7 @@ mod tests {
                 path: path.into(),
                 document,
                 overrides: HashMap::new(),
+                output_suffix: None,
             };
             let settings = ExportSettings {
                 directory: root.to_string_lossy().into_owned(),
@@ -2141,6 +2168,56 @@ mod tests {
     }
 
     #[test]
+    fn per_photo_suffixes_match_preflight_export_and_collision_handling() {
+        let root = tempfile::tempdir().unwrap();
+        let input = root.path().join("photo.png");
+        RgbaImage::from_pixel(24, 16, Rgba([120, 80, 40, 255]))
+            .save(&input)
+            .unwrap();
+        let item = ExportItem {
+            path: input.to_string_lossy().into_owned(),
+            document: test_document(),
+            overrides: HashMap::new(),
+            output_suffix: Some("-旅行白框".into()),
+        };
+        let mut request = ExportRequest {
+            items: vec![
+                item.clone(),
+                ExportItem {
+                    output_suffix: Some("-黑框".into()),
+                    ..item.clone()
+                },
+                item,
+            ],
+            settings: ExportSettings {
+                format: "png".into(),
+                size: "original".into(),
+                metadata: "none".into(),
+                ..test_settings(root.path())
+            },
+        };
+        assert!(preflight_export_sync(&request).ready);
+        let summary =
+            run_export_with_progress(request.clone(), &AtomicBool::new(false), |_| {}).unwrap();
+        assert_eq!(summary.succeeded, 3);
+        for name in [
+            "photo-旅行白框.png",
+            "photo-黑框.png",
+            "photo-旅行白框-2.png",
+        ] {
+            assert!(root.path().join(name).is_file(), "Missing {name}");
+        }
+        request.settings.collision = "skip".into();
+        assert!(preflight_export_sync(&request).ready);
+        let summary =
+            run_export_with_progress(request.clone(), &AtomicBool::new(false), |_| {}).unwrap();
+        assert_eq!(summary.skipped, 3);
+        request.items[0].output_suffix = Some("/../escape".into());
+        assert!(!preflight_export_sync(&request).ready);
+        assert!(run_export_with_progress(request, &AtomicBool::new(false), |_| {}).is_err());
+    }
+
+    #[test]
     fn preflight_rejects_names_that_the_filesystem_cannot_create() {
         let root = tempfile::tempdir().unwrap();
         for stem in ["a".repeat(249), "图".repeat(83), "📷".repeat(62)] {
@@ -2153,6 +2230,7 @@ mod tests {
                 path: input.to_string_lossy().into_owned(),
                 document: test_document(),
                 overrides: HashMap::new(),
+                output_suffix: None,
             };
             let output_error = unique_output_path(&input, &settings).unwrap_err();
             assert!(output_error.contains("请缩短"), "{output_error}");
@@ -2190,6 +2268,7 @@ mod tests {
                     path: input.to_string_lossy().into_owned(),
                     document: document.clone(),
                     overrides: HashMap::new(),
+                    output_suffix: None,
                 }
             })
             .collect();
@@ -2338,6 +2417,7 @@ mod tests {
                         .into_owned(),
                     document: test_document(),
                     overrides: HashMap::new(),
+                    output_suffix: None,
                 })
                 .collect(),
             settings: test_settings(root.path()),
@@ -2364,6 +2444,7 @@ mod tests {
                 path: input.to_string_lossy().into_owned(),
                 document: test_document(),
                 overrides: HashMap::new(),
+                output_suffix: None,
             }],
             settings,
         };
@@ -2414,6 +2495,7 @@ mod tests {
                 path: input.to_string_lossy().into_owned(),
                 document: test_document(),
                 overrides: HashMap::new(),
+                output_suffix: None,
             };
             let settings = ExportSettings {
                 no_upscale: true,
@@ -2473,6 +2555,7 @@ mod tests {
                 path: input.to_string_lossy().into_owned(),
                 document: test_document(),
                 overrides: HashMap::new(),
+                output_suffix: None,
             }],
             settings: ExportSettings {
                 long_edge: 800,
@@ -2553,6 +2636,7 @@ mod tests {
             path: input.to_string_lossy().into_owned(),
             document: test_document(),
             overrides: HashMap::new(),
+            output_suffix: None,
         };
         let settings = ExportSettings {
             directory: root.to_string_lossy().into_owned(),
@@ -2614,6 +2698,7 @@ mod tests {
                     )
                     .unwrap(),
                     overrides: HashMap::new(),
+                    output_suffix: None,
                 })
                 .collect();
             let request = ExportRequest {
@@ -2815,6 +2900,7 @@ mod tests {
                 .unwrap_or_else(|_| "../assets/origin/PANA9432.JPG".into()),
             document,
             overrides: HashMap::new(),
+            output_suffix: None,
         };
         let mut settings = test_settings(root.path());
         settings.metadata = "basic".into();
@@ -2892,6 +2978,7 @@ mod tests {
             path: "../assets/origin/PANA9432.JPG".to_owned(),
             document,
             overrides: HashMap::new(),
+            output_suffix: None,
         };
         let settings = ExportSettings {
             directory: root.to_string_lossy().into_owned(),
