@@ -9,8 +9,10 @@ use std::{
     io::{BufReader, Write},
     path::{Path, PathBuf},
 };
+use tauri::Manager;
 
 mod export;
+mod fonts;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -546,9 +548,15 @@ async fn write_template_backup(path: String, content: String) -> Result<(), Stri
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            fonts::initialize(app.path().app_data_dir()?.join("fonts"));
+            Ok(())
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            fonts::list_fonts,
+            fonts::import_font,
             inspect_images,
             inspect_images_resilient,
             list_image_files,

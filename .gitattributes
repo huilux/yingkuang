@@ -1,0 +1,2 @@
+# Preserve original upstream font licenses, including their whitespace and CRLF.
+public/fonts/**/OFL.txt -text -whitespace

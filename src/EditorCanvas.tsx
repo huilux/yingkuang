@@ -1,3 +1,4 @@
+import { ensureFontsLoaded, fontsChangedEvent, previewFontFamily } from "./font-library";
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useId, useMemo, useRef, useState } from "react";
 import Konva from "konva";
 import { Group, Image as CanvasImage, Layer, Line, Rect, Stage, Text } from "react-konva";
@@ -61,6 +62,17 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
   const visibleLayers = design.layers.filter(layer => isVisible(layer, design.regions));
   // Font readiness changes text measurement even if the document is unchanged.
   const [fontRevision, setFontRevision] = useState(0);
+  const [fontError, setFontError] = useState("");
+  const fontFamilies = JSON.stringify(visibleLayers.map(layer => layer.fontFamily));
+  useEffect(() => {
+    let alive = true;
+    const load = () => { void ensureFontsLoaded(JSON.parse(fontFamilies) as string[]).then(() => {
+      if (alive) { setFontError(""); setFontRevision(value => value + 1); }
+    }).catch((error: unknown) => { if (alive) setFontError(String(error)); }); };
+    load();
+    window.addEventListener(fontsChangedEvent, load);
+    return () => { alive = false; window.removeEventListener(fontsChangedEvent, load); };
+  }, [fontFamilies]);
   useEffect(() => {
     let alive = true;
     const update = () => { if (alive) setFontRevision(value => value + 1); };
@@ -325,6 +337,7 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
         </Group>
       </Layer>
     </Stage>
+    {fontError && <div className="canvas-preview-status" role="alert">字体加载失败：{fontError}</div>}
     {!image && <div className="canvas-preview-status" role="status">{error ? "相框预览生成失败，请重新选择照片" : "正在生成相框预览…"}</div>}
     {image && error && <div className="canvas-preview-status" role="status">相框预览更新失败，请重新选择照片</div>}
     {image && (photoError || photoLoading) && <div className="canvas-photo-status" role="status">{photoError ? "高清照片读取失败，当前显示缩略图；请确认原文件仍可访问" : "正在加载高清照片…"}</div>}
@@ -343,7 +356,7 @@ function Watermark({ layer, text, position, fontRevision, onSelect, onDragStart,
     const node = textRef.current;
     if (!node) return;
     // Re-measure loaded fonts, including CJK; never estimate with text.length.
-    node.fontFamily(layer.fontFamily);
+    node.fontFamily(previewFontFamily(layer.fontFamily));
     node.offset({ x: node.width() / 2, y: node.height() / 2 });
     hitRef.current?.setAttrs({ x: -node.width() / 2 - 8, y: -node.height() / 2 - 6, width: node.width() + 16, height: node.height() + 12 });
   }, [text, layer.fontSize, layer.fontFamily, layer.fontWeight, fontRevision]);
@@ -355,7 +368,7 @@ function Watermark({ layer, text, position, fontRevision, onSelect, onDragStart,
     onDragMove={event => onDragMove(event.target as Konva.Group, event.evt as MouseEvent | TouchEvent)}
     onDragEnd={event => onDragEnd(event.target as Konva.Group)}>
     <Rect ref={hitRef} fill="rgba(0,0,0,0)" />
-    <Text key={fontRevision} ref={textRef} text={text} fontFamily={layer.fontFamily} fontSize={layer.fontSize} fontStyle={String(layer.fontWeight)}
+    <Text key={fontRevision} ref={textRef} text={text} fontFamily={previewFontFamily(layer.fontFamily)} fontSize={layer.fontSize} fontStyle={String(layer.fontWeight)}
       fill={layer.color} opacity={layer.opacity * (text.startsWith("未读取到") ? 0.55 : 1)} listening={false} />
   </Group>;
 }

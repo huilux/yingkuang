@@ -651,3 +651,13 @@ input[type="checkbox"]:disabled { opacity: .45; cursor: not-allowed; }
 .photo-drop-overlay svg { width: 40px; height: 40px; color: var(--accent); }
 .photo-drop-overlay strong { color: var(--text); font-size: 18px; font-weight: 600; }
 .photo-drop-overlay span { color: var(--text-secondary); font-size: 13px; }
+
+.font-picker { display: grid; gap: 8px; margin-bottom: 14px; }
+.font-picker .field { margin: 0; }
+.font-import-button { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 34px; padding: 7px 12px; border: 1px solid var(--line-strong); border-radius: var(--control-radius); background: var(--bg-raised); color: var(--text); font-size: 12px; }
+.font-import-button:hover:not(:disabled) { background: var(--bg-hover); }
+.font-import-button:disabled { opacity: .5; cursor: default; }
+.font-import-button svg { width: 16px; height: 16px; }
+.font-picker .selection-note { margin: 0; }
+.font-feedback { margin: 0; color: var(--text); font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.font-feedback p { margin: 0 0 6px; }

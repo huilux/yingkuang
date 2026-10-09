@@ -1,0 +1,10 @@
+[
+  {"family":"Noto Sans CJK SC","label":"思源黑体 · 中文无衬线","value":"Noto Sans CJK SC, sans-serif","files":[{"path":"noto-sans-sc/NotoSansSC[wght].ttf","weight":"400 700"}]},
+  {"family":"Noto Serif CJK SC","label":"思源宋体 · 中文衬线","value":"Noto Serif CJK SC, serif","files":[{"path":"noto-serif-sc/NotoSerifSC[wght].ttf","weight":"400 700"}]},
+  {"family":"Montserrat","label":"Montserrat · 几何无衬线","value":"Montserrat, Noto Sans CJK SC, sans-serif","files":[{"path":"montserrat/Montserrat[wght].ttf","weight":"400 700"}]},
+  {"family":"Lato","label":"Lato · 简洁人文","value":"Lato, Noto Sans CJK SC, sans-serif","files":[{"path":"lato/Lato-Regular.ttf","weight":"400 500"},{"path":"lato/Lato-Bold.ttf","weight":"600 700"}]},
+  {"family":"Playfair Display","label":"Playfair Display · 经典衬线","value":"Playfair Display, Noto Sans CJK SC, serif","files":[{"path":"playfair-display/PlayfairDisplay[wght].ttf","weight":"400 700"}]},
+  {"family":"Oswald","label":"Oswald · 窄体标题","value":"Oswald, Noto Sans CJK SC, sans-serif","files":[{"path":"oswald/Oswald[wght].ttf","weight":"400 700"}]},
+  {"family":"Space Mono","label":"Space Mono · 等宽参数","value":"Space Mono, Noto Sans CJK SC, monospace","files":[{"path":"space-mono/SpaceMono-Regular.ttf","weight":"400 500"},{"path":"space-mono/SpaceMono-Bold.ttf","weight":"600 700"}]},
+  {"family":"Ma Shan Zheng","label":"马善政毛笔楷书 · 中文手写","value":"Ma Shan Zheng, Noto Sans CJK SC, cursive","files":[{"path":"ma-shan-zheng/MaShanZheng-Regular.ttf","weight":"400 700"}]}
+]

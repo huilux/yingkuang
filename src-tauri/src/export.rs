@@ -1,5 +1,5 @@
 use crate::{ExifSnapshot, apply_orientation, read_exif};
-use ab_glyph::{Font, FontArc, FontVec, PxScale};
+use ab_glyph::{Font, FontArc, FontVec, PxScale, ScaleFont};
 use image::{
     DynamicImage, ImageDecoder, ImageEncoder, ImageReader, Pixel, Rgba, RgbaImage,
     codecs::{
@@ -466,6 +466,7 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
     let mut largest_height = 0;
     let mut largest_file_name = String::new();
     let mut reserved_outputs = HashSet::new();
+    let mut checked_fonts = HashMap::new();
     let mut file_name_counts = HashMap::new();
     for item in &request.items {
         let name = Path::new(&item.path)
@@ -493,6 +494,19 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
         if !path.is_file() {
             errors.push(format!("{error_name}：原图不存在或不可读取"));
             continue;
+        }
+        for layer in
+            item.document.layers.iter().filter(|layer| {
+                layer.visible && region_enabled(&layer.region, &item.document.regions)
+            })
+        {
+            if layer.font_family.starts_with("YingkuangFont")
+                && let Err(error) =
+                    load_font(&layer.font_family, layer.font_weight, &mut checked_fonts)
+            {
+                errors.push(format!("{error_name}：{}：{error}", layer.name));
+                break;
+            }
         }
         let mut item_settings = request.settings.clone();
         if let Some(suffix) = &item.output_suffix {
@@ -926,6 +940,11 @@ fn load_font(
         return Ok(font.clone());
     }
     let requested = family.split(',').next().unwrap_or("sans-serif").trim();
+    if let Some(result) = crate::fonts::managed_font(requested, weight) {
+        let font = result?;
+        cache.insert(cache_key, font.clone());
+        return Ok(font);
+    }
     let style = if weight >= 700 {
         "Bold"
     } else if weight >= 600 {
@@ -987,7 +1006,37 @@ fn draw_layers(
         let font = load_font(&layer.font_family, layer.font_weight, fonts)
             .map_err(|error| format!("{}：{error}", layer.name))?;
         let font_scale = css_font_scale(&font, (layer.font_size * scale).max(1.0));
-        let (text_width, text_height) = text_size(font_scale, &font, &text);
+        // Use the same Chinese fallback as the browser when a Latin/custom face
+        // lacks glyphs. Keep runs on the primary font's baseline and line box.
+        let fallback = if text.chars().any(|c| font.glyph_id(c).0 == 0) {
+            load_font("Noto Sans CJK SC", layer.font_weight, fonts)?
+        } else {
+            font.clone()
+        };
+        let mut runs: Vec<(String, bool)> = Vec::new();
+        for c in text.chars() {
+            let missing = font.glyph_id(c).0 == 0;
+            if let Some((run, _)) = runs.last_mut().filter(|(_, previous)| *previous == missing) {
+                run.push(c);
+            } else {
+                runs.push((c.to_string(), missing));
+            }
+        }
+        let run_sizes: Vec<_> = runs
+            .iter()
+            .map(|(text, missing)| {
+                let face = if *missing { &fallback } else { &font };
+                let scale = css_font_scale(face, (layer.font_size * scale).max(1.0));
+                let (width, _) = text_size(scale, face, text);
+                (scale, width.saturating_sub(1))
+            })
+            .collect();
+        let text_width = run_sizes
+            .iter()
+            .map(|(_, width)| *width)
+            .sum::<u32>()
+            .saturating_add(1);
+        let text_height = font_scale.y.ceil() as u32;
         let padding = (font_scale.y * 0.35).ceil() as u32 + 4;
         let width = text_width.checked_add(padding.saturating_mul(2));
         let height = text_height.checked_add(padding.saturating_mul(2));
@@ -1005,15 +1054,15 @@ fn draw_layers(
         }
         let mut text_image = RgbaImage::new(width, height);
         let color = parse_color(&layer.color, (layer.opacity.clamp(0.0, 1.0) * 255.0) as u8);
-        draw_text_mut(
-            &mut text_image,
-            color,
-            padding as i32,
-            padding as i32,
-            font_scale,
-            &font,
-            &text,
-        );
+        let mut cursor = padding as i32;
+        let baseline = font.as_scaled(font_scale).ascent();
+        for ((text, missing), (run_scale, width)) in runs.iter().zip(run_sizes) {
+            let face = if *missing { &fallback } else { &font };
+            let top =
+                padding as i32 + (baseline - face.as_scaled(run_scale).ascent()).round() as i32;
+            draw_text_mut(&mut text_image, color, cursor, top, run_scale, face, text);
+            cursor += width as i32;
+        }
         let text_image = match layer.rotation {
             90 => imageops::rotate90(&text_image),
             -90 => imageops::rotate270(&text_image),
@@ -2062,6 +2111,56 @@ mod tests {
         )
         .unwrap();
         text_canvas.save(root.join("text.png")).unwrap();
+        for (name, family, weight) in [
+            (
+                "montserrat_mixed",
+                "Montserrat, Noto Sans CJK SC, sans-serif",
+                400,
+            ),
+            (
+                "montserrat_bold",
+                "Montserrat, Noto Sans CJK SC, sans-serif",
+                700,
+            ),
+            ("serif_mixed", "Noto Serif CJK SC, serif", 600),
+        ] {
+            let mut item = text_item.clone();
+            item.document.layers[0].font_family = family.to_owned();
+            item.document.layers[0].font_weight = weight;
+            let mut canvas = RgbaImage::new(600, 400);
+            draw_layers(
+                &mut canvas,
+                &item,
+                &ExifSnapshot::default(),
+                &text_geometry,
+                1.0,
+                &mut HashMap::new(),
+            )
+            .unwrap();
+            canvas.save(root.join(format!("{name}.png"))).unwrap();
+        }
+        let custom_directory = root.join("fonts");
+        crate::fonts::initialize(custom_directory.clone());
+        let custom = crate::fonts::import_at(
+            &custom_directory,
+            Path::new("../public/fonts/space-mono/SpaceMono-Regular.ttf"),
+        )
+        .unwrap();
+        let mut item = text_item.clone();
+        item.document.layers[0].font_family =
+            format!("{}, Noto Sans CJK SC, sans-serif", custom.family);
+        let mut canvas = RgbaImage::new(600, 400);
+        draw_layers(
+            &mut canvas,
+            &item,
+            &ExifSnapshot::default(),
+            &text_geometry,
+            1.0,
+            &mut HashMap::new(),
+        )
+        .unwrap();
+        canvas.save(root.join("imported_mixed.png")).unwrap();
+
         let mut rotated_document = text_item.document.clone();
         rotated_document.layers[0].rotation = 90;
         let rotated_item = ExportItem {
@@ -2120,6 +2219,40 @@ mod tests {
                 .save(root.join("real_export.png"))
                 .unwrap();
         }
+    }
+
+    #[test]
+    fn missing_imported_font_is_reported_before_export() {
+        let root = tempfile::tempdir().unwrap();
+        let input = root.path().join("photo.png");
+        RgbaImage::new(24, 16).save(&input).unwrap();
+        let mut document = test_document();
+        let mut layer = test_layer("custom");
+        layer.custom_value = "映框 50mm".into();
+        layer.font_family = format!(
+            "YingkuangFont{}, Noto Sans CJK SC, sans-serif",
+            "0".repeat(64)
+        );
+        document.layers.push(layer);
+        let item = ExportItem {
+            path: input.to_string_lossy().into_owned(),
+            document,
+            overrides: HashMap::new(),
+            output_suffix: None,
+        };
+        let request = ExportRequest {
+            items: vec![item.clone()],
+            settings: test_settings(root.path()),
+        };
+        let preflight = preflight_export_sync(&request);
+        assert!(!preflight.ready);
+        assert!(preflight.errors.iter().any(|error| error.contains("字体")));
+        assert!(
+            render_item(&item, &request.settings)
+                .unwrap_err()
+                .contains("字体")
+        );
+        assert!(!root.path().join("photo-frame.jpg").exists());
     }
 
     fn test_document() -> EditorDocument {

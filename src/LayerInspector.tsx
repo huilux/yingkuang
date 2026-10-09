@@ -1,3 +1,4 @@
+import { FontPicker } from "./FontPicker";
 import { SelectControl } from "./SelectControl";
 import { useState } from "react";
 import { Eye, EyeSlash, TextT, Trash } from "@phosphor-icons/react";
@@ -86,7 +87,7 @@ export function LayerInspector({ document: design, photo, selectedIds, onSelect,
         <button type="button" disabled={!canArrange || layers.length < 3} title="至少选择三个元素，保持两端位置并均分文字边界间的空隙" onClick={() => arrange("distribute-x")}>横向等间距</button><button type="button" disabled={!canArrange || layers.length < 3} title="至少选择三个元素，保持两端位置并均分文字边界间的空隙" onClick={() => arrange("distribute-y")}>纵向等间距</button>
       </div>
       <p className="selection-note">{reference === "selection" ? "逐项对齐到所选元素的共同边界。" : "整体对齐到参照，保持元素间相对位置。"}{!canArrange ? "隐藏元素或关闭的区域不参与画布排版。" : ""}</p>
-      <label className="field"><span>字体</span><SelectControl aria-label="字体" value={mixed("fontFamily") ? "" : first.fontFamily} onChange={event => patch({ fontFamily: event.currentTarget.value })}>{mixed("fontFamily") && <option value="" disabled>多种字体</option>}<option value="Noto Sans CJK SC, sans-serif">Noto Sans 思源黑体</option><option value="Noto Serif CJK SC, serif">Noto Serif 思源宋体</option><option value="DejaVu Sans, sans-serif">DejaVu Sans</option><option value="Liberation Sans, sans-serif">Liberation Sans</option><option value="monospace">等宽字体</option></SelectControl></label>
+      <FontPicker value={mixed("fontFamily") ? "" : first.fontFamily} onChange={fontFamily => patch({ fontFamily })} />
       {mixed("fontSize") && <p className="selection-note">字号不同；调整后统一。</p>}
       <SliderRow label="字号" value={first.fontSize} min={8} max={120} onStart={onStart} onEnd={onEnd} onChange={value => patch({ fontSize: value }, false)} />
       <label className="field"><span>字重</span><SelectControl aria-label="字重" value={mixed("fontWeight") ? "" : first.fontWeight} onChange={event => patch({ fontWeight: Number(event.currentTarget.value) as WatermarkLayer["fontWeight"] })}>{mixed("fontWeight") && <option value="" disabled>多种字重</option>}<option value="400">常规</option><option value="500">中等</option><option value="600">半粗</option><option value="700">粗体</option></SelectControl></label>

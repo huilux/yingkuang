@@ -1,3 +1,4 @@
+import { ensureFontsLoaded, fontsChangedEvent, previewFontFamily } from "./font-library";
 import { useEffect, useState } from "react";
 import { calculateGeometry, layerPosition, resolveLayerText } from "./editor-model";
 import { isVisible } from "./canvas-camera";
@@ -27,6 +28,7 @@ async function previewImage(template: TemplateRecord, activePhoto: PhotoAsset | 
   const geometry = calculateGeometry(photo, document);
   const canvas = await rasterize(source, document.frame, geometry, signal, true, 560);
   if (!canvas || signal.aborted) return null;
+  await ensureFontsLoaded(document.layers.filter(layer => isVisible(layer, document.regions)).map(layer => layer.fontFamily));
   await window.document.fonts.ready;
   if (signal.aborted) return null;
   const context = canvas.getContext("2d");
@@ -43,7 +45,7 @@ async function previewImage(template: TemplateRecord, activePhoto: PhotoAsset | 
     context.save();
     context.translate(position.x, position.y);
     context.rotate(layer.rotation * Math.PI / 180);
-    context.font = `${layer.fontWeight} ${layer.fontSize}px ${layer.fontFamily}`;
+    context.font = `${layer.fontWeight} ${layer.fontSize}px ${previewFontFamily(layer.fontFamily)}`;
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.fillStyle = layer.color;
@@ -57,6 +59,12 @@ async function previewImage(template: TemplateRecord, activePhoto: PhotoAsset | 
 
 export function TemplatePreview({ template, photo, className = "" }: { template: TemplateRecord; photo?: PhotoAsset; className?: string }) {
   const [image, setImage] = useState("");
+  const [fontRevision, setFontRevision] = useState(0);
+  useEffect(() => {
+    const changed = () => setFontRevision(value => value + 1);
+    window.addEventListener(fontsChangedEvent, changed);
+    return () => window.removeEventListener(fontsChangedEvent, changed);
+  }, []);
   useEffect(() => {
     const controller = new AbortController();
     setImage("");
@@ -64,7 +72,7 @@ export function TemplatePreview({ template, photo, className = "" }: { template:
       if (result && !controller.signal.aborted) setImage(result);
     }).catch(() => {});
     return () => controller.abort();
-  }, [template, photo]);
+  }, [template, photo, fontRevision]);
   return <span className={`template-preview ${className}`}>
     {image ? <img src={image} alt="" /> : <span className="template-preview-loading" aria-hidden="true" />}
   </span>;

@@ -31,6 +31,8 @@ ab_glyph = "0.2.32"
 little_exif = "0.6.23"
 lcms2 = "6.1.1"
 tempfile = "3.27.0"
+sha2 = "0.10.9"
+ttf-parser = "0.25.1"
 
 # Keep photo decoding and thumbnail generation interactive in `tauri dev`.
 # The application itself retains normal debug builds and debugging information.

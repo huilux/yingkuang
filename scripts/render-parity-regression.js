@@ -31,7 +31,9 @@
     { ...common, type: 'solid', radius: 12, shadow: 100 }, (x, y) => x >= 80 && x < 600 && y >= 444 && y < 540);
   const scaled = await compare('scaled_background', { width: 680, height: 580, photo: { x: 40, y: 40, width: 600, height: 400 } },
     { ...common, type: 'blur' }, (x, y) => x >= 80 && x < 600 && y >= 480 && y < 560);
-  async function textBounds(name, rotation) {
+  async function textBounds(name, rotation, fontFamily = 'Noto Sans CJK SC, sans-serif', fontWeight = 400) {
+    const { ensureFontsLoaded, previewFontFamily } = await import('/src/font-library.ts');
+    await ensureFontsLoaded([fontFamily]);
     await document.fonts.ready;
     const container = document.createElement('div');
     container.style.cssText = 'position:fixed;left:-10000px;top:-10000px;width:600px;height:400px';
@@ -39,7 +41,7 @@
     const stage = new window.Konva.Stage({ container, width: 600, height: 400 });
     const layer = new window.Konva.Layer();
     const node = new window.Konva.Text({ x: 300, y: 200, text: '映框 50mm f/2.8',
-      fontFamily: 'Noto Sans CJK SC, sans-serif', fontSize: 32, fontStyle: '400', fill: '#000', rotation });
+      fontFamily: previewFontFamily(fontFamily), fontSize: 32, fontStyle: String(fontWeight), fill: '#000', rotation });
     node.offset({ x: node.width() / 2, y: node.height() / 2 });
     layer.add(node); stage.add(layer); stage.draw();
     const preview = stage.toCanvas({ pixelRatio: 1 });
@@ -66,5 +68,12 @@
   }
   const text = await textBounds('text', 0);
   const textRotated = await textBounds('text_rotated', 90);
-  return { background, shadow, strongShadow, scaled, text, textRotated };
+  const montserrat = await textBounds('montserrat_mixed', 0, 'Montserrat, Noto Sans CJK SC, sans-serif');
+  const montserratBold = await textBounds('montserrat_bold', 0, 'Montserrat, Noto Sans CJK SC, sans-serif', 700);
+  const serif = await textBounds('serif_mixed', 0, 'Noto Serif CJK SC, serif', 600);
+  const { importFont } = await import('/src/font-library.ts');
+  const fontBytes = await (await fetch('/fonts/space-mono/SpaceMono-Regular.ttf')).arrayBuffer();
+  const imported = await importFont(new File([fontBytes], 'SpaceMono.ttf'));
+  const importedText = await textBounds('imported_mixed', 0, imported.value);
+  return { background, shadow, strongShadow, scaled, text, textRotated, montserrat, montserratBold, serif, importedText };
 })();
