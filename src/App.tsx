@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
+import { importDirectoryKey, readImportDirectory, selectedImportDirectory } from "./import-location";
 import {
   ArrowCounterClockwise,
   ArrowClockwise,
@@ -185,6 +186,7 @@ function App() {
   const [exportCancelling, setExportCancelling] = useState(false);
   const [sessionReady, setSessionReady] = useState(!isNative);
   const importBusy = useRef(false);
+  const lastImportDirectory = useRef<string | undefined>(undefined);
   const lastExportRequest = useRef<ExportRequest | null>(null);
   const exportBusy = useRef(false);
   const restoredSession = useRef<SessionSnapshot>({ paths: [] });
@@ -568,9 +570,16 @@ function App() {
     importBusy.current = true;
     setMessage("");
     try {
+      const defaultPath = lastImportDirectory.current ?? readImportDirectory();
       const selection = source === "folder"
-        ? await open({ directory: true, multiple: false, title: "选择照片文件夹" })
-        : await open({ multiple: true, directory: false, filters: [{ name: "摄影图片", extensions: imageExtensions }] });
+        ? await open({ directory: true, multiple: false, title: "选择照片文件夹", defaultPath })
+        : await open({ multiple: true, directory: false, filters: [{ name: "摄影图片", extensions: imageExtensions }], defaultPath });
+      const directory = selection ? selectedImportDirectory(selection, source) : undefined;
+      if (directory) {
+        lastImportDirectory.current = directory;
+        try { localStorage.setItem(importDirectoryKey, directory); storageError("importDirectory", ""); }
+        catch { storageError("importDirectory", "最近导入目录暂未保存，本次仍会记住；重启后可能需要重新选择。"); }
+      }
       const selectedPaths = source === "folder" && typeof selection === "string"
         ? await invoke<string[]>("list_image_files", { directory: selection })
         : selection ? (Array.isArray(selection) ? selection : [selection]) : [];
