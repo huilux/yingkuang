@@ -122,7 +122,7 @@ button:disabled { cursor: not-allowed; opacity: .42; }
   cursor: pointer;
   transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
-.button { padding: 0 13px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.button { padding: 0 13px; font-size: 12px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
 .button:hover:not(:disabled), .icon-button:hover:not(:disabled), .tool-button:hover:not(:disabled), .zoom-control button:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--line-strong); }
 .button.primary { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
 .button.primary:hover:not(:disabled) { border-color: var(--accent-strong); background: var(--accent-strong); }
@@ -447,8 +447,8 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .field-hint, .field-message { font-size: 9px; line-height: 1.45; }
 .field-hint { color: var(--text-tertiary); }
 .field-message { color: var(--danger); }
-.check-field { display: grid; grid-template-columns: 16px 1fr; gap: 9px; align-items: start; margin-top: 5px; padding: 12px; border: 1px solid var(--line); border-radius: var(--control-radius); cursor: pointer; }
-.check-field input { margin: 2px 0 0; }
+.check-field { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 9px; align-items: start; margin-top: 5px; padding: 12px; border: 1px solid var(--line); border-radius: var(--control-radius); font-size: 12px; line-height: 1.5; cursor: pointer; }
+.check-field input { margin: 1px 0 0; }
 input[type="checkbox"] { appearance: none; display: inline-grid; place-content: center; width: 16px; height: 16px; padding: 0; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--bg-input); cursor: pointer; }
 input[type="checkbox"]::after { content: ""; width: 4px; height: 8px; margin-top: -2px; border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg); visibility: hidden; }
 input[type="checkbox"]:checked { border-color: var(--accent); background: var(--accent); }
