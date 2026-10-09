@@ -643,3 +643,11 @@ input[type="checkbox"]:disabled { opacity: .45; cursor: not-allowed; }
 .recovery-backup-path { overflow-wrap: anywhere; }
 .storage-notice > div + div { margin-top: 10px; }
 .storage-notice { min-height: 0; max-height: 240px; overflow-y: auto; }
+
+/* File drop feedback covers the whole window without intercepting canvas gestures. */
+.library-drop-hint { margin: -5px 12px 12px; color: var(--text-tertiary); font-size: 11px; text-align: center; }
+.photo-drop-overlay { position: fixed; z-index: 100; inset: 12px; display: grid; place-items: center; border: 2px dashed var(--accent); border-radius: var(--panel-radius); background: color-mix(in srgb, var(--bg-app) 92%, transparent); pointer-events: none; }
+.photo-drop-overlay > div { display: grid; justify-items: center; gap: 12px; padding: 28px; border: 1px solid var(--line-strong); border-radius: var(--panel-radius); background: var(--bg-panel); text-align: center; }
+.photo-drop-overlay svg { width: 40px; height: 40px; color: var(--accent); }
+.photo-drop-overlay strong { color: var(--text); font-size: 18px; font-weight: 600; }
+.photo-drop-overlay span { color: var(--text-secondary); font-size: 13px; }

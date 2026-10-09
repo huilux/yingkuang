@@ -3,7 +3,7 @@ use exif::{In, Reader as ExifReader, Tag, Value};
 use image::{DynamicImage, GenericImageView, codecs::jpeg::JpegEncoder};
 use serde::Serialize;
 use std::{
-    collections::{HashMap, hash_map::DefaultHasher},
+    collections::{HashMap, HashSet, hash_map::DefaultHasher},
     fs::{self, File},
     hash::{Hash, Hasher},
     io::{BufReader, Write},
@@ -64,6 +64,14 @@ struct InspectFailure {
 struct InspectReport {
     items: Vec<PhotoAsset>,
     failures: Vec<InspectFailure>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PhotoPathsReport {
+    paths: Vec<String>,
+    failures: Vec<InspectFailure>,
+    ignored: usize,
 }
 
 #[derive(Default)]
@@ -442,6 +450,58 @@ fn image_files_in_directory(directory: &Path) -> Result<Vec<String>, String> {
     Ok(paths)
 }
 
+fn resolve_photo_paths_sync(paths: Vec<String>) -> PhotoPathsReport {
+    let mut report = PhotoPathsReport {
+        paths: Vec::new(),
+        failures: Vec::new(),
+        ignored: 0,
+    };
+    let mut visited = HashSet::new();
+    let mut images = HashSet::new();
+    for path in paths {
+        if !visited.insert(path.clone()) {
+            continue;
+        }
+        let input = Path::new(&path);
+        let resolved = match fs::metadata(input) {
+            Ok(metadata) if metadata.is_dir() => image_files_in_directory(input),
+            Ok(metadata)
+                if metadata.is_file()
+                    && input
+                        .extension()
+                        .and_then(|extension| extension.to_str())
+                        .is_some_and(|extension| {
+                            matches!(
+                                extension.to_ascii_lowercase().as_str(),
+                                "jpg" | "jpeg" | "png"
+                            )
+                        }) =>
+            {
+                Ok(vec![path.clone()])
+            }
+            Ok(_) => {
+                report.ignored += 1;
+                continue;
+            }
+            Err(error) => Err(format!("无法读取拖入项目：{error}")),
+        };
+        match resolved {
+            Ok(paths) => report
+                .paths
+                .extend(paths.into_iter().filter(|path| images.insert(path.clone()))),
+            Err(reason) => report.failures.push(InspectFailure { path, reason }),
+        }
+    }
+    report
+}
+
+#[tauri::command]
+async fn resolve_photo_paths(paths: Vec<String>) -> Result<PhotoPathsReport, String> {
+    tauri::async_runtime::spawn_blocking(move || resolve_photo_paths_sync(paths))
+        .await
+        .map_err(|error| format!("读取拖入项目任务异常结束：{error}"))
+}
+
 #[tauri::command]
 async fn list_image_files(directory: String) -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(move || image_files_in_directory(Path::new(&directory)))
@@ -496,6 +556,7 @@ pub fn run() {
             write_template_backup,
             load_editor_photo,
             export::preflight_export,
+            resolve_photo_paths,
             export::export_images,
             export::cancel_export
         ])
@@ -538,6 +599,38 @@ mod tests {
             2,
             "failed backup left a temporary file"
         );
+    }
+
+    #[test]
+    fn dropped_paths_expand_folders_deduplicate_and_keep_good_inputs_after_errors() {
+        let root = tempfile::tempdir().unwrap();
+        let nested = root.path().join("nested");
+        fs::create_dir(&nested).unwrap();
+        for name in ["a.JPG", "b.jPeG", "c.PNG", "notes.txt"] {
+            File::create(nested.join(name)).unwrap();
+        }
+        let image = nested.join("a.JPG").to_string_lossy().into_owned();
+        let folder = root.path().to_string_lossy().into_owned();
+        let text = nested.join("notes.txt").to_string_lossy().into_owned();
+        let missing = root
+            .path()
+            .join("missing.jpg")
+            .to_string_lossy()
+            .into_owned();
+        let report = resolve_photo_paths_sync(vec![
+            image.clone(),
+            missing.clone(),
+            text,
+            folder.clone(),
+            folder,
+            image.clone(),
+        ]);
+        assert_eq!(report.paths.len(), 3);
+        assert_eq!(report.paths[0], image);
+        assert_eq!(report.ignored, 1);
+        assert_eq!(report.failures.len(), 1);
+        assert_eq!(report.failures[0].path, missing);
+        assert!(resolve_photo_paths_sync(Vec::new()).paths.is_empty());
     }
 
     #[test]

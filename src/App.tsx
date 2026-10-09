@@ -1,11 +1,12 @@
 import { WindowChrome } from "./WindowChrome";
 import { SelectControl } from "./SelectControl";
-import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { importDirectoryKey, readImportDirectory, selectedImportDirectory } from "./import-location";
+import { usePhotoDrop } from "./use-photo-drop";
 import {
   ArrowCounterClockwise,
   ArrowClockwise,
@@ -565,37 +566,44 @@ function App() {
     }
   }
 
-  async function importNativePhotos(source: "files" | "folder") {
+  async function importNativePhotos(source: "files" | "folder" | string[]) {
     if (importBusy.current || loadState === "loading") return;
     importBusy.current = true;
     setMessage("");
     try {
+      const dropped = Array.isArray(source);
       const defaultPath = lastImportDirectory.current ?? readImportDirectory();
-      const selection = source === "folder"
+      const selection = dropped ? source : source === "folder"
         ? await open({ directory: true, multiple: false, title: "选择照片文件夹", defaultPath })
         : await open({ multiple: true, directory: false, filters: [{ name: "摄影图片", extensions: imageExtensions }], defaultPath });
-      const directory = selection ? selectedImportDirectory(selection, source) : undefined;
+      const directory = selection && !dropped ? selectedImportDirectory(selection, source as "files" | "folder") : undefined;
       if (directory) {
         lastImportDirectory.current = directory;
         try { localStorage.setItem(importDirectoryKey, directory); storageError("importDirectory", ""); }
         catch { storageError("importDirectory", "最近导入目录暂未保存，本次仍会记住；重启后可能需要重新选择。"); }
       }
-      const selectedPaths = source === "folder" && typeof selection === "string"
+      if (!selection) return;
+      setLoadState("loading");
+      setMessage("正在查找照片…");
+      const resolved = dropped ? await invoke<{ paths: string[]; failures: InspectReport["failures"]; ignored: number }>("resolve_photo_paths", { paths: source }) : null;
+      const selectedPaths = resolved ? resolved.paths : source === "folder" && typeof selection === "string"
         ? await invoke<string[]>("list_image_files", { directory: selection })
         : selection ? (Array.isArray(selection) ? selection : [selection]) : [];
       if (!selectedPaths.length) {
-        if (source === "folder" && selection) setMessage("该文件夹内没有 JPEG 或 PNG 照片");
+        setLoadState("idle");
+        setMessage(resolved?.failures.length ? `无法读取拖入项目：${resolved.failures[0].reason}` : "未找到 JPEG 或 PNG 照片");
         return;
       }
       const known = new Set(photos.map(photo => photo.path));
       const paths = [...new Set(selectedPaths)].filter(path => !known.has(path));
       if (!paths.length) {
+        setLoadState("idle");
         setMessage("所选照片已在当前批次中");
         return;
       }
       setLoadState("loading");
       let imported = 0;
-      let failed = 0;
+      let failed = resolved?.failures.length ?? 0;
       for (const [index, path] of paths.entries()) {
         setMessage(`正在导入 ${index + 1}/${paths.length} 张照片`);
         const report = await invoke<InspectReport>("inspect_images_resilient", { paths: [path] });
@@ -604,9 +612,9 @@ function App() {
         failed += report.failures.length;
       }
       setLoadState("idle");
-      setMessage(failed
+      setMessage((failed
         ? `已导入 ${imported} 张，${failed} 张无法读取`
-        : `已导入 ${imported} 张照片`);
+        : `已导入 ${imported} 张照片`) + (resolved?.ignored ? `，已忽略 ${resolved.ignored} 个不支持的文件` : ""));
     } catch (error) {
       setLoadState("error");
       setMessage(String(error));
@@ -615,9 +623,9 @@ function App() {
     }
   }
 
-  async function importBrowserPhotos(event: ChangeEvent<HTMLInputElement>) {
-    const input = event.currentTarget;
-    const files = [...(input.files ?? [])];
+  async function importBrowserPhotos(selectedFiles: File[]) {
+    const files = selectedFiles.filter(file => /\.(jpe?g|png)$/iu.test(file.name));
+    if (selectedFiles.length && !files.length) { setMessage("请添加 JPEG 或 PNG 照片"); return; }
     if (!files.length || importBusy.current) return;
     importBusy.current = true;
     setLoadState("loading");
@@ -668,7 +676,6 @@ function App() {
       setMessage(`读取图片失败：${String(error)}`);
     } finally {
       importBusy.current = false;
-      input.value = "";
     }
   }
 
@@ -677,6 +684,13 @@ function App() {
     if (isNative) void importNativePhotos(source);
     else (source === "folder" ? folderInput : fileInput).current?.click();
   }
+
+  const dropBlockedReason = !sessionReady || loadState === "loading" ? "正在读取照片，请稍后再拖入"
+    : exportRunning || exportChecking ? "正在导出，请完成后再拖入"
+    : showExport || exportResult || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery ? "请先关闭弹窗，再拖入照片" : "";
+  const photoDragging = usePhotoDrop({ native: isNative, blockedReason: dropBlockedReason,
+    onPaths: paths => { void importNativePhotos(paths); },
+    onFiles: files => { void importBrowserPhotos(files); }, onMessage: setMessage });
 
   function activatePhoto(id: string) {
     commitTransaction();
@@ -989,10 +1003,11 @@ function App() {
         updateLayers(moveSelection(selectedLayers.filter(layer => isVisible(layer, activeDocument.regions)), calculateGeometry(activePhoto, activeDocument), { x: direction[0] * step, y: direction[1] * step }));
       }
     }}>
+      {photoDragging && <div className="photo-drop-overlay" role="status"><div><ImageSquare aria-hidden="true" /><strong>{dropBlockedReason || "松开鼠标，导入照片"}</strong><span>{isNative ? "支持 JPEG / PNG，也可拖入文件夹" : "支持 JPEG / PNG，可一次拖入多张"}</span></div></div>}
       <WindowChrome enabled={isNative} />
       <header className="app-header" data-window-drag={isNative ? "" : undefined}>
-        <input ref={fileInput} className="visually-hidden" type="file" aria-label="选择照片文件" accept="image/jpeg,image/png" multiple onChange={(event) => void importBrowserPhotos(event)} />
-        <input ref={(node) => { folderInput.current = node; node?.setAttribute("webkitdirectory", ""); }} className="visually-hidden" type="file" aria-label="选择照片文件夹" accept="image/jpeg,image/png" multiple onChange={(event) => void importBrowserPhotos(event)} />
+        <input ref={fileInput} className="visually-hidden" type="file" aria-label="选择照片文件" accept="image/jpeg,image/png" multiple onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void importBrowserPhotos(files); }} />
+        <input ref={(node) => { folderInput.current = node; node?.setAttribute("webkitdirectory", ""); }} className="visually-hidden" type="file" aria-label="选择照片文件夹" accept="image/jpeg,image/png" multiple onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void importBrowserPhotos(files); }} />
         <div className="brand-block"><span className="brand-mark"><FrameCorners weight="bold" /></span><h1>映框</h1></div>
         <div className="project-title"><strong title={activePhoto?.fileName}>{activePhoto?.fileName ?? "未导入照片"}</strong></div>
         <div className="header-actions">
@@ -1015,6 +1030,7 @@ function App() {
               <button className="button secondary" type="button" onClick={() => handleImport()} disabled={loadState === "loading"}><Plus /> 添加照片</button>
               <button className="button secondary" type="button" onClick={() => handleImport("folder")} disabled={loadState === "loading"}><FolderOpen /> 导入文件夹</button>
             </div>
+            <p className="library-drop-hint">{isNative ? "也可将照片或文件夹拖入窗口" : "也可将照片拖入窗口"}</p>
             <label className="library-template-select"><span>新照片使用模板</span><SelectControl aria-label="新照片使用模板" value={defaultTemplateId} onChange={(event) => setDefaultTemplateId(event.currentTarget.value)}>{templates.map((template) => <option value={template.id} key={template.id}>{template.name}</option>)}</SelectControl><small>仅影响之后导入的照片</small></label>
             {!!photos.length && <details className="photo-filters">
               <summary>查找与筛选{filtersActive ? ` · ${visiblePhotos.length}/${photos.length}` : ""}</summary>
