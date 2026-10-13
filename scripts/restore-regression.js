@@ -12,6 +12,7 @@
   const session = {
     paths: ['first.jpg', 'missing.jpg', 'active.jpg'], activePath: 'active.jpg',
     checkedPaths: ['first.jpg'], documentsByPath: { 'missing.jpg': missingDocument }, overridesByPath: { 'active.jpg': { camera: 'Restored Camera' }, 'missing.jpg': { camera: 'Missing Camera' } },
+    cropsByPath: { 'missing.jpg': { x: .1, y: .2, width: .5, height: .5, rotation: 13.7 } },
   };
   localStorage.setItem('yingkuang-session-v2', JSON.stringify(session));
   let release;
@@ -50,6 +51,7 @@
     if (persisted.activePath !== 'active.jpg' || persisted.checkedPaths.join() !== 'first.jpg' || persisted.overridesByPath['active.jpg'].camera !== 'Restored Camera') failures.push('Restored selection or metadata was lost');
     if (!host.querySelector('.status-bar').textContent.includes('1 张原图已移动')) failures.push('Missing photo was not reported');
     if (!persisted.paths.includes('missing.jpg') || persisted.documentsByPath['missing.jpg']?.frame.paddingX !== 17 || persisted.overridesByPath['missing.jpg']?.camera !== 'Missing Camera') failures.push('Missing photo edits were overwritten during restoration');
+    if (persisted.cropsByPath['missing.jpg']?.x !== .1 || persisted.cropsByPath['missing.jpg']?.rotation !== 13.7) failures.push('Missing photo crop was overwritten during restoration');
     const report = { activeVisibleEarly, partialSavePrevented, inspections, failures };
     if (failures.length) throw new Error(JSON.stringify(report));
     missingAvailable = true;
@@ -58,6 +60,7 @@
     const recovered = JSON.parse(localStorage.getItem('yingkuang-session-v2'));
     if (recovered.documentsByPath['missing.jpg']?.frame.paddingX !== 17 || recovered.overridesByPath['missing.jpg']?.camera !== 'Missing Camera' || host.querySelector('.missing-photos')) throw new Error('Reimport did not recover missing photo edits');
     if (recovered.checkedPaths.includes('missing.jpg')) throw new Error('Recovering an unchecked missing photo changed the export selection');
+    if (recovered.cropsByPath['missing.jpg']?.width !== .5 || recovered.cropsByPath['missing.jpg']?.rotation !== 13.7) throw new Error('Reimport did not recover the missing crop');
     return { ...report, missingEditsPreserved: true, reimportRecovered: true, recoveredSelectionPreserved: true };
   } finally {
     release(); root.unmount(); host.remove(); clearMocks();

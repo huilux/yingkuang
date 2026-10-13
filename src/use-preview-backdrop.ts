@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import type { CanvasGeometry, FrameSettings } from "./types";
+import type { CanvasGeometry, FrameSettings, PhotoAsset } from "./types";
+import { bitmapCrop } from "./photo-crop";
+import { rotatedPhotoBitmap } from "./photo-transform";
 
 const escapeXml = (value: string) => value.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[char]!);
 
@@ -16,8 +18,25 @@ async function embeddedSource(source: string, signal: AbortSignal): Promise<stri
   });
 }
 
-export async function rasterize(source: string, frame: FrameSettings, geometry: CanvasGeometry, signal: AbortSignal, includePhoto = true, maxDimension = 1600) {
-  const href = escapeXml(await embeddedSource(source, signal));
+export async function rasterize(source: string, frame: FrameSettings, geometry: CanvasGeometry, signal: AbortSignal, includePhoto = true, maxDimension = 1600, photoSource?: PhotoAsset) {
+  let embedded = await embeddedSource(source, signal);
+  if (signal.aborted) return null;
+  if (photoSource?.crop) {
+    const original = new Image();
+    original.src = embedded;
+    await original.decode();
+    if (signal.aborted) return null;
+    const rotated = rotatedPhotoBitmap(original, photoSource.width, photoSource.height, photoSource.crop.rotation);
+    const crop = bitmapCrop(photoSource, rotated.width, rotated.height);
+    const cropped = document.createElement("canvas");
+    cropped.width = Math.max(1, Math.round(crop.width));
+    cropped.height = Math.max(1, Math.round(crop.height));
+    const context = cropped.getContext("2d");
+    if (!context) throw new Error("无法生成裁切预览");
+    context.drawImage(rotated, crop.x, crop.y, crop.width, crop.height, 0, 0, cropped.width, cropped.height);
+    embedded = cropped.toDataURL("image/png");
+  }
+  const href = escapeXml(embedded);
   if (signal.aborted) return null;
   const { width, height, photo } = geometry;
   const scale = Math.min(1, maxDimension / Math.max(width, height));
@@ -53,16 +72,16 @@ export async function rasterize(source: string, frame: FrameSettings, geometry: 
   }
 }
 
-export function usePreviewBackdrop(source: string, frame: FrameSettings, geometry: CanvasGeometry) {
+export function usePreviewBackdrop(source: string, frame: FrameSettings, geometry: CanvasGeometry, photo?: PhotoAsset) {
   const [image, setImage] = useState<HTMLCanvasElement | null>(null);
   const [error, setError] = useState(false);
   // Dependencies describe pixels, not the document or its watermark positions.
-  const key = JSON.stringify([source, frame, geometry.width, geometry.height, geometry.photo]);
+  const key = JSON.stringify([source, frame, geometry.width, geometry.height, geometry.photo, photo?.crop, photo?.width, photo?.height]);
   useEffect(() => {
     const controller = new AbortController();
     setError(false);
     const timer = window.setTimeout(() => {
-      void rasterize(source, frame, geometry, controller.signal, false).then(result => {
+      void rasterize(source, frame, geometry, controller.signal, false, 1600, photo).then(result => {
         if (result && !controller.signal.aborted) setImage(result);
       }).catch(() => { if (!controller.signal.aborted) setError(true); });
     }, 60);

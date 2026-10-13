@@ -35,6 +35,17 @@ export interface PhotoAsset {
   thumbnailDataUrl: string;
   metadata: PhotoMetadata;
   overrides?: Partial<Record<MetadataKey, string>>;
+  /** Normalized coordinates after EXIF orientation, rotation and automatic edge trimming. */
+  crop?: PhotoCrop;
+}
+
+export interface PhotoCrop {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Clockwise degrees, -180..180; missing in legacy crop records. */
+  rotation?: number;
 }
 
 export interface FrameSettings {

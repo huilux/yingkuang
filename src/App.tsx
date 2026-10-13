@@ -1,12 +1,13 @@
 import { WindowChrome } from "./WindowChrome";
 import { SelectControl } from "./SelectControl";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { importDirectoryKey, readImportDirectory, selectedImportDirectory } from "./import-location";
 import { usePhotoDrop } from "./use-photo-drop";
+import { cropPixels } from "./photo-crop";
 import {
   ArrowCounterClockwise,
   ArrowClockwise,
@@ -58,11 +59,14 @@ import type {
   ExportSummary,
   LayerSource,
   PhotoAsset,
+  PhotoCrop,
   RegionId,
   TemplateRecord,
   WatermarkLayer,
 } from "./types";
 import "./App.css";
+
+const CropEditor = lazy(() => import("./CropEditor"));
 
 const isNative = "__TAURI_INTERNALS__" in window;
 const sessionKey = "yingkuang-session-v2";
@@ -114,6 +118,7 @@ type HistoryEntry = {
   documents: Record<string, EditorDocument>;
   overrides: Record<string, PhotoAsset["overrides"]>;
   templates: Record<string, string | undefined>;
+  crops: Record<string, PhotoCrop | undefined>;
 };
 
 type InspectReport = {
@@ -139,7 +144,8 @@ const exportStageLabels: Record<ExportProgress["stage"], string> = {
 };
 
 function formatPixels(photo: PhotoAsset) {
-  return `${photo.width} × ${photo.height}`;
+  const crop = cropPixels(photo);
+  return `${crop.width} × ${crop.height}${photo.crop ? " · 已调整" : ""}`;
 }
 
 function initialDocuments() {
@@ -176,6 +182,7 @@ function App() {
   const [showTemplateManager, setShowTemplateManager] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [showExport, setShowExport] = useState(false);
+  const [showCrop, setShowCrop] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState<{ ids: string[]; missingPaths: string[] } | null>(null);
   const [exportSettings, setExportSettings] = useState(defaultExport);
   const [exportRunning, setExportRunning] = useState(false);
@@ -272,7 +279,7 @@ function App() {
             const report = await invoke<InspectReport>("inspect_images_resilient", { paths: [path] });
             if (cancelled) return;
             for (const item of report.items) {
-              const photo = { ...item, overrides: saved.overridesByPath?.[item.path] };
+              const photo = { ...item, overrides: saved.overridesByPath?.[item.path], crop: saved.cropsByPath?.[item.path] };
               setDocuments(current => ({ ...current, [photo.id]: saved.documentsByPath?.[photo.path] ?? createDefaultDocument() }));
               const sourceTemplate = saved.templateIdsByPath?.[photo.path] ?? saved.activeTemplate ?? defaultTemplateId;
               if (templates.some((template) => template.id === sourceTemplate)) setTemplateByPhoto(current => ({ ...current, [photo.id]: sourceTemplate }));
@@ -311,6 +318,7 @@ function App() {
     const overridesByPath: Record<string, PhotoAsset["overrides"]> = {};
     const templateIdsByPath: Record<string, string> = {};
     const dimensionsByPath: NonNullable<SessionSnapshot["dimensionsByPath"]> = {};
+    const cropsByPath: NonNullable<SessionSnapshot["cropsByPath"]> = {};
     const saved = restoredSession.current;
     const unavailable = missingPhotos.filter(item => !photos.some(photo => photo.path === item.path));
     for (const { path } of unavailable) {
@@ -318,6 +326,7 @@ function App() {
       if (saved.overridesByPath?.[path]) overridesByPath[path] = saved.overridesByPath[path];
       if (saved.templateIdsByPath?.[path]) templateIdsByPath[path] = saved.templateIdsByPath[path];
       if (saved.dimensionsByPath?.[path]) dimensionsByPath[path] = saved.dimensionsByPath[path];
+      if (saved.cropsByPath?.[path]) cropsByPath[path] = saved.cropsByPath[path];
     }
     for (const photo of photos) {
       if (!photo.path) continue;
@@ -325,6 +334,7 @@ function App() {
       if (photo.overrides) overridesByPath[photo.path] = photo.overrides;
       if (templateByPhoto[photo.id]) templateIdsByPath[photo.path] = templateByPhoto[photo.id];
       dimensionsByPath[photo.path] = { width: photo.width, height: photo.height };
+      if (photo.crop) cropsByPath[photo.path] = photo.crop;
     }
     const order = new Map(saved.paths.map((path, index) => [path, index]));
     const paths = [...new Set([...photos.map(photo => photo.path).filter(Boolean), ...unavailable.map(item => item.path)])]
@@ -337,6 +347,7 @@ function App() {
       overridesByPath,
       templateIdsByPath,
       dimensionsByPath,
+      cropsByPath,
       exportSettings,
     };
     return snapshot;
@@ -404,7 +415,7 @@ function App() {
     try {
       if (photos.some(photo => photo.path === inspected.path || photo.id === inspected.id)) throw new Error("所选照片已在当前批次中");
       const saved = relocateSessionPath(restoredSession.current, oldPath, inspected.path);
-      const photo = { ...inspected, overrides: saved.overridesByPath?.[inspected.path] };
+      const photo = { ...inspected, overrides: saved.overridesByPath?.[inspected.path], crop: saved.cropsByPath?.[inspected.path] };
       const templateId = saved.templateIdsByPath?.[photo.path] ?? defaultTemplateId;
       const template = templates.find(template => template.id === templateId) ?? templates[0];
       const document = saved.documentsByPath?.[photo.path] ?? (template ? documentFromTemplate(template, photo) : createDefaultDocument());
@@ -435,7 +446,7 @@ function App() {
   }
 
   function captureHistory(ids: string[]): HistoryEntry {
-    const entry: HistoryEntry = { documents: {}, overrides: {}, templates: {} };
+    const entry: HistoryEntry = { documents: {}, overrides: {}, templates: {}, crops: {} };
     for (const id of new Set(ids)) {
       const photo = photos.find(photo => photo.id === id);
       const document = id === activeId ? currentDocument.current : documents[id];
@@ -443,6 +454,7 @@ function App() {
       entry.documents[id] = cloneDocument(document);
       entry.overrides[id] = structuredClone(photo.overrides);
       entry.templates[id] = templateByPhoto[id];
+      entry.crops[id] = structuredClone(photo.crop);
     }
     return entry;
   }
@@ -459,7 +471,7 @@ function App() {
     if (entry.documents[activeId]) currentDocument.current = cloneDocument(entry.documents[activeId]);
     setDocuments(current => ({ ...current, ...structuredClone(entry.documents) }));
     setPhotos(current => current.map(photo => Object.prototype.hasOwnProperty.call(entry.overrides, photo.id)
-      ? { ...photo, overrides: structuredClone(entry.overrides[photo.id]) } : photo));
+      ? { ...photo, overrides: structuredClone(entry.overrides[photo.id]), crop: structuredClone(entry.crops[photo.id]) } : photo));
     setTemplateByPhoto(current => {
       const next = { ...current };
       for (const [id, template] of Object.entries(entry.templates)) {
@@ -505,6 +517,17 @@ function App() {
     restoreHistory(previous);
   }
 
+  function applyCrop(crop: PhotoCrop | undefined) {
+    if (!activePhoto) return;
+    commitTransaction();
+    if (JSON.stringify(activePhoto.crop) !== JSON.stringify(crop)) {
+      pushHistory(captureHistory([activeId]));
+      setPhotos(current => current.map(photo => photo.id === activeId ? { ...photo, crop } : photo));
+    }
+    setShowCrop(false);
+    setMessage(crop ? "已应用裁切与旋转，相框与水印已适配选区" : "已恢复完整照片");
+  }
+
   function redo() {
     const next = redoStack.current.pop();
     if (!next) return;
@@ -533,7 +556,7 @@ function App() {
   function addPhotos(next: PhotoAsset[], activate = true) {
     if (!next.length) return;
     const recovered = new Set(missingPhotos.map(item => item.path));
-    next = next.map(photo => recovered.has(photo.path) ? { ...photo, overrides: restoredSession.current.overridesByPath?.[photo.path] } : photo);
+    next = next.map(photo => recovered.has(photo.path) ? { ...photo, overrides: restoredSession.current.overridesByPath?.[photo.path], crop: restoredSession.current.cropsByPath?.[photo.path] } : photo);
     setMissingPhotos(current => current.filter(item => !next.some(photo => photo.path === item.path)));
     const selectedTemplate = templates.find((template) => template.id === defaultTemplateId) ?? templates[0];
     setPhotos((current) => {
@@ -687,7 +710,7 @@ function App() {
 
   const dropBlockedReason = !sessionReady || loadState === "loading" ? "正在读取照片，请稍后再拖入"
     : exportRunning || exportChecking ? "正在导出，请完成后再拖入"
-    : showExport || exportResult || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery ? "请先关闭弹窗，再拖入照片" : "";
+    : showCrop || showExport || exportResult || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery ? "请先关闭弹窗，再拖入照片" : "";
   const photoDragging = usePhotoDrop({ native: isNative, blockedReason: dropBlockedReason,
     onPaths: paths => { void importNativePhotos(paths); },
     onFiles: files => { void importBrowserPhotos(files); }, onMessage: setMessage });
@@ -711,7 +734,7 @@ function App() {
     saved.paths = saved.paths.filter(path => !removedPaths.has(path));
     saved.checkedPaths = saved.checkedPaths?.filter(path => !removedPaths.has(path));
     if (saved.activePath && removedPaths.has(saved.activePath)) saved.activePath = "";
-    for (const key of ["documentsByPath", "overridesByPath", "templateIdsByPath", "dimensionsByPath"] as const) {
+    for (const key of ["documentsByPath", "overridesByPath", "templateIdsByPath", "dimensionsByPath", "cropsByPath"] as const) {
       for (const path of removedPaths) if (saved[key]) delete saved[key][path];
     }
     restoredSession.current = saved;
@@ -982,7 +1005,7 @@ function App() {
     <div className={`app-shell ${isNative ? "native-window" : ""}`} onKeyDown={event => {
       if (event.defaultPrevented) return;
       const target = event.target as HTMLElement;
-      if (showExport || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery || exportRunning || exportResult) return;
+      if (showCrop || showExport || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery || exportRunning || exportResult) return;
       if (editorRef.current?.isInteracting()) return;
       const command = event.ctrlKey || event.metaKey;
       const rangeUndo = target.closest('input[type="range"]') && command && ["z", "y"].includes(event.key.toLowerCase());
@@ -1067,7 +1090,7 @@ function App() {
         </aside>
 
         <section className="editor-panel">
-          <EditorWorkspace photo={activePhoto} document={activeDocument} loading={loadState === "loading"} onImport={() => handleImport()} onToggleSnap={() => setSnapEnabled(value => !value)} editorRef={editorRef} selectedLayerIds={selectedLayerIds} snapEnabled={snapEnabled} onSelectionChange={(ids) => { setSelectedLayerIds(ids); if (ids.length) setInspectorTab("watermark"); }} onLayersCommit={updateLayers} />
+          <EditorWorkspace photo={activePhoto} document={activeDocument} loading={loadState === "loading"} onImport={() => handleImport()} onCrop={() => { commitTransaction(); setShowCrop(true); }} onToggleSnap={() => setSnapEnabled(value => !value)} editorRef={editorRef} selectedLayerIds={selectedLayerIds} snapEnabled={snapEnabled} onSelectionChange={(ids) => { setSelectedLayerIds(ids); if (ids.length) setInspectorTab("watermark"); }} onLayersCommit={updateLayers} />
 
           <div className={`status-bar ${loadState === "error" ? "error" : ""}`}><span>{message || (selectedLayers.length ? `已选：${selectedLayers.length === 1 ? selectedLayers[0].name : `${selectedLayers.length} 个元素`}` : activePhoto ? `${activePhoto.fileName}  ${activePhoto.megapixels.toFixed(1)} MP` : "准备就绪")}</span><span>{activePhoto ? `${formatPixels(activePhoto)}  sRGB  预览` : "完全本地处理"}</span></div>
         </section>
@@ -1129,7 +1152,7 @@ function App() {
         <div className="compact-dialog-header"><div><span>恢复编辑</span><h2 id="relink-title">确认原图的新位置</h2></div><button className="icon-button" type="button" aria-label="关闭" onClick={() => setPendingRelink(null)}><X /></button></div>
         <div className="compact-dialog-body"><img className="relink-preview" src={pendingRelink.photo.thumbnailDataUrl} alt="所选照片预览" /><p>原路径：<span className="relink-path">{pendingRelink.oldPath}</span></p><p>新路径：<span className="relink-path">{pendingRelink.photo.path}</span></p><p>新照片尺寸：{formatPixels(pendingRelink.photo)} px</p>
           {restoredSession.current.dimensionsByPath?.[pendingRelink.oldPath] && <p>原照片尺寸：{restoredSession.current.dimensionsByPath[pendingRelink.oldPath].width} × {restoredSession.current.dimensionsByPath[pendingRelink.oldPath].height} px</p>}
-          <p>确认这是原来的照片。原排版、手动文字与勾选状态将保留；如果照片经过裁剪或旋转，请检查水印位置。</p>
+          <p>确认这是原来的照片。原排版、裁切、手动文字与勾选状态将保留；如果照片经过裁剪或旋转，请检查裁切区域和水印位置。</p>
         </div><footer><button data-modal-initial className="button secondary" type="button" onClick={() => setPendingRelink(null)}>取消</button><button className="button primary" type="button" onClick={confirmReplacementPhoto}>使用此照片恢复</button></footer>
       </section></Modal>}
 
@@ -1208,6 +1231,8 @@ function App() {
           </section>
         </Modal>
       )}
+
+      {showCrop && activePhoto && <Suspense fallback={<Modal onClose={() => setShowCrop(false)}><section className="progress-dialog" role="dialog" aria-modal="true" aria-label="裁切照片"><p role="status">正在加载裁切工具…</p><button className="button secondary" type="button" onClick={() => setShowCrop(false)}>取消</button></section></Modal>}><CropEditor photo={activePhoto} onApply={applyCrop} onCancel={() => setShowCrop(false)} /></Suspense>}
 
       {!exportRunning && exportResult && (
         <Modal onClose={() => setExportResult(null)}>

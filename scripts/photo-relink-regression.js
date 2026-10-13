@@ -12,6 +12,7 @@
   localStorage.setItem(key, JSON.stringify({ paths: [existing, old, unchecked], activePath: existing, checkedPaths: [old],
     documentsByPath: { [old]: document, [unchecked]: document }, overridesByPath: { [old]: { camera: 'Recovered Camera' }, [unchecked]: { camera: '' } },
     templateIdsByPath: { [old]: 'wide-float' }, dimensionsByPath: { [old]: { width: 6000, height: 4000 } },
+    cropsByPath: { [old]: { x: .1, y: .2, width: .5, height: .5, rotation: -103.7 } },
     exportSettings: { directory: '/output', range: 'current' } }));
   let selection = null;
   const inspections = [], exports = [];
@@ -62,9 +63,11 @@
     t.assert(saved().checkedPaths.includes(moved) && !saved().checkedPaths.includes(old), 'Checked selection was not moved');
     t.assert(saved().templateIdsByPath[moved] === 'wide-float', 'Template association was lost');
     t.assert(saved().dimensionsByPath[moved].width === 300, 'New dimensions were not saved');
+    t.assert(saved().cropsByPath[moved]?.x === .1 && saved().cropsByPath[moved]?.rotation === -103.7 && !saved().cropsByPath[old], 'Crop was not relocated');
     button('导出当前').click(); await t.waitFor(() => host.querySelector('.export-dialog'));
     button('预检并开始导出').click(); await t.waitFor(() => host.querySelector('.result-dialog'));
     t.assert(exports[0].items[0].path === moved && exports[0].items[0].document.frame.paddingX === 17 && exports[0].items[0].overrides.camera === 'Recovered Camera', 'Export did not use the recovered original and edits');
+    t.assert(exports[0].items[0].crop?.width === .5 && exports[0].items[0].crop?.rotation === -103.7, 'Export lost relocated crop');
     host.querySelector('.result-dialog [aria-label="关闭"]').click(); await t.frame();
     selection = second; locate('unchecked.jpg').click(); await t.waitFor(() => host.querySelector('.relink-dialog'));
     button('使用此照片恢复').click(); await t.waitFor(() => !host.querySelector('.missing-photos'));
@@ -72,6 +75,7 @@
     root.unmount(); root = createRoot(host); root.render(React.createElement(React.StrictMode, null, React.createElement(App)));
     await t.waitFor(() => host.querySelectorAll('.photo-row').length === 3 && host.querySelector('.status-bar').textContent.includes('已恢复'));
     t.assert(!host.querySelector('.missing-photos') && saved().documentsByPath[moved].frame.paddingX === 17 && saved().checkedPaths.join() === moved, 'Restart did not retain relocated edits and selection');
+    t.assert(saved().cropsByPath[moved]?.height === .5 && saved().cropsByPath[moved]?.rotation === -103.7, 'Restart lost relocated crop');
     return { pickerCancelSafe: true, duplicateBlocked: true, unreadableBlocked: true, confirmationCancelSafe: true, dimensionsVisible: true,
       orderPreserved: true, editsAndSelectionPreserved: true, exportedNewPath: true, restartRecovered: true };
   } finally {

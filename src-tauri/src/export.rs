@@ -42,6 +42,147 @@ struct ExportItem {
     overrides: HashMap<String, String>,
     #[serde(default)]
     output_suffix: Option<String>,
+    #[serde(default)]
+    crop: Option<PhotoCrop>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct PhotoCrop {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    #[serde(default)]
+    rotation: f64,
+}
+
+fn normalized_rotation(rotation: f64) -> Result<f64, String> {
+    if !rotation.is_finite() || rotation.abs() > 180.0 {
+        return Err("旋转角度无效，请使用 -180° 至 180° 之间的角度".into());
+    }
+    let angle = (rotation + 180.0).rem_euclid(360.0) - 180.0;
+    Ok((angle * 1_000_000.0 + 0.5).floor() / 1_000_000.0)
+}
+
+fn rotation_dimensions(width: u32, height: u32, rotation: f64) -> Result<(u32, u32), String> {
+    let rotation = normalized_rotation(rotation)?;
+    let quarter = (rotation / 90.0).round() as i32;
+    let fine = (rotation - f64::from(quarter) * 90.0).abs().to_radians();
+    let (w, h) = if quarter.abs() % 2 == 1 {
+        (height, width)
+    } else {
+        (width, height)
+    };
+    if fine < 1e-10 {
+        return Ok((w, h));
+    }
+    let (w, h) = (f64::from(w), f64::from(h));
+    let (sin, cos) = fine.sin_cos();
+    let (shorter, longer) = (w.min(h), w.max(h));
+    let (rw, rh) = if shorter <= 2.0 * sin * cos * longer || (sin - cos).abs() < 1e-10 {
+        (
+            shorter / 2.0 / if w >= h { sin } else { cos },
+            shorter / 2.0 / if w >= h { cos } else { sin },
+        )
+    } else {
+        let cos2 = cos * cos - sin * sin;
+        ((w * cos - h * sin) / cos2, (h * cos - w * sin) / cos2)
+    };
+    Ok((
+        ((rw + 1e-9).floor() as u32).max(1),
+        ((rh + 1e-9).floor() as u32).max(1),
+    ))
+}
+
+// Coordinates refer to the orientation-corrected, rotated safe rectangle. Keep this nearest-edge
+// rounding in sync with photo-crop.ts; even a subpixel selection retains one pixel.
+fn crop_rectangle(
+    width: u32,
+    height: u32,
+    crop: Option<&PhotoCrop>,
+) -> Result<(u32, u32, u32, u32), String> {
+    let (width, height) = rotation_dimensions(width, height, crop.map_or(0.0, |c| c.rotation))?;
+    let Some(crop) = crop else {
+        return Ok((0, 0, width, height));
+    };
+    if width == 0
+        || height == 0
+        || ![crop.x, crop.y, crop.width, crop.height]
+            .iter()
+            .all(|v| v.is_finite())
+        || crop.x < 0.0
+        || crop.y < 0.0
+        || crop.width <= 0.0
+        || crop.height <= 0.0
+        || crop.x + crop.width > 1.0 + 1e-9
+        || crop.y + crop.height > 1.0 + 1e-9
+    {
+        return Err("裁切区域无效，请重新选择照片区域".into());
+    }
+    let x = ((crop.x * f64::from(width)).round() as u32).min(width - 1);
+    let y = ((crop.y * f64::from(height)).round() as u32).min(height - 1);
+    let right = (((crop.x + crop.width) * f64::from(width)).round() as u32).clamp(x + 1, width);
+    let bottom = (((crop.y + crop.height) * f64::from(height)).round() as u32).clamp(y + 1, height);
+    Ok((x, y, right - x, bottom - y))
+}
+
+fn transform_photo(source: RgbaImage, crop: Option<&PhotoCrop>) -> Result<RgbaImage, String> {
+    let (width, height) = source.dimensions();
+    let (x, y, crop_width, crop_height) = crop_rectangle(width, height, crop)?;
+    let angle = normalized_rotation(crop.map_or(0.0, |c| c.rotation))?;
+    // Quarter turns are pixel permutations: preserve exact detail and alpha.
+    if (angle % 90.0).abs() < 1e-10 {
+        let turned = match ((angle / 90.0).round() as i32).rem_euclid(4) {
+            1 => imageops::rotate90(&source),
+            2 => imageops::rotate180(&source),
+            3 => imageops::rotate270(&source),
+            _ => source,
+        };
+        return Ok(
+            if (x, y, crop_width, crop_height) == (0, 0, turned.width(), turned.height()) {
+                turned
+            } else {
+                imageops::crop_imm(&turned, x, y, crop_width, crop_height).to_image()
+            },
+        );
+    }
+    let (rotated_width, rotated_height) = rotation_dimensions(width, height, angle)?;
+    let (sin, cos) = angle.to_radians().sin_cos();
+    // Sample only the final selected rectangle, avoiding a full rotated allocation.
+    // Interpolate premultiplied alpha to prevent dark fringes on transparent PNGs.
+    Ok(RgbaImage::from_fn(crop_width, crop_height, |px, py| {
+        let dx = f64::from(x + px) + 0.5 - f64::from(rotated_width) / 2.0;
+        let dy = f64::from(y + py) + 0.5 - f64::from(rotated_height) / 2.0;
+        let sx =
+            (cos * dx + sin * dy + f64::from(width) / 2.0 - 0.5).clamp(0.0, f64::from(width - 1));
+        let sy = (-sin * dx + cos * dy + f64::from(height) / 2.0 - 0.5)
+            .clamp(0.0, f64::from(height - 1));
+        let (x0, y0) = (sx.floor() as u32, sy.floor() as u32);
+        let (fx, fy) = (sx - f64::from(x0), sy - f64::from(y0));
+        let mut channels = [0.0_f64; 4];
+        for (xx, yy, weight) in [
+            (x0, y0, (1.0 - fx) * (1.0 - fy)),
+            ((x0 + 1).min(width - 1), y0, fx * (1.0 - fy)),
+            (x0, (y0 + 1).min(height - 1), (1.0 - fx) * fy),
+            ((x0 + 1).min(width - 1), (y0 + 1).min(height - 1), fx * fy),
+        ] {
+            let pixel = source.get_pixel(xx, yy).0;
+            let alpha = f64::from(pixel[3]) * weight;
+            for channel in 0..3 {
+                channels[channel] += f64::from(pixel[channel]) * alpha;
+            }
+            channels[3] += alpha;
+        }
+        if channels[3] <= 0.0 {
+            return Rgba([0, 0, 0, 0]);
+        }
+        Rgba([
+            (channels[0] / channels[3]).round() as u8,
+            (channels[1] / channels[3]).round() as u8,
+            (channels[2] / channels[3]).round() as u8,
+            channels[3].round() as u8,
+        ])
+    }))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -532,6 +673,13 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
         if matches!(read_exif(path).orientation, 5..=8) {
             std::mem::swap(&mut width, &mut height);
         }
+        let (_, _, width, height) = match crop_rectangle(width, height, item.crop.as_ref()) {
+            Ok(rect) => rect,
+            Err(error) => {
+                errors.push(format!("{error_name}：{error}"));
+                continue;
+            }
+        };
         let (output_width, output_height) =
             output_dimensions(width, height, &item.document, &request.settings);
         if let Err(error) = validate_output_dimensions(output_width, output_height) {
@@ -1108,11 +1256,14 @@ fn render_item_with_renderer(
     if matches!(exif.orientation, 5..=8) {
         std::mem::swap(&mut width, &mut height);
     }
+    let (_, _, width, height) = crop_rectangle(width, height, item.crop.as_ref())?;
     let (output_width, output_height) = output_dimensions(width, height, &item.document, settings);
     validate_output_dimensions(output_width, output_height)?;
     let source = decode_color_managed(Path::new(&item.path), exif.orientation)?;
     let (source_width, source_height) = source.dimensions();
     exif.dimensions = Some(format!("{source_width} × {source_height}"));
+    let source = transform_photo(source, item.crop.as_ref())?;
+    let (source_width, source_height) = source.dimensions();
     let geometry = calculate_geometry(source_width, source_height, &item.document);
     let scale = output_scale(source_width, &geometry, settings);
     let canvas_width = (geometry.width * scale).round().max(1.0) as u32;
@@ -1546,6 +1697,7 @@ mod tests {
             document: test_document(),
             overrides: HashMap::new(),
             output_suffix: None,
+            crop: None,
         };
         let request = ExportRequest {
             items: vec![
@@ -1618,6 +1770,7 @@ mod tests {
                 document: test_document(),
                 overrides: HashMap::new(),
                 output_suffix: None,
+                crop: None,
             };
             let request = ExportRequest {
                 items: vec![item; total],
@@ -1655,6 +1808,7 @@ mod tests {
             document: test_document(),
             overrides: HashMap::new(),
             output_suffix: None,
+            crop: None,
         };
         let settings = ExportSettings {
             size: "original".into(),
@@ -1679,6 +1833,7 @@ mod tests {
             document,
             overrides: HashMap::new(),
             output_suffix: None,
+            crop: None,
         };
         let error = draw_layers(
             &mut RgbaImage::new(10, 10),
@@ -1702,6 +1857,7 @@ mod tests {
             document: test_document(),
             overrides: HashMap::new(),
             output_suffix: None,
+            crop: None,
         };
         let settings = ExportSettings {
             long_edge: 30_000,
@@ -1724,6 +1880,7 @@ mod tests {
                 document: test_document(),
                 overrides: HashMap::new(),
                 output_suffix: None,
+                crop: None,
             }],
             settings: test_settings(root.path()),
         };
@@ -1753,6 +1910,7 @@ mod tests {
                 document: test_document(),
                 overrides: HashMap::new(),
                 output_suffix: None,
+                crop: None,
             }],
             settings: ExportSettings {
                 long_edge: 30_000,
@@ -1780,6 +1938,7 @@ mod tests {
                 document: test_document(),
                 overrides: HashMap::new(),
                 output_suffix: None,
+                crop: None,
             };
             let settings = ExportSettings {
                 size: "original".into(),
@@ -2100,6 +2259,7 @@ mod tests {
             document: text_document,
             overrides: HashMap::new(),
             output_suffix: None,
+            crop: None,
         };
         draw_layers(
             &mut text_canvas,
@@ -2168,6 +2328,7 @@ mod tests {
             document: rotated_document,
             overrides: HashMap::new(),
             output_suffix: None,
+            crop: None,
         };
         let mut rotated_canvas = RgbaImage::new(600, 400);
         draw_layers(
@@ -2199,6 +2360,7 @@ mod tests {
                 document,
                 overrides: HashMap::new(),
                 output_suffix: None,
+                crop: None,
             };
             let settings = ExportSettings {
                 directory: root.to_string_lossy().into_owned(),
@@ -2239,6 +2401,7 @@ mod tests {
             document,
             overrides: HashMap::new(),
             output_suffix: None,
+            crop: None,
         };
         let request = ExportRequest {
             items: vec![item.clone()],
@@ -2357,6 +2520,7 @@ mod tests {
             document: test_document(),
             overrides: HashMap::new(),
             output_suffix: Some("-旅行白框".into()),
+            crop: None,
         };
         let mut request = ExportRequest {
             items: vec![
@@ -2409,6 +2573,7 @@ mod tests {
                 document: test_document(),
                 overrides: HashMap::new(),
                 output_suffix: None,
+                crop: None,
             };
             let output_error = unique_output_path(&input, &settings).unwrap_err();
             assert!(output_error.contains("请缩短"), "{output_error}");
@@ -2447,6 +2612,7 @@ mod tests {
                     document: document.clone(),
                     overrides: HashMap::new(),
                     output_suffix: None,
+                    crop: None,
                 }
             })
             .collect();
@@ -2596,6 +2762,7 @@ mod tests {
                     document: test_document(),
                     overrides: HashMap::new(),
                     output_suffix: None,
+                    crop: None,
                 })
                 .collect(),
             settings: test_settings(root.path()),
@@ -2623,6 +2790,7 @@ mod tests {
                 document: test_document(),
                 overrides: HashMap::new(),
                 output_suffix: None,
+                crop: None,
             }],
             settings,
         };
@@ -2674,6 +2842,7 @@ mod tests {
                 document: test_document(),
                 overrides: HashMap::new(),
                 output_suffix: None,
+                crop: None,
             };
             let settings = ExportSettings {
                 no_upscale: true,
@@ -2734,6 +2903,7 @@ mod tests {
                 document: test_document(),
                 overrides: HashMap::new(),
                 output_suffix: None,
+                crop: None,
             }],
             settings: ExportSettings {
                 long_edge: 800,
@@ -2815,6 +2985,7 @@ mod tests {
             document: test_document(),
             overrides: HashMap::new(),
             output_suffix: None,
+            crop: None,
         };
         let settings = ExportSettings {
             directory: root.to_string_lossy().into_owned(),
@@ -2877,6 +3048,7 @@ mod tests {
                     .unwrap(),
                     overrides: HashMap::new(),
                     output_suffix: None,
+                    crop: None,
                 })
                 .collect();
             let request = ExportRequest {
@@ -2926,6 +3098,364 @@ mod tests {
             "batch 200 complete: {:.3}s",
             started.elapsed().as_secs_f64()
         );
+    }
+
+    #[test]
+    fn rotation_bounds_match_shared_frontend_fixtures() {
+        let fixtures: serde_json::Value =
+            serde_json::from_str(include_str!("../../scripts/fixtures/photo-rotation.json"))
+                .unwrap();
+        for f in fixtures.as_array().unwrap() {
+            assert_eq!(
+                rotation_dimensions(
+                    f["width"].as_u64().unwrap() as u32,
+                    f["height"].as_u64().unwrap() as u32,
+                    f["angle"].as_f64().unwrap()
+                )
+                .unwrap(),
+                (
+                    f["outputWidth"].as_u64().unwrap() as u32,
+                    f["outputHeight"].as_u64().unwrap() as u32
+                ),
+                "{f}"
+            );
+        }
+        let legacy: PhotoCrop =
+            serde_json::from_str(r#"{"x":0,"y":0,"width":1,"height":1}"#).unwrap();
+        assert_eq!(legacy.rotation, 0.0);
+        for angle in [f64::NAN, f64::INFINITY, -180.1, 180.1] {
+            assert!(
+                crop_rectangle(
+                    10,
+                    20,
+                    Some(&PhotoCrop {
+                        rotation: angle,
+                        ..legacy.clone()
+                    })
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn rotation_preserves_quarter_turn_pixels_and_interpolates_transparency_without_dark_halos() {
+        let source = RgbaImage::from_fn(47, 31, |x, y| {
+            Rgba([(x * 5) as u8, (y * 7) as u8, 80, (x * 5) as u8])
+        });
+        let mut crop = PhotoCrop {
+            x: 0.2,
+            y: 0.1,
+            width: 0.5,
+            height: 0.7,
+            rotation: 0.0,
+        };
+        for (angle, turned) in [
+            (0.0, source.clone()),
+            (90.0, imageops::rotate90(&source)),
+            (-90.0, imageops::rotate270(&source)),
+            (180.0, imageops::rotate180(&source)),
+        ] {
+            crop.rotation = angle;
+            let (x, y, w, h) =
+                crop_rectangle(source.width(), source.height(), Some(&crop)).unwrap();
+            assert_eq!(
+                transform_photo(source.clone(), Some(&crop)).unwrap(),
+                imageops::crop_imm(&turned, x, y, w, h).to_image()
+            );
+        }
+        crop.x = 0.0;
+        crop.y = 0.0;
+        crop.width = 1.0;
+        crop.height = 1.0;
+        for angle in [
+            -179.9, -135.0, -90.1, -45.0, -17.3, -0.1, 0.1, 17.3, 45.0, 89.9, 135.0, 179.9,
+        ] {
+            crop.rotation = angle;
+            let opaque = RgbaImage::from_pixel(47, 31, Rgba([240, 80, 20, 255]));
+            let rotated = transform_photo(opaque, Some(&crop)).unwrap();
+            assert!(
+                rotated.pixels().all(|p| p.0 == [240, 80, 20, 255]),
+                "empty or discolored corner at {angle}"
+            );
+            let transparent = RgbaImage::from_fn(47, 31, |x, _| {
+                if x < 23 {
+                    Rgba([240, 80, 20, 180])
+                } else {
+                    Rgba([0, 0, 0, 0])
+                }
+            });
+            let rotated = transform_photo(transparent, Some(&crop)).unwrap();
+            assert!(
+                rotated
+                    .pixels()
+                    .all(|p| p.0[3] == 0 || p.0[..3] == [240, 80, 20]),
+                "dark fringe at {angle}"
+            );
+        }
+    }
+
+    #[test]
+    fn rotated_export_applies_after_exif_and_matches_preflight_and_encoded_dimensions() {
+        let root = tempfile::tempdir().unwrap();
+        let source =
+            RgbaImage::from_fn(48, 32, |x, y| Rgba([(x * 4) as u8, (y * 7) as u8, 80, 255]));
+        let mut document = test_document();
+        document.frame.padding_x = 0.0;
+        document.frame.padding_y = 0.0;
+        document.regions.bottom.enabled = false;
+        for orientation in 1..=8 {
+            let input = root.path().join(format!("rotation-{orientation}.png"));
+            source.save(&input).unwrap();
+            let mut metadata = Metadata::new();
+            metadata.set_tag(ExifTag::Orientation(vec![orientation]));
+            metadata.write_to_file(&input).unwrap();
+            for rotation in [90.0, -17.3, 135.0] {
+                let crop = PhotoCrop {
+                    x: 0.1,
+                    y: 0.2,
+                    width: 0.8,
+                    height: 0.7,
+                    rotation,
+                };
+                let item = ExportItem {
+                    path: input.to_string_lossy().into_owned(),
+                    document: document.clone(),
+                    overrides: HashMap::new(),
+                    output_suffix: None,
+                    crop: Some(crop.clone()),
+                };
+                let expected = transform_photo(
+                    decode_color_managed(&input, orientation.into()).unwrap(),
+                    Some(&crop),
+                )
+                .unwrap();
+                for format in ["png", "jpeg"] {
+                    let settings = ExportSettings {
+                        size: "original".into(),
+                        format: format.into(),
+                        metadata: "basic".into(),
+                        ..test_settings(root.path())
+                    };
+                    let preflight = preflight_export_sync(&ExportRequest {
+                        items: vec![item.clone()],
+                        settings: settings.clone(),
+                    });
+                    assert!(preflight.ready, "{:?}", preflight.errors);
+                    assert_eq!(
+                        (preflight.largest_width, preflight.largest_height),
+                        expected.dimensions()
+                    );
+                    assert_eq!(render_item(&item, &settings).unwrap().0, expected);
+                    let (output, _) = export_one(&item, &settings).unwrap().unwrap();
+                    let encoded = image::open(&output).unwrap().into_rgba8();
+                    assert_eq!(encoded.dimensions(), expected.dimensions());
+                    assert_eq!(read_exif(&output).orientation, 1);
+                    if format == "png" {
+                        assert_eq!(encoded, expected);
+                    }
+                }
+            }
+            assert_eq!(
+                image::image_dimensions(&input).unwrap(),
+                source.dimensions()
+            );
+        }
+    }
+
+    #[test]
+    fn crop_coordinates_round_edges_and_reject_invalid_regions() {
+        assert_eq!(
+            crop_rectangle(6000, 4000, None).unwrap(),
+            (0, 0, 6000, 4000)
+        );
+        let crop = PhotoCrop {
+            rotation: 0.0,
+            x: 0.5,
+            y: 0.5,
+            width: 0.5,
+            height: 0.5,
+        };
+        assert_eq!(crop_rectangle(3, 5, Some(&crop)).unwrap(), (2, 3, 1, 2));
+        let tiny = PhotoCrop {
+            rotation: 0.0,
+            x: 0.999999,
+            y: 0.999999,
+            width: 0.000001,
+            height: 0.000001,
+        };
+        assert_eq!(
+            crop_rectangle(6000, 4000, Some(&tiny)).unwrap(),
+            (5999, 3999, 1, 1)
+        );
+        for invalid in [
+            PhotoCrop {
+                x: -0.1,
+                ..crop.clone()
+            },
+            PhotoCrop {
+                width: 0.0,
+                ..crop.clone()
+            },
+            PhotoCrop {
+                height: f64::NAN,
+                ..crop.clone()
+            },
+            PhotoCrop {
+                width: f64::INFINITY,
+                ..crop.clone()
+            },
+            PhotoCrop {
+                y: 0.8,
+                ..crop.clone()
+            },
+        ] {
+            assert!(crop_rectangle(6000, 4000, Some(&invalid)).is_err());
+        }
+    }
+
+    #[test]
+    fn cropped_export_matches_selected_original_pixels_after_every_exif_orientation() {
+        let root = tempfile::tempdir().unwrap();
+        let source =
+            RgbaImage::from_fn(48, 32, |x, y| Rgba([(x * 4) as u8, (y * 7) as u8, 80, 255]));
+        let mut document = test_document();
+        document.frame.padding_x = 0.0;
+        document.frame.padding_y = 0.0;
+        document.regions.bottom.enabled = false;
+        for orientation in 1..=8 {
+            let input = root.path().join(format!("orientation-{orientation}.png"));
+            source.save(&input).unwrap();
+            let mut metadata = Metadata::new();
+            metadata.set_tag(ExifTag::Orientation(vec![orientation]));
+            metadata.write_to_file(&input).unwrap();
+            let crop = PhotoCrop {
+                rotation: 0.0,
+                x: 0.25,
+                y: 0.25,
+                width: 0.5,
+                height: 0.5,
+            };
+            let item = ExportItem {
+                path: input.to_string_lossy().into_owned(),
+                document: document.clone(),
+                overrides: HashMap::new(),
+                output_suffix: None,
+                crop: Some(crop.clone()),
+            };
+            let corrected = decode_color_managed(&input, orientation.into()).unwrap();
+            let (x, y, w, h) =
+                crop_rectangle(corrected.width(), corrected.height(), Some(&crop)).unwrap();
+            let expected = imageops::crop_imm(&corrected, x, y, w, h).to_image();
+            for format in ["png", "jpeg"] {
+                let settings = ExportSettings {
+                    size: "original".into(),
+                    format: format.into(),
+                    metadata: "basic".into(),
+                    ..test_settings(root.path())
+                };
+                let preflight = preflight_export_sync(&ExportRequest {
+                    items: vec![item.clone()],
+                    settings: settings.clone(),
+                });
+                assert!(preflight.ready, "{:?}", preflight.errors);
+                assert_eq!((preflight.largest_width, preflight.largest_height), (w, h));
+                let (rendered, width, height) = render_item(&item, &settings).unwrap();
+                assert_eq!((width, height), (w, h));
+                assert_eq!(rendered, expected, "orientation {orientation}");
+                let (output, _) = export_one(&item, &settings).unwrap().unwrap();
+                let encoded = image::open(&output).unwrap().into_rgba8();
+                assert_eq!(encoded.dimensions(), (w, h));
+                assert_eq!(read_exif(&output).orientation, 1);
+                if format == "png" {
+                    assert_eq!(encoded, expected);
+                }
+            }
+            assert_eq!(image::image_dimensions(&input).unwrap(), (48, 32));
+        }
+    }
+
+    #[test]
+    fn cropped_blur_frame_and_watermarks_match_a_physically_cropped_source() {
+        let root = tempfile::tempdir().unwrap();
+        let source = RgbaImage::from_fn(320, 200, |x, _| {
+            if x < 160 {
+                Rgba([240, 20, 10, 255])
+            } else {
+                Rgba([0, 0, 250, 255])
+            }
+        });
+        let input = root.path().join("original.png");
+        source.save(&input).unwrap();
+        let cropped_input = root.path().join("cropped.png");
+        imageops::crop_imm(&source, 0, 0, 160, 200)
+            .to_image()
+            .save(&cropped_input)
+            .unwrap();
+        let mut document = test_document();
+        document.frame.frame_type = "blur".into();
+        document.frame.blur = 20.0;
+        let mut layer = test_layer("custom");
+        layer.custom_value = "CROP".into();
+        document.layers.push(layer);
+        let item = ExportItem {
+            path: input.to_string_lossy().into_owned(),
+            document,
+            overrides: HashMap::new(),
+            output_suffix: None,
+            crop: Some(PhotoCrop {
+                rotation: 0.0,
+                x: 0.0,
+                y: 0.0,
+                width: 0.5,
+                height: 1.0,
+            }),
+        };
+        let reference = ExportItem {
+            path: cropped_input.to_string_lossy().into_owned(),
+            crop: None,
+            ..item.clone()
+        };
+        for (size, no_upscale) in [
+            ("original", false),
+            ("long-edge", true),
+            ("long-edge", false),
+        ] {
+            let settings = ExportSettings {
+                size: size.into(),
+                no_upscale,
+                format: "png".into(),
+                ..test_settings(root.path())
+            };
+            let (rendered, w, h) = render_item(&item, &settings).unwrap();
+            assert_eq!(rendered, render_item(&reference, &settings).unwrap().0);
+            let preflight = preflight_export_sync(&ExportRequest {
+                items: vec![item.clone()],
+                settings: settings.clone(),
+            });
+            assert!(preflight.ready, "{:?}", preflight.errors);
+            assert_eq!((preflight.largest_width, preflight.largest_height), (w, h));
+            let (output, _) = export_one(&item, &settings).unwrap().unwrap();
+            assert_eq!(image::image_dimensions(output).unwrap(), (w, h));
+        }
+        let invalid = ExportItem {
+            crop: Some(PhotoCrop {
+                rotation: 0.0,
+                x: 0.9,
+                y: 0.0,
+                width: 0.5,
+                height: 1.0,
+            }),
+            ..item
+        };
+        let settings = test_settings(root.path());
+        let preflight = preflight_export_sync(&ExportRequest {
+            items: vec![invalid.clone()],
+            settings: settings.clone(),
+        });
+        assert!(!preflight.ready);
+        assert!(preflight.errors.iter().any(|error| error.contains("裁切")));
+        assert!(render_item(&invalid, &settings).is_err());
     }
 
     #[test]
@@ -3079,6 +3609,7 @@ mod tests {
             document,
             overrides: HashMap::new(),
             output_suffix: None,
+            crop: None,
         };
         let mut settings = test_settings(root.path());
         settings.metadata = "basic".into();
@@ -3157,6 +3688,7 @@ mod tests {
             document,
             overrides: HashMap::new(),
             output_suffix: None,
+            crop: None,
         };
         let settings = ExportSettings {
             directory: root.to_string_lossy().into_owned(),

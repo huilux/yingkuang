@@ -1,4 +1,5 @@
-import type { EditorDocument, ExportSettings, PhotoAsset, TemplateRecord } from "./types";
+import type { EditorDocument, ExportSettings, PhotoAsset, PhotoCrop, TemplateRecord } from "./types";
+import { cropPixels } from "./photo-crop.ts";
 
 export type ExportIssueField = "range" | "directory" | "longEdge" | "suffix" | "quality" | "preflight";
 
@@ -12,6 +13,7 @@ export type ExportItem = {
   document: EditorDocument;
   overrides: NonNullable<PhotoAsset["overrides"]>;
   outputSuffix?: string;
+  crop?: PhotoCrop;
 };
 
 export type ExportPlan = {
@@ -58,7 +60,8 @@ export function templateExportSuffix(name: string): string {
 }
 
 function outputDimensions(photo: PhotoAsset, document: EditorDocument, settings: ExportSettings) {
-  const ratio = photo.width / photo.height;
+  const crop = cropPixels(photo);
+  const ratio = crop.width / crop.height;
   const photoWidth = ratio >= 1 ? ratio * 1000 : 1000;
   const photoHeight = ratio >= 1 ? 1000 : 1000 / ratio;
   const horizontal = document.frame.paddingX * 10;
@@ -69,7 +72,7 @@ function outputDimensions(photo: PhotoAsset, document: EditorDocument, settings:
   const height = photoHeight + vertical * 2
     + (document.regions.top.enabled ? document.regions.top.extra * 10 : 0)
     + (document.regions.bottom.enabled ? document.regions.bottom.extra * 10 : 0);
-  const originalScale = photo.width / photoWidth;
+  const originalScale = crop.width / photoWidth;
   const requestedScale = settings.size === "long-edge"
     ? settings.longEdge / Math.max(width, height)
     : originalScale;
@@ -115,6 +118,7 @@ export function buildExportPlan(input: BuildExportPlanInput): ExportPlan {
     path: photo.path,
     document: structuredClone(document),
     overrides: structuredClone(photo.overrides ?? {}),
+    ...(photo.crop ? { crop: structuredClone(photo.crop) } : {}),
     ...(input.settings.suffixMode === "template" ? {
       outputSuffix: templateExportSuffix(input.templates?.find(template => template.id === input.templateByPhoto?.[photo.id])?.name ?? "相框"),
     } : {}),

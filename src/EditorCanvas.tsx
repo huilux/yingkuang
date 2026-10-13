@@ -6,6 +6,8 @@ import { calculateGeometry, layerPosition, resolveLayerText } from "./editor-mod
 import { baseScale, clampZoom, fitCamera, isVisible, regionNames, safeRect, snapSelection, zoomAt, type Camera, type Guide, type Point } from "./canvas-camera";
 import { usePreviewBackdrop } from "./use-preview-backdrop";
 import { useEditorPhoto } from "./use-editor-photo";
+import { bitmapCrop } from "./photo-crop";
+import { rotatedPhotoBitmap } from "./photo-transform";
 import { arrangeSelection, moveSelection, positionPatch, selectLayer, unionBounds, type AlignReference, type ArrangeAction, type LayerPatch, type MeasuredLayer } from "./selection-model";
 import type { EditorDocument, PhotoAsset, WatermarkLayer, Rect as SceneRect, RegionId } from "./types";
 
@@ -49,8 +51,10 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
   const [size, setSize] = useState({ width: 0, height: 0 });
   const previousSize = useRef(size);
   const geometry = useMemo(() => calculateGeometry(photo, design), [photo, design]);
-  const { image, error } = usePreviewBackdrop(photo.thumbnailDataUrl, design.frame, geometry);
-  const { image: editorPhoto, error: photoError, loading: photoLoading } = useEditorPhoto(photo);
+  const cropKey = JSON.stringify(photo.crop);
+  const { image, error } = usePreviewBackdrop(photo.thumbnailDataUrl, design.frame, geometry, photo);
+  const { image: originalPhoto, error: photoError, loading: photoLoading } = useEditorPhoto(photo);
+  const editorPhoto = useMemo(() => originalPhoto && rotatedPhotoBitmap(originalPhoto, photo.width, photo.height, photo.crop?.rotation), [originalPhoto, photo.width, photo.height, photo.crop?.rotation]);
   const clipPhoto = useCallback((context: Konva.Context) => {
     context.beginPath();
     context.roundRect(0, 0, geometry.photo.width, geometry.photo.height,
@@ -129,6 +133,11 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
     });
     previousSize.current = size;
   }, [size.width, size.height, geometry.width, geometry.height]);
+  useLayoutEffect(() => {
+    // A new composition should be visible even after zooming into the old one.
+    fitted.current = true;
+    if (size.width && size.height) applyCamera(fitCamera(size, geometry));
+  }, [cropKey]);
 
   function selectedNodes(ids = selectionIds.current) {
     return objectsRef.current?.find<Konva.Group>((node: Konva.Node) => node.hasName("watermark-layer") && ids.includes(node.id())) ?? [];
@@ -305,7 +314,7 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
         <Group ref={backgroundRef} name="background-world">
           <Rect width={geometry.width} height={geometry.height} fill={design.frame.color} />
           {image && <CanvasImage name="preview-backdrop" image={image} width={geometry.width} height={geometry.height} />}
-          {editorPhoto && <Group x={geometry.photo.x} y={geometry.photo.y} clipFunc={clipPhoto}><CanvasImage name="preview-photo" image={editorPhoto} width={geometry.photo.width} height={geometry.photo.height} /></Group>}
+          {editorPhoto && <Group x={geometry.photo.x} y={geometry.photo.y} clipFunc={clipPhoto}><CanvasImage name="preview-photo" image={editorPhoto} crop={bitmapCrop(photo, editorPhoto.width, editorPhoto.height)} width={geometry.photo.width} height={geometry.photo.height} /></Group>}
         </Group>
       </Layer>
       <Layer>

@@ -1,5 +1,6 @@
 import { isValidEditorDocument } from "./builtin-template-catalog.ts";
-import type { EditorDocument, ExportSettings, PhotoAsset } from "./types";
+import { isValidPhotoCrop } from "./photo-crop.ts";
+import type { EditorDocument, ExportSettings, PhotoAsset, PhotoCrop } from "./types";
 
 export type SessionSnapshot = {
   paths: string[];
@@ -11,6 +12,7 @@ export type SessionSnapshot = {
   activeTemplate?: string;
   templateIdsByPath?: Record<string, string>;
   dimensionsByPath?: Record<string, { width: number; height: number }>;
+  cropsByPath?: Record<string, PhotoCrop>;
 };
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -23,11 +25,12 @@ export function parseSession(source: string | null): SessionSnapshot {
       (value.checkedPaths !== undefined && !strings(value.checkedPaths)) ||
       (value.activePath !== undefined && !string(value.activePath)) ||
       (value.activeTemplate !== undefined && !string(value.activeTemplate))) throw new Error("工作记录格式不正确");
-  for (const key of ["documentsByPath", "overridesByPath", "templateIdsByPath", "dimensionsByPath"] as const) {
+  for (const key of ["documentsByPath", "overridesByPath", "templateIdsByPath", "dimensionsByPath", "cropsByPath"] as const) {
     const entries = value[key];
     if (entries === undefined) continue;
     if (!record(entries)) throw new Error("工作记录字段不完整");
     for (const entry of Object.values(entries)) {
+      if (key === "cropsByPath" && !isValidPhotoCrop(entry)) throw new Error("工作记录中的裁切区域无效");
       if (key === "documentsByPath" && !isValidEditorDocument(entry)) throw new Error("工作记录中的编辑文档无效");
       if (key === "overridesByPath" && (!record(entry) || !Object.values(entry).every(string))) throw new Error("工作记录中的文字覆盖无效");
       if (key === "templateIdsByPath" && !string(entry)) throw new Error("工作记录中的模板关联无效");
@@ -59,7 +62,7 @@ export function relocateSessionPath(session: SessionSnapshot, oldPath: string, n
   next.paths = next.paths.map(path => path === oldPath ? newPath : path);
   if (next.activePath === oldPath) next.activePath = newPath;
   if (next.checkedPaths) next.checkedPaths = next.checkedPaths.map(path => path === oldPath ? newPath : path);
-  for (const key of ["documentsByPath", "overridesByPath", "templateIdsByPath", "dimensionsByPath"] as const) {
+  for (const key of ["documentsByPath", "overridesByPath", "templateIdsByPath", "dimensionsByPath", "cropsByPath"] as const) {
     const entries = next[key];
     if (entries && Object.prototype.hasOwnProperty.call(entries, oldPath) && oldPath !== newPath) {
       Object.defineProperty(entries, newPath, { value: entries[oldPath], enumerable: true, writable: true, configurable: true });

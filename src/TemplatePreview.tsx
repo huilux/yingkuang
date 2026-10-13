@@ -1,6 +1,6 @@
 import { ensureFontsLoaded, fontsChangedEvent, previewFontFamily } from "./font-library";
 import { useEffect, useState } from "react";
-import { calculateGeometry, layerPosition, resolveLayerText } from "./editor-model";
+import { calculateGeometry, layerPosition, photoOrientation, resolveLayerText } from "./editor-model";
 import { isVisible } from "./canvas-camera";
 import { rasterize } from "./use-preview-backdrop";
 import type { PhotoAsset, TemplateRecord } from "./types";
@@ -23,10 +23,10 @@ async function previewImage(template: TemplateRecord, activePhoto: PhotoAsset | 
     id: "template-preview", path: "", fileName: "预览照片", width, height,
     megapixels: width * height / 1_000_000, thumbnailDataUrl: source, metadata: sampleMetadata,
   };
-  const document = template.layouts[width >= height ? "landscape" : "portrait"] ?? template.layouts.landscape ?? template.layouts.portrait;
+  const document = template.layouts[photoOrientation(photo)] ?? template.layouts.landscape ?? template.layouts.portrait;
   if (!document) return null;
   const geometry = calculateGeometry(photo, document);
-  const canvas = await rasterize(source, document.frame, geometry, signal, true, 560);
+  const canvas = await rasterize(source, document.frame, geometry, signal, true, 560, photo);
   if (!canvas || signal.aborted) return null;
   await ensureFontsLoaded(document.layers.filter(layer => isVisible(layer, document.regions)).map(layer => layer.fontFamily));
   await window.document.fonts.ready;

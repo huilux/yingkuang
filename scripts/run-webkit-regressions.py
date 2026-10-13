@@ -19,6 +19,8 @@ scripts = Path(__file__).resolve().parent
 checks = ["konva-canvas-regression.js", "multi-selection-regression.js", "precision-regression.js", "drag-persistence-regression.js", "current-canvas-batch-regression.js", "export-document-regression.js", "export-workflow-regression.js", "export-retry-regression.js", "photo-detail-regression.js", "browser-import-regression.js", "editor-photo-loading-regression.js", "import-regression.js", "restore-regression.js", "session-failure-regression.js", "modal-regression.js", "metadata-undo-regression.js", "template-save-regression.js", "export-improvements-regression.js", "photo-relink-regression.js", "missing-photo-removal-regression.js", "storage-recovery-regression.js", "template-import-regression.js", "editing-guards-regression.js", "batch-filter-regression.js", "export-filename-regression.js", "parameter-picker-regression.js", "export-feedback-regression.js", "slider-undo-regression.js", "interface-controls-regression.js", "control-content-alignment-regression.js", "template-suffix-regression.js", "import-location-regression.js", "native-photo-drop-regression.js", "browser-photo-drop-regression.js", "font-library-regression.js", "native-font-import-regression.js"]
 if len(sys.argv) > 2:
     checks = sys.argv[2:]
+else:
+    checks.extend(["photo-crop-regression.js", "photo-rotation-regression.js", "photo-rotation-interaction-regression.js"])
 
 result = 1
 current_check = "page load"

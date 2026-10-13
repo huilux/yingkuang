@@ -7,6 +7,7 @@ import type {
   WatermarkLayer,
 } from "./types";
 import { builtInDefaultTemplateId, builtInTemplates } from "./builtin-template-catalog.ts";
+import { cropPixels } from "./photo-crop.ts";
 
 export { builtInTemplates };
 
@@ -122,7 +123,8 @@ export function cloneDocument(document: EditorDocument): EditorDocument {
 }
 
 export function photoOrientation(photo: PhotoAsset): "landscape" | "portrait" {
-  return photo.width >= photo.height ? "landscape" : "portrait";
+  const crop = cropPixels(photo);
+  return crop.width >= crop.height ? "landscape" : "portrait";
 }
 
 export function resolveLayerText(layer: WatermarkLayer, photo: PhotoAsset): string {
@@ -134,7 +136,8 @@ export function resolveLayerText(layer: WatermarkLayer, photo: PhotoAsset): stri
 }
 
 export function calculateGeometry(photo: PhotoAsset, document: EditorDocument): CanvasGeometry {
-  const ratio = photo.width / photo.height;
+  const crop = cropPixels(photo);
+  const ratio = crop.width / crop.height;
   const photoWidth = ratio >= 1 ? ratio * 1000 : 1000;
   const photoHeight = ratio >= 1 ? 1000 : 1000 / ratio;
   const horizontal = document.frame.paddingX * 10;
