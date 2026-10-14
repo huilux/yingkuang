@@ -5,8 +5,8 @@
   "Lato": "Manrope",
   "Playfair Display": "Cormorant Garamond",
   "Oswald": "Barlow Semi Condensed",
-  "Space Mono": "monospace",
   "Ma Shan Zheng": "LXGW WenKai TC",
   "DejaVu Sans": "Manrope",
-  "Liberation Sans": "Manrope"
+  "Liberation Sans": "Manrope",
+  "monospace": "Space Mono"
 }

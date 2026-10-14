@@ -1,5 +1,5 @@
 use crate::{ExifSnapshot, apply_orientation, read_exif};
-use ab_glyph::{Font, FontArc, FontVec, PxScale, ScaleFont};
+use ab_glyph::{Font, FontArc, PxScale, ScaleFont};
 use image::{
     DynamicImage, ImageDecoder, ImageEncoder, ImageReader, Pixel, Rgba, RgbaImage,
     codecs::{
@@ -15,9 +15,8 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
-    io::{BufWriter, ErrorKind, Read, Write},
+    io::{BufWriter, ErrorKind, Write},
     path::{Path, PathBuf},
-    process::Command,
     sync::atomic::{AtomicBool, Ordering},
     time::Instant,
 };
@@ -1088,43 +1087,9 @@ fn load_font(
         return Ok(font.clone());
     }
     let requested = family.split(',').next().unwrap_or("sans-serif").trim();
-    let requested = if requested == "Space Mono" {
-        "monospace"
-    } else {
-        requested
-    };
-    if let Some(result) = crate::fonts::managed_font(requested, weight) {
-        let font = result?;
-        cache.insert(cache_key, font.clone());
-        return Ok(font);
-    }
-    let style = if weight >= 700 {
-        "Bold"
-    } else if weight >= 600 {
-        "SemiBold"
-    } else if weight >= 500 {
-        "Medium"
-    } else {
-        "Regular"
-    };
-    let pattern = format!("{requested}:style={style}");
-    let output = Command::new("fc-match")
-        .args(["--format=%{file}|%{index}", &pattern])
-        .output()
-        .map_err(|error| format!("无法查询字体 {requested}：{error}"))?;
-    if !output.status.success() {
-        return Err(format!("系统找不到字体 {requested}"));
-    }
-    let result = String::from_utf8_lossy(&output.stdout);
-    let (path, index) = result.split_once('|').unwrap_or((result.as_ref(), "0"));
-    let mut data = Vec::new();
-    File::open(path)
-        .and_then(|mut file| file.read_to_end(&mut data))
-        .map_err(|error| format!("无法读取字体 {path}：{error}"))?;
-    let index = index.trim().parse::<u32>().unwrap_or(0);
-    let font = FontArc::new(
-        FontVec::try_from_vec_and_index(data, index).map_err(|_| format!("无法解析字体 {path}"))?,
-    );
+    let font = crate::fonts::managed_font(requested, weight).ok_or_else(|| {
+        format!("不支持字体 {requested}，请在水印面板选择内置字体或导入原字体文件")
+    })??;
     cache.insert(cache_key, font.clone());
     Ok(font)
 }
@@ -3662,11 +3627,12 @@ mod tests {
     }
 
     #[test]
-    fn exports_real_jpeg_with_text_and_basic_metadata() {
+    fn exports_jpeg_with_text_and_basic_metadata() {
         let root =
             std::env::temp_dir().join(format!("yingkuang-real-export-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("create test directory");
+        let fixture = crate::test_fixtures::jpeg_with_exif(&root);
         let mut document = test_document();
         document.frame.frame_type = "blur".to_owned();
         document.frame.blur = 32.0;
@@ -3687,7 +3653,7 @@ mod tests {
             visible: true,
         });
         let item = ExportItem {
-            path: "../assets/origin/PANA9432.JPG".to_owned(),
+            path: fixture.to_string_lossy().into_owned(),
             document,
             overrides: HashMap::new(),
             output_suffix: None,

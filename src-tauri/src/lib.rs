@@ -13,6 +13,8 @@ use tauri::Manager;
 
 mod export;
 mod fonts;
+#[cfg(test)]
+mod test_fixtures;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -793,11 +795,12 @@ mod tests {
     }
 
     #[test]
-    fn imports_real_jpeg_and_extracts_exif() {
-        let photo = inspect_image(PathBuf::from("../assets/origin/PANA9432.JPG"))
+    fn imports_jpeg_and_extracts_exif() {
+        let root = tempfile::tempdir().unwrap();
+        let photo = inspect_image(crate::test_fixtures::jpeg_with_exif(root.path()))
             .expect("fixture should import");
 
-        assert_eq!((photo.width, photo.height), (6000, 4000));
+        assert_eq!((photo.width, photo.height), (600, 400));
         assert!(
             photo
                 .thumbnail_data_url
@@ -806,12 +809,15 @@ mod tests {
         assert_eq!(photo.metadata.focal_length.as_deref(), Some("60mm"));
         assert_eq!(photo.metadata.aperture.as_deref(), Some("f/5.6"));
         assert_eq!(photo.metadata.iso.as_deref(), Some("ISO100"));
-        assert_eq!(photo.metadata.camera.as_deref(), Some("Panasonic DC-S5M2"));
-        assert_eq!(photo.metadata.make.as_deref(), Some("Panasonic"));
-        assert_eq!(photo.metadata.model.as_deref(), Some("DC-S5M2"));
+        assert_eq!(
+            photo.metadata.camera.as_deref(),
+            Some("FixtureCamera Model 1")
+        );
+        assert_eq!(photo.metadata.make.as_deref(), Some("FixtureCamera"));
+        assert_eq!(photo.metadata.model.as_deref(), Some("Model 1"));
         assert_eq!(
             photo.metadata.extra.get("exif:Make").map(String::as_str),
-            Some("Panasonic")
+            Some("FixtureCamera")
         );
     }
 

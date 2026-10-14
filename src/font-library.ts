@@ -9,9 +9,7 @@ export function resolveFontFamily(value: string) {
 }
 
 export const builtinFonts = catalog;
-export const systemFonts = [
-  { value: "monospace", label: "等宽 · 系统字体" },
-];
+export const systemFonts: { value: string; label: string }[] = [];
 function renderingFamilies(value: string) {
   const [primary, ...fallbacks] = resolveFontFamily(value).split(", ");
   // Native export uses WenKai when the primary face lacks a glyph. Put it

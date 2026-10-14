@@ -147,5 +147,20 @@
         "weight": "400 700"
       }
     ]
+  },
+  {
+    "family": "Space Mono",
+    "label": "Space Mono · 等宽参数",
+    "value": "Space Mono, LXGW WenKai TC, monospace",
+    "files": [
+      {
+        "path": "spacemono/SpaceMono-Regular.ttf",
+        "weight": "400 500"
+      },
+      {
+        "path": "spacemono/SpaceMono-Bold.ttf",
+        "weight": "600 700"
+      }
+    ]
   }
 ]

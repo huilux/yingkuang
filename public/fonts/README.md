@@ -14,12 +14,13 @@ Unmodified font files from the official [Google Fonts repository](https://github
 | Sacramento | Thin Latin handwritten signatures | Regular only |
 | Cinzel | Classical inscription-style Latin names | Variable 400–700 |
 | Rajdhani | Technical camera names and EXIF parameters | 400, 500, 600, 700 |
+| Space Mono | Consistent offline monospace parameters | Regular, Bold |
 | Bebas Neue | Condensed uppercase Latin titles | Regular only |
 
-Allura, ZCOOL XiaoWei, Long Cang, Sacramento and Bebas Neue use their original regular outlines for every editor weight; WenKai maps 400/500 to Regular and 600/700 to Bold. No fonts have been modified or subsetted. The system monospace option does not bundle a font file.
+Allura, ZCOOL XiaoWei, Long Cang, Sacramento and Bebas Neue use their original regular outlines for every editor weight; WenKai maps 400/500 to Regular and 600/700 to Bold. No fonts have been modified or subsetted. Space Mono maps 400/500 to Regular and 600/700 to Bold. Saved `monospace` names resolve to bundled Space Mono in both preview and export; no system font lookup is needed.
 
 ## Redistribution
 
 Keep every family's `OFL.txt` with the font in source and binary distributions. The files are copied into the frontend distribution by Vite. Font copyright and license remain separate from the application's license. OFL permits use, embedding and bundling with commercial or open-source software; fonts cannot be sold on their own. Modified fonts must follow OFL terms, including any Reserved Font Names. Images created using the fonts do not inherit OFL. See the [official OFL FAQ](https://openfontlicense.org/ofl-faq/).
 
-The previous eight bundled families have been removed. `src/retired-fonts.json` only maps saved family names to replacements; it contains no old font data. User-imported fonts remain local and are not included in this repository's redistribution grant.
+The earlier font selection has been replaced; Space Mono is bundled again for portable monospace rendering. `src/retired-fonts.json` only maps saved family names to replacements; it contains no old font data. User-imported fonts remain local and are not included in this repository's redistribution grant.

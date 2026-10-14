@@ -34,6 +34,23 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "licenseFile": "../LICENSE",
+    "resources": {
+      "../LICENSE": "licenses/MIT.txt",
+      "../THIRD_PARTY_NOTICES.md": "licenses/THIRD_PARTY_NOTICES.md",
+      "../public/fonts/allura/OFL.txt": "licenses/fonts/allura/OFL.txt",
+      "../public/fonts/barlowsemicondensed/OFL.txt": "licenses/fonts/barlowsemicondensed/OFL.txt",
+      "../public/fonts/bebasneue/OFL.txt": "licenses/fonts/bebasneue/OFL.txt",
+      "../public/fonts/cinzel/OFL.txt": "licenses/fonts/cinzel/OFL.txt",
+      "../public/fonts/cormorantgaramond/OFL.txt": "licenses/fonts/cormorantgaramond/OFL.txt",
+      "../public/fonts/longcang/OFL.txt": "licenses/fonts/longcang/OFL.txt",
+      "../public/fonts/lxgwwenkaitc/OFL.txt": "licenses/fonts/lxgwwenkaitc/OFL.txt",
+      "../public/fonts/manrope/OFL.txt": "licenses/fonts/manrope/OFL.txt",
+      "../public/fonts/rajdhani/OFL.txt": "licenses/fonts/rajdhani/OFL.txt",
+      "../public/fonts/sacramento/OFL.txt": "licenses/fonts/sacramento/OFL.txt",
+      "../public/fonts/spacemono/OFL.txt": "licenses/fonts/spacemono/OFL.txt",
+      "../public/fonts/zcoolxiaowei/OFL.txt": "licenses/fonts/zcoolxiaowei/OFL.txt"
+    }
   }
 }

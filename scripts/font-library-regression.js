@@ -10,11 +10,12 @@
     try { await library.ensureFontsLoaded([font.value]); }
     catch (error) { throw new Error(`${font.family} failed to load: ${error}`); }
   }
-  assert(library.systemFonts.length === 1 && library.systemFonts[0].value === 'monospace', 'Only system monospace should remain');
+  assert(library.systemFonts.length === 0, 'Watermark fonts must not depend on system fonts');
   assert(library.previewFontFamily('Montserrat, Noto Sans CJK SC, sans-serif') === library.previewFontFamily('Manrope, LXGW WenKai TC, sans-serif'), 'Retired font preview differs from its replacement');
   assert(library.previewFontFamily('DejaVu Sans, sans-serif') === library.previewFontFamily('Manrope, LXGW WenKai TC, sans-serif'), 'Legacy sans-serif must use the bundled Chinese fallback before generic fonts');
-  assert(library.builtinFonts.length === 11, 'Expected eleven offline font families');
+  assert(library.builtinFonts.length === 12, 'Expected twelve offline font families');
   for (const font of library.builtinFonts) assert(document.fonts.check(`400 32px ${library.previewFontFamily(font.value)}`), `${font.family} did not load offline`);
+  assert(library.previewFontFamily('monospace').startsWith('Yingkuang Space Mono'), 'Legacy monospace must resolve to bundled Space Mono');
   document.querySelector('#tab-watermark').click(); await frame();
   document.querySelector('.layer-visibility[aria-label^="隐藏"]').closest('.layer-row').querySelector('.layer-main').click(); await frame();
   const fontSelect = () => document.querySelector('select[aria-label="字体"]');

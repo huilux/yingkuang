@@ -18,3 +18,18 @@ test-output/
 # Local photography references and full-resolution test fixtures
 assets/image/
 assets/origin/
+
+# Local secrets and signing material
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.key
+*.pem
+
+# Private development archive and local agent/cloud configuration
+.local-dev/
+.agents/
+.codex/
+.aws/

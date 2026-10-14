@@ -179,6 +179,12 @@ struct FontFile {
 
 fn builtin_bytes(path: &str) -> Option<&'static [u8]> {
     match path {
+        "spacemono/SpaceMono-Regular.ttf" => Some(include_bytes!(
+            "../../public/fonts/spacemono/SpaceMono-Regular.ttf"
+        )),
+        "spacemono/SpaceMono-Bold.ttf" => Some(include_bytes!(
+            "../../public/fonts/spacemono/SpaceMono-Bold.ttf"
+        )),
         "manrope/Manrope[wght].ttf" => Some(include_bytes!(
             "../../public/fonts/manrope/Manrope[wght].ttf"
         )),
@@ -363,9 +369,6 @@ mod tests {
         let retired: HashMap<String, String> =
             serde_json::from_str(include_str!("../../src/retired-fonts.json")).unwrap();
         for (old, new) in retired {
-            if new == "monospace" {
-                continue;
-            }
             for weight in [400, 500, 600, 700] {
                 let old_font = builtin_font(&old, weight).unwrap().unwrap();
                 let new_font = builtin_font(&new, weight).unwrap().unwrap();

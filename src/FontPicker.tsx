@@ -14,9 +14,9 @@ export function FontPicker({ value, onChange }: { value: string; onChange: (valu
   const fileInput = useRef<HTMLInputElement>(null);
   const alive = useRef(true);
   const options = [...builtinFonts, ...library.fonts, ...systemFonts];
-  const selectedValue = value.startsWith("YingkuangFont")
-    ? library.fonts.find(font => resolveFontFamily(font.value) === resolveFontFamily(value))?.value ?? value
-    : value;
+  const selectedValue = options.find(font =>
+    resolveFontFamily(font.value).split(",")[0] === resolveFontFamily(value).split(",")[0]
+  )?.value ?? value;
   const known = !selectedValue || options.some(font => font.value === selectedValue);
   useEffect(() => { alive.current = true; void restoreImportedFonts(); return () => { alive.current = false; }; }, []);
 
