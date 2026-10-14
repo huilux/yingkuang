@@ -16,15 +16,15 @@
 
 ## 平台与安装
 
-目标平台为 Linux、Windows 和 macOS。目前有 Arch Linux 的桌面使用验证；Windows/macOS 已配置构建任务，但远端 CI 和实机验收仍待完成，尚不宣称三平台稳定支持。
+Linux x64、Windows x64、macOS Apple Silicon 与 Intel 已通过[跨平台 CI 的测试和安装包构建](https://github.com/huilux/yingkuang/actions/runs/38541170291)。已有 Arch Linux 的桌面使用验证；各平台干净环境安装、升级与完整实机验收仍待完成。
 
-| 平台 | 计划提供的安装包 |
+| 平台 | CI 测试安装包 |
 | --- | --- |
 | Linux x64 | AppImage、deb |
 | Windows x64 | exe（NSIS） |
 | macOS Apple Silicon / Intel | dmg |
 
-当前请使用源码构建；最低系统版本和正式下载入口将在安装包验收后公布。[构建与发布说明](docs/release.md)包含各平台命令与验证范围。
+测试安装包可从 [Actions](https://github.com/huilux/yingkuang/actions/workflows/desktop.yml) 的 artifacts 获取，需要相应仓库访问权限，保留 14 天。尚未发布正式 Release；Windows 包未做代码签名，macOS 包仅使用 ad-hoc 签名、未公证。也可使用源码构建。最低系统版本将在实机验收后公布。[构建与发布说明](docs/release.md)包含各平台命令与验证范围。
 
 ## 开发启动
 

@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-项目目标为 Linux、Windows、macOS。已有 Arch Linux 历史验收；CI 已开始远端验证，结果以对应提交的 Actions 记录为准，Windows/macOS 安装包尚未完成实机验收。不能把构建成功当作已全面支持该系统。
+项目目标为 Linux、Windows、macOS。2026-10-14，运行代码提交 `6f767c4` 已通过[四平台 CI 的测试、Clippy 与安装包构建](https://github.com/huilux/yingkuang/actions/runs/38541170291)。Linux CI 同时通过生产 CSP 的 WebKit 检查。已有 Arch Linux 历史桌面验收；新生成安装包的干净环境安装和完整实机验收仍待完成，不能把构建成功当作已全面支持该系统。
 
 | 平台 | CI 环境 | 产物 |
 | --- | --- | --- |
