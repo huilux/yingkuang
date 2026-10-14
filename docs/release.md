@@ -56,7 +56,7 @@ npm run tauri build -- --bundles dmg
 
 安装依赖后运行 `npm run licenses:collect`，按本机 Rust 目标生成 `test-output/licenses/<目标>/inventory.json` 和 `LICENSE-TEXTS.txt`。交叉构建时使用 `npm run licenses:collect -- <Rust 目标三元组>`。CI 在各平台执行并上传独立的许可材料 artifact。
 
-脚本从 npm 锁文件及安装目录、Cargo 锁定解析结果提取许可声明与许可证正文，包含构建和开发依赖。`missingTexts` 列出没有独立许可证正文的包，`absentOptional` 列出未安装的 npm 可选依赖。安装版本不匹配或必要依赖缺失会使脚本失败。
+脚本从 npm 锁文件及安装目录、Cargo 锁定解析结果提取许可声明与许可证正文，包含构建和开发依赖。补充正文从 `licenses/upstream/sources.json` 按名称、版本和 SHA-256 校验后纳入；`missingTexts` 列出仍没有许可证正文的包，`absentOptional` 列出未安装的 npm 可选依赖。安装版本不匹配或必要依赖缺失会使脚本失败。
 
 发布者仍需逐项处理缺失正文，并核对原生静态库、系统动态库及 AppImage 等打包工具带入的库。此报告不是最终安装包的精确依赖清单，也不代表许可审计通过；确认后将所需正文与声明随正式安装包提供。生成材料不提交到源码仓库。
 
