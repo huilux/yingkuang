@@ -54,11 +54,11 @@ npm run tauri build -- --bundles dmg
 
 ### 依赖许可材料
 
-安装依赖后运行 `npm run licenses:collect`，按本机 Rust 目标生成 `test-output/licenses/<目标>/inventory.json` 和 `LICENSE-TEXTS.txt`。交叉构建时使用 `npm run licenses:collect -- <Rust 目标三元组>`。CI 在各平台执行并上传独立的许可材料 artifact。
+安装依赖后运行 `npm run licenses:collect`，按本机 Rust 目标生成 `test-output/licenses/<目标>/inventory.json` 和 `LICENSE-TEXTS.txt`。交叉构建时使用 `npm run licenses:collect -- <Rust 目标三元组>`。CI 在各平台执行并上传独立的许可材料 artifact。使用 `npm run tauri build`、`npm run tauri bundle` 或 `npm run build:appimage` 时，包装脚本会重新收集对应 Rust 目标的材料，并通过临时配置将正文及清单放入资源目录的 `licenses/dependencies/<目标>/`。项目 MIT、第三方声明和字体 OFL 仍随包保留。macOS universal 构建会同时收集两种架构。开发运行和 Cargo 测试无需预先生成这些文件。不要绕过项目脚本直接调用 Tauri CLI 制作分发包。
 
-脚本从 npm 锁文件及安装目录、Cargo 锁定解析结果提取许可声明与许可证正文，包含构建和开发依赖。补充正文从 `licenses/upstream/sources.json` 按名称、版本和 SHA-256 校验后纳入；`missingTexts` 列出仍没有许可证正文的包，`absentOptional` 列出未安装的 npm 可选依赖，`reviewRequired` 列出上游署名或 SDK 条款等仍需人工核对的事项。安装版本不匹配或必要依赖缺失会使脚本失败。
+脚本从 npm 锁文件及安装目录、Cargo 锁定解析结果提取许可声明与许可证正文，包含构建和开发依赖。补充正文从 `licenses/upstream/sources.json` 按名称、版本和 SHA-256 校验后纳入；`missingTexts` 列出仍没有许可证正文的包，`absentOptional` 列出未安装的 npm 可选依赖，`reviewRequired` 列出上游署名或 SDK 条款等仍需人工核对的事项。安装版本不匹配或必要依赖缺失会使脚本失败。打包入口还会拒绝 `missingTexts` 非空的材料；`reviewRequired` 会输出提醒并保存在随包清单中，仍需在正式发布前处理。
 
-发布者仍需逐项处理缺失正文，并核对原生静态库、系统动态库及 AppImage 等打包工具带入的库。此报告不是最终安装包的精确依赖清单，也不代表许可审计通过；确认后将所需正文与声明随正式安装包提供。生成材料不提交到源码仓库。
+发布者仍需逐项处理缺失正文，并核对原生静态库、系统动态库及 AppImage 等打包工具带入的库。此报告不是最终安装包的精确依赖清单，也不代表许可审计通过；npm/Rust 正文与声明已接入打包流程，系统库与打包工具载荷仍需单独补齐并验收。生成材料不提交到源码仓库。
 
 参考：[Tauri GitHub 流水线](https://v2.tauri.app/distribute/pipelines/github/)、[macOS 签名](https://v2.tauri.app/distribute/sign/macos/)、[Windows 安装包](https://v2.tauri.app/distribute/windows-installer/)。
 
