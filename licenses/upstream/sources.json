@@ -140,6 +140,11 @@
         "path": "licenses/upstream/unic-char-property/0.9.0/LICENSE-MIT",
         "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-MIT",
         "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      },
+      {
+        "path": "licenses/upstream/unic-char-property/0.9.0/AUTHORS",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/AUTHORS",
+        "sha256": "2748c1a1fba7616917c61d455e8d715ab952671ead63f2026ad0124410596b09"
       }
     ]
   },
@@ -162,6 +167,11 @@
         "path": "licenses/upstream/unic-char-range/0.9.0/LICENSE-MIT",
         "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-MIT",
         "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      },
+      {
+        "path": "licenses/upstream/unic-char-range/0.9.0/AUTHORS",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/AUTHORS",
+        "sha256": "2748c1a1fba7616917c61d455e8d715ab952671ead63f2026ad0124410596b09"
       }
     ]
   },
@@ -184,6 +194,11 @@
         "path": "licenses/upstream/unic-common/0.9.0/LICENSE-MIT",
         "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-MIT",
         "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      },
+      {
+        "path": "licenses/upstream/unic-common/0.9.0/AUTHORS",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/AUTHORS",
+        "sha256": "2748c1a1fba7616917c61d455e8d715ab952671ead63f2026ad0124410596b09"
       }
     ]
   },
@@ -206,6 +221,11 @@
         "path": "licenses/upstream/unic-ucd-ident/0.9.0/LICENSE-MIT",
         "url": "https://github.com/open-i18n/rust-unic/blob/8a6ce83063d90b91ae2ce59eddb803edd393fca9/LICENSE-MIT",
         "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      },
+      {
+        "path": "licenses/upstream/unic-ucd-ident/0.9.0/AUTHORS",
+        "url": "https://github.com/open-i18n/rust-unic/blob/8a6ce83063d90b91ae2ce59eddb803edd393fca9/AUTHORS",
+        "sha256": "2748c1a1fba7616917c61d455e8d715ab952671ead63f2026ad0124410596b09"
       }
     ]
   },
@@ -228,6 +248,11 @@
         "path": "licenses/upstream/unic-ucd-version/0.9.0/LICENSE-MIT",
         "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/LICENSE-MIT",
         "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      },
+      {
+        "path": "licenses/upstream/unic-ucd-version/0.9.0/AUTHORS",
+        "url": "https://github.com/open-i18n/rust-unic/blob/5878605364af97a3358368a6eaef02104af2e016/AUTHORS",
+        "sha256": "2748c1a1fba7616917c61d455e8d715ab952671ead63f2026ad0124410596b09"
       }
     ]
   }
