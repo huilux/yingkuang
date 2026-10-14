@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-项目目标为 Linux、Windows、macOS。2026-10-14，运行代码提交 `6f767c4` 已通过[四平台 CI 的测试、Clippy 与安装包构建](https://github.com/huilux/yingkuang/actions/runs/38541170291)。Linux CI 同时通过生产 CSP 的 WebKit 检查。已有 Arch Linux 历史桌面验收；新生成安装包的干净环境安装和完整实机验收仍待完成，不能把构建成功当作已全面支持该系统。
+项目目标为 Linux、Windows、macOS。2026-10-14，运行代码提交 `6f767c4` 已通过[四平台 CI 的测试、Clippy 与安装包构建](https://github.com/huilux/yingkuang/actions/runs/38541170291)。Linux CI 同时通过生产 CSP 的 WebKit 检查。许可证随包构建提交 `ac08fd8` 也已通过[四平台 CI](https://github.com/huilux/yingkuang/actions/runs/38561583230)，其本地 deb 已解包逐字节核对 npm/Rust 清单与正文、项目 MIT、第三方声明及 12 份字体许可。已有 Arch Linux 历史桌面验收；新生成安装包的干净环境安装和完整实机验收仍待完成，不能把构建成功当作已全面支持该系统。
 
 | 平台 | CI 环境 | 产物 |
 | --- | --- | --- |
@@ -59,6 +59,10 @@ npm run tauri build -- --bundles dmg
 脚本从 npm 锁文件及安装目录、Cargo 锁定解析结果提取许可声明与许可证正文，包含构建和开发依赖。补充正文从 `licenses/upstream/sources.json` 按名称、版本和 SHA-256 校验后纳入；`missingTexts` 列出仍没有许可证正文的包，`absentOptional` 列出未安装的 npm 可选依赖，`reviewRequired` 列出上游署名或 SDK 条款等仍需人工核对的事项。安装版本不匹配或必要依赖缺失会使脚本失败。打包入口还会拒绝 `missingTexts` 非空的材料；`reviewRequired` 会输出提醒并保存在随包清单中，仍需在正式发布前处理。
 
 发布者仍需逐项处理缺失正文，并核对原生静态库、系统动态库及 AppImage 等打包工具带入的库。此报告不是最终安装包的精确依赖清单，也不代表许可审计通过；npm/Rust 正文与声明已接入打包流程，系统库与打包工具载荷仍需单独补齐并验收。生成材料不提交到源码仓库。
+
+Linux CI 在 AppImage 构建完成后，会从实际产物提取文件，并在同一构建机上生成 `yingkuang-appimage-system-review` artifact：记录产物 SHA-256、文件摘要、匹配的 Debian/Ubuntu 二进制包及源码包版本、版权文件和公共许可证正文。来源匹配区分字节完全一致与 ELF build ID 一致；后者用于辅助核对经过 patchelf 修改的库，不能视为字节一致。仅文件名相同不会判定为已确认来源。
+
+报告中的 `unresolvedFiles`、`missingCopyright` 和 `remainingReview` 必须在分发前核对。AppImage 外层运行时、生成脚本以及适用许可证要求的对应源码仍需另行处理。该 artifact 是审查材料，目前未自动嵌入 AppImage，也不代表分发许可检查已通过。只在同一 Debian/Ubuntu 构建机上运行 `python3 scripts/audit-appimage.py <已提取的 AppDir> <新的输出目录>`；不要用本地 Arch 包数据库替代 Ubuntu CI 的来源证据。
 
 参考：[Tauri GitHub 流水线](https://v2.tauri.app/distribute/pipelines/github/)、[macOS 签名](https://v2.tauri.app/distribute/sign/macos/)、[Windows 安装包](https://v2.tauri.app/distribute/windows-installer/)。
 

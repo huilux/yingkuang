@@ -79,6 +79,24 @@ jobs:
       - name: Build Linux AppImage
         if: runner.os == 'Linux'
         run: npm run build:appimage
+      - name: Audit actual AppImage system payload
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_appimage_audit.py'
+          package=$(realpath src-tauri/target/release/bundle/appimage/*.AppImage)
+          audit_dir=$(mktemp -d)
+          (cd "$audit_dir" && "$package" --appimage-extract > /dev/null)
+          python3 scripts/audit-appimage.py "$audit_dir/squashfs-root" test-output/appimage-audit
+          sha256sum "$package" | sed 's|  .*/|  |' > test-output/appimage-audit/APPIMAGE-SHA256.txt
+      - name: Upload AppImage system license review materials
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: yingkuang-appimage-system-review
+          if-no-files-found: error
+          retention-days: 14
+          path: test-output/appimage-audit/
       - name: Upload test packages
         uses: actions/upload-artifact@v4
         with:
