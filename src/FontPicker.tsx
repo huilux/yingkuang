@@ -2,7 +2,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { UploadSimple } from "@phosphor-icons/react";
 import { SelectControl } from "./SelectControl";
-import { builtinFonts, fontSnapshot, importFont, restoreImportedFonts, subscribeFonts, systemFonts } from "./font-library";
+import { builtinFonts, fontSnapshot, importFont, restoreImportedFonts, resolveFontFamily, subscribeFonts, systemFonts } from "./font-library";
 
 const isNative = "__TAURI_INTERNALS__" in window;
 
@@ -14,7 +14,10 @@ export function FontPicker({ value, onChange }: { value: string; onChange: (valu
   const fileInput = useRef<HTMLInputElement>(null);
   const alive = useRef(true);
   const options = [...builtinFonts, ...library.fonts, ...systemFonts];
-  const known = !value || options.some(font => font.value === value);
+  const selectedValue = value.startsWith("YingkuangFont")
+    ? library.fonts.find(font => resolveFontFamily(font.value) === resolveFontFamily(value))?.value ?? value
+    : value;
+  const known = !selectedValue || options.some(font => font.value === selectedValue);
   useEffect(() => { alive.current = true; void restoreImportedFonts(); return () => { alive.current = false; }; }, []);
 
   async function importSources(sources: Array<File | string>) {
@@ -45,9 +48,9 @@ export function FontPicker({ value, onChange }: { value: string; onChange: (valu
   }
 
   return <div className="font-picker" aria-busy={busy || library.loading}>
-    <label className="field"><span>字体</span><SelectControl aria-label="字体" value={value} onChange={event => onChange(event.currentTarget.value)}>
+    <label className="field"><span>字体</span><SelectControl aria-label="字体" value={selectedValue} onChange={event => onChange(event.currentTarget.value)}>
       {!value && <option value="" disabled>多种字体</option>}
-      {!known && <option value={value} disabled>{value.startsWith("YingkuangFont") ? "自定义字体（缺失，请重新导入）" : `${value}（模板字体）`}</option>}
+      {!known && <option value={value} disabled>{value.startsWith("YingkuangFont") ? "自定义字体（缺失，请重新导入）" : resolveFontFamily(value) !== value ? `${resolveFontFamily(value)}（旧字体已替换）` : `${value}（模板字体）`}</option>}
       {options.map(font => <option key={font.value} value={font.value}>{font.label}</option>)}
     </SelectControl></label>
     <button className="font-import-button" type="button" disabled={busy || library.loading} onClick={() => void chooseFiles()}><UploadSimple aria-hidden="true" />{busy ? "正在导入字体…" : library.loading ? "正在加载字体库…" : "导入字体"}</button>

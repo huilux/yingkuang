@@ -1088,6 +1088,11 @@ fn load_font(
         return Ok(font.clone());
     }
     let requested = family.split(',').next().unwrap_or("sans-serif").trim();
+    let requested = if requested == "Space Mono" {
+        "monospace"
+    } else {
+        requested
+    };
     if let Some(result) = crate::fonts::managed_font(requested, weight) {
         let font = result?;
         cache.insert(cache_key, font.clone());
@@ -1157,7 +1162,7 @@ fn draw_layers(
         // Use the same Chinese fallback as the browser when a Latin/custom face
         // lacks glyphs. Keep runs on the primary font's baseline and line box.
         let fallback = if text.chars().any(|c| font.glyph_id(c).0 == 0) {
-            load_font("Noto Sans CJK SC", layer.font_weight, fonts)?
+            load_font("LXGW WenKai TC", layer.font_weight, fonts)?
         } else {
             font.clone()
         };
@@ -2245,7 +2250,7 @@ mod tests {
             region: "canvas".to_owned(),
             x: 0.5,
             y: 0.5,
-            font_family: "Noto Sans CJK SC, sans-serif".to_owned(),
+            font_family: "LXGW WenKai TC, sans-serif".to_owned(),
             font_size: 32.0,
             font_weight: 400,
             color: "#000000".to_owned(),
@@ -2272,17 +2277,15 @@ mod tests {
         .unwrap();
         text_canvas.save(root.join("text.png")).unwrap();
         for (name, family, weight) in [
+            ("retired_sans", "DejaVu Sans, sans-serif", 400),
+            ("system_mono", "monospace", 400),
+            ("manrope_mixed", "Manrope, LXGW WenKai TC, sans-serif", 400),
+            ("manrope_bold", "Manrope, LXGW WenKai TC, sans-serif", 700),
             (
-                "montserrat_mixed",
-                "Montserrat, Noto Sans CJK SC, sans-serif",
-                400,
+                "serif_mixed",
+                "Cormorant Garamond, LXGW WenKai TC, serif",
+                600,
             ),
-            (
-                "montserrat_bold",
-                "Montserrat, Noto Sans CJK SC, sans-serif",
-                700,
-            ),
-            ("serif_mixed", "Noto Serif CJK SC, serif", 600),
         ] {
             let mut item = text_item.clone();
             item.document.layers[0].font_family = family.to_owned();
@@ -2303,12 +2306,12 @@ mod tests {
         crate::fonts::initialize(custom_directory.clone());
         let custom = crate::fonts::import_at(
             &custom_directory,
-            Path::new("../public/fonts/space-mono/SpaceMono-Regular.ttf"),
+            Path::new("../public/fonts/barlowsemicondensed/BarlowSemiCondensed-Regular.ttf"),
         )
         .unwrap();
         let mut item = text_item.clone();
         item.document.layers[0].font_family =
-            format!("{}, Noto Sans CJK SC, sans-serif", custom.family);
+            format!("{}, LXGW WenKai TC, sans-serif", custom.family);
         let mut canvas = RgbaImage::new(600, 400);
         draw_layers(
             &mut canvas,
@@ -2392,7 +2395,7 @@ mod tests {
         let mut layer = test_layer("custom");
         layer.custom_value = "映框 50mm".into();
         layer.font_family = format!(
-            "YingkuangFont{}, Noto Sans CJK SC, sans-serif",
+            "YingkuangFont{}, LXGW WenKai TC, sans-serif",
             "0".repeat(64)
         );
         document.layers.push(layer);

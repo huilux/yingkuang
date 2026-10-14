@@ -1,15 +1,28 @@
 import catalog from "./font-catalog.json";
+import retiredFonts from "./retired-fonts.json";
+
+export function resolveFontFamily(value: string) {
+  return [...new Set(value.split(",").map(family => {
+    const name = family.trim();
+    return (retiredFonts as Record<string, string>)[name] ?? name;
+  }))].join(", ");
+}
 
 export const builtinFonts = catalog;
 export const systemFonts = [
-  { value: "DejaVu Sans, sans-serif", label: "DejaVu Sans · 系统字体" },
-  { value: "Liberation Sans, sans-serif", label: "Liberation Sans · 系统字体" },
   { value: "monospace", label: "等宽 · 系统字体" },
 ];
+function renderingFamilies(value: string) {
+  const [primary, ...fallbacks] = resolveFontFamily(value).split(", ");
+  // Native export uses WenKai when the primary face lacks a glyph. Put it
+  // before generic fallbacks, which could otherwise select a system CJK face.
+  return [...new Set([primary, "LXGW WenKai TC", ...fallbacks])];
+}
+
 // Keep document fonts separate from the application UI's system fonts.
 // Saved template names stay stable; only Canvas-facing family names are mapped.
 export function previewFontFamily(value: string) {
-  return value.split(",").map(family => {
+  return renderingFamilies(value).map(family => {
     const name = family.trim();
     return builtinFonts.some(font => font.family === name) ? `Yingkuang ${name}` : name;
   }).join(", ");
@@ -35,7 +48,7 @@ function registerBuiltins() {
 export async function ensureFontsLoaded(families: string[]) {
   registerBuiltins();
   await restoreImportedFonts();
-  const requested = new Set(families.flatMap(value => value.split(",").map(family => family.trim())));
+  const requested = new Set(families.flatMap(renderingFamilies));
   for (const family of requested) {
     if (family.startsWith("YingkuangFont") && !faces.has(family)) throw new Error("缺少自定义字体，请在水印面板重新导入原字体文件");
   }
@@ -109,7 +122,7 @@ function addImportedFont(font: ImportedFont, face: FontFace) {
   for (const previous of faces.get(font.family) ?? []) document.fonts.delete(previous);
   document.fonts.add(face);
   faces.set(font.family, [face]);
-  const option = { family: font.family, value: `${font.family}, Noto Sans CJK SC, sans-serif`, label: `${font.name} · 已导入` };
+  const option = { family: font.family, value: `${font.family}, LXGW WenKai TC, sans-serif`, label: `${font.name} · 已导入` };
   const fonts = [...snapshot.fonts.filter(item => item.family !== font.family), option].sort((a, b) => a.label.localeCompare(b.label));
   publish({ ...snapshot, fonts });
   return option;

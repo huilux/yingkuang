@@ -6,8 +6,14 @@
   const libraryUrl = performance.getEntriesByType('resource').find(entry => new URL(entry.name).pathname === '/src/font-library.ts').name;
   const library = await import(libraryUrl);
   const { stage } = await context();
-  await library.ensureFontsLoaded(library.builtinFonts.map(font => font.value));
-  assert(library.builtinFonts.length === 8, 'Expected eight offline font families');
+  for (const font of library.builtinFonts) {
+    try { await library.ensureFontsLoaded([font.value]); }
+    catch (error) { throw new Error(`${font.family} failed to load: ${error}`); }
+  }
+  assert(library.systemFonts.length === 1 && library.systemFonts[0].value === 'monospace', 'Only system monospace should remain');
+  assert(library.previewFontFamily('Montserrat, Noto Sans CJK SC, sans-serif') === library.previewFontFamily('Manrope, LXGW WenKai TC, sans-serif'), 'Retired font preview differs from its replacement');
+  assert(library.previewFontFamily('DejaVu Sans, sans-serif') === library.previewFontFamily('Manrope, LXGW WenKai TC, sans-serif'), 'Legacy sans-serif must use the bundled Chinese fallback before generic fonts');
+  assert(library.builtinFonts.length === 11, 'Expected eleven offline font families');
   for (const font of library.builtinFonts) assert(document.fonts.check(`400 32px ${library.previewFontFamily(font.value)}`), `${font.family} did not load offline`);
   document.querySelector('#tab-watermark').click(); await frame();
   document.querySelector('.layer-visibility[aria-label^="隐藏"]').closest('.layer-row').querySelector('.layer-main').click(); await frame();
@@ -15,13 +21,13 @@
   await waitFor(() => fontSelect() && !document.querySelector('.font-import-button').disabled, 'Font picker not ready');
   const select = value => { fontSelect().value = value; fontSelect().dispatchEvent(new Event('change', { bubbles: true })); };
   const initial = fontSelect().value;
-  const montserrat = library.builtinFonts.find(font => font.family === 'Montserrat');
-  select(montserrat.value); await frame();
-  await waitFor(() => stage.findOne('.watermark-layer').findOne('Text').fontFamily() === library.previewFontFamily(montserrat.value), 'Canvas font did not change');
+  const manrope = library.builtinFonts.find(font => font.family === 'Manrope');
+  select(manrope.value); await frame();
+  await waitFor(() => stage.findOne('.watermark-layer').findOne('Text').fontFamily() === library.previewFontFamily(manrope.value), 'Canvas font did not change');
   document.querySelector('button[aria-label="撤销"]').click(); await frame();
   assert(fontSelect().value === initial, 'Font choice did not undo');
   const input = document.querySelector('input[aria-label="导入字体文件"]');
-  const bytes = await (await fetch('/fonts/space-mono/SpaceMono-Regular.ttf')).arrayBuffer();
+  const bytes = await (await fetch('/fonts/barlowsemicondensed/BarlowSemiCondensed-Regular.ttf')).arrayBuffer();
   const files = new DataTransfer();
   files.items.add(new File([new Uint8Array([0, 1, 0, 0, 1, 2])], 'Broken.TTF'));
   files.items.add(new File([bytes], 'My Caption.TTF'));
@@ -51,5 +57,5 @@
   assert(fresh.fontSnapshot().fonts.some(font => font.value === imported.value), 'A fresh library did not restore the imported font');
   // Restore the initial design so later browser checks start from its baseline.
   select(initial); await frame();
-  return { offlineFamilies: 8, builtinChoiceUndo: true, importedCanvasFont: true, invalidFileRecovery: true, duplicateDeduplication: true, persistedFontBytes: bytes.byteLength, freshLibraryRestore: true };
+  return { offlineFamilies: library.builtinFonts.length, builtinChoiceUndo: true, importedCanvasFont: true, invalidFileRecovery: true, duplicateDeduplication: true, persistedFontBytes: bytes.byteLength, freshLibraryRestore: true };
 })();

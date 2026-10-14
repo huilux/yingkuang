@@ -1,19 +1,28 @@
 # 内置字体与本地字体导入
 
-在右侧「水印」面板选择一个或多个图层，在「字体」下拉框选择字体。列表保留已有系统字体，新增真实离线资源：
+系统字体选项只保留「等宽 · 系统字体」。原有 8 款内置字体已移除，替换为以下 11 款离线字体：
 
-| 字体 | 用途 |
-| --- | --- |
-| 思源黑体（Noto Sans SC） | 中文简洁排版、通用文字 |
-| 思源宋体（Noto Serif SC） | 中文标题、经典相框 |
-| Montserrat | 几何风格品牌名、相机名 |
-| Lato | 简洁参数与说明 |
-| Playfair Display | 经典衬线标题 |
-| Oswald | 窄体标题、较长相机名称 |
-| Space Mono | 等宽 EXIF 参数 |
-| 马善政毛笔楷书 | 中文手写签名、标题 |
+| 字体 | 适合的水印场景 | 使用建议 |
+| --- | --- | --- |
+| Manrope | 摄影师署名、版权文字、简洁说明 | 默认字体；中小字号优先 |
+| Barlow Semi Condensed | 相机型号、镜头与 EXIF 参数 | 较窄字面，适合一行排布较多信息 |
+| Cormorant Garamond | 英文姓名、作品标题 | 衬线笔画细，建议较大字号与足够对比度 |
+| Allura | 英文手写签名 | 用于短署名，避免密集参数与极小字号 |
+| 霞鹜文楷 TC（LXGW WenKai TC） | 中文题字、摄影说明 | 支持常用简繁中文，也是拉丁字体的中文回退 |
+| 站酷小薇（ZCOOL XiaoWei） | 中文文艺题字、作品名 | 有衬线装饰感，适合中大字号 |
+| 龙藏体（Long Cang） | 中文行草署名 | 适合短题字，避免小字号参数 |
+| Sacramento | 纤细英文手写签名 | 建议较大字号、较高不透明度 |
+| Cinzel | 古典铭文式英文署名 | 适合姓名、地点与短标题 |
+| Rajdhani | 科技感相机型号、参数 | 方正窄体，四档真实字重 |
+| Bebas Neue | 窄体大写英文标题 | 适合短标题与品牌文字，不用于区分大小写 |
 
-思源黑体、思源宋体原先依赖系统安装，现在随应用提供。选型参考 [Chexif 的六种相框字体](https://chexif.com/en/)（包括 Montserrat、Lato、Playfair Display、Oswald）和 [ExifRegistry 的 Space Mono 参数相框](https://github.com/daviarndt/exifregistry)。资源来自 Google Fonts 官方仓库，固定版本、完整许可证与校验值随资源保存在 `public/fonts/`。
+这是按水印用途作出的选型判断，并非上游对水印效果的保证。实际效果还取决于字号、透明度与照片背景。
+
+## 来源与开源分发
+
+字体来自 [Google Fonts 官方仓库](https://github.com/google/fonts)，固定提交版本、下载地址与 SHA-256 均记录在 `public/fonts/sources.json`。每个字体目录保存原始 `OFL.txt`（含版权声明）；字体二进制未修改、未裁剪。
+
+十一款均使用 SIL Open Font License 1.1，可商用、嵌入应用并随开源项目再分发。分发源码或安装包时应保留各字体的版权和许可证；不能单独出售字体文件。字体继续使用 OFL，不随应用代码改成其他许可证；用字体生成的照片无需采用 OFL。若以后改字形、裁剪或重命名，需重新核对 OFL 与保留字体名称条款。依据：[OFL 官方 FAQ](https://openfontlicense.org/ofl-faq/)。
 
 ## 导入与保存
 
@@ -24,16 +33,17 @@
 - 重新启动后自动恢复。字体库读取失败可以重试；某一字体损坏不影响其他字体。缺失自定义字体会提示重新导入，导出预检也会阻止静默替换字体。
 - 字体选择、批量样式、撤销、模板和会话继续保存原有 `fontFamily` 字段。模板 JSON 备份只保存字体标识，不嵌入字体文件；换设备时需重新导入同一字体文件。
 
-## 渲染
+## 渲染与旧模板
 
-画布字体使用独立名称，不影响界面控件的系统字体与对齐。画布和模板预览等待可见文字所需的字体加载后重新测量；导出读取相同文件，不依赖系统查找新增字体。英文或自定义字体缺少的中文字符回退到内置思源黑体，混排保留主字体基线。可变字体按 400 / 500 / 600 / 700 实际字重渲染；静态字体使用文件自身的字形，Lato 与 Space Mono 提供常规和粗体两个文件。
+画布与原生导出使用同一组字体文件，离线可用。Manrope、Cormorant Garamond、Cinzel 使用 400–700 可变字重；Barlow Semi Condensed、Rajdhani 提供四档真实字重；文楷的 400/500 使用常规体，600/700 使用粗体；Allura、站酷小薇、龙藏体、Sacramento、Bebas Neue 只有常规体，各字重保持原始字形。
+
+新模板使用新字体。旧模板和会话不删除用户数据，渲染时按 `src/retired-fonts.json` 映射：Montserrat/Lato/旧系统无衬线 → Manrope，Playfair Display → Cormorant Garamond，Oswald → Barlow Semi Condensed，Space Mono → 系统等宽，旧中文字体 → 霞鹜文楷 TC。字体选择器显示「旧字体已替换」，可重新选择并保存。替换会改变文字宽度，旧模板可能需要微调位置或字号。
+
+英文、系统等宽和导入字体缺少中文时回退到文楷，前端提前加载同一回退字体，原生导出保持主字体基线。
 
 ## 验证
 
-- `npm run build`：类型检查、35 项数据/资源回归、生产构建、启动包体积检查。
-- `cargo test --manifest-path src-tauri/Cargo.toml --lib`：字体解析、所有字重、导入去重、持久化、损坏条目隔离、大小边界、缺失字体预检与现有导出回归。
-- `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`。
-- `xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422`：原有流程及字体库、桌面导入对话框的回归。
-- `python3 scripts/render-parity.py http://127.0.0.1:1422`：真实 Rust 图像与 WebKit 预览对比，包含中文、英文混排、粗体、导入字体和阴影。
-
-混排用例实测：Montserrat 的文字边界差异 1 px、粗体高度差 1 px；思源宋体与导入的 Space Mono 混排边界一致。
+- `npm run build`：类型检查、数据/资源回归、生产构建与包体积检查。
+- `cargo test --manifest-path src-tauri/Cargo.toml --lib`：字体解析、四档字重、中文覆盖、旧字体映射与导出回归。
+- `scripts/font-library-regression.js`：浏览器字体加载、选择撤销、导入、去重与恢复。
+- `python3 scripts/render-parity.py http://127.0.0.1:1422`：真实 Rust 图像与 WebKit 预览对比。

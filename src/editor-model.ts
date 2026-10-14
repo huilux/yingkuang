@@ -100,7 +100,7 @@ function layer(
     region: "bottom",
     x,
     y,
-    fontFamily: "Noto Sans CJK SC, sans-serif",
+    fontFamily: "Manrope, LXGW WenKai TC, sans-serif",
     fontSize: 22,
     fontWeight: 500,
     color: "#ffffff",

@@ -4,7 +4,7 @@
   const moduleUrl = name => performance.getEntriesByType('resource').find(entry => entry.name.includes(`/deps/${name}.js?`)).name;
   const { default: React } = await import(moduleUrl('react'));
   const { default: { createRoot } } = await import(moduleUrl('react-dom_client'));
-  const bytes = await (await fetch('/fonts/space-mono/SpaceMono-Regular.ttf')).arrayBuffer();
+  const bytes = await (await fetch('/fonts/barlowsemicondensed/BarlowSemiCondensed-Regular.ttf')).arrayBuffer();
   const hash = await crypto.subtle.digest('SHA-256', bytes);
   const family = 'YingkuangFont' + [...new Uint8Array(hash)].map(v => v.toString(16).padStart(2, '0')).join('');
   const font = { family, name: 'Native Caption Regular', data: btoa([...new Uint8Array(bytes)].map(v => String.fromCharCode(v)).join('')) };
@@ -24,7 +24,7 @@
   const edits = [];
   try {
     const { FontPicker } = await import(`/src/FontPicker.tsx?native-font=${Date.now()}`);
-    root.render(React.createElement(FontPicker, { value: 'Noto Sans CJK SC, sans-serif', onChange: value => edits.push(value) }));
+    root.render(React.createElement(FontPicker, { value: 'LXGW WenKai TC, sans-serif', onChange: value => edits.push(value) }));
     await t.waitFor(() => host.querySelector('.font-import-button') && !host.querySelector('.font-import-button').disabled, 'Native font picker not ready');
     host.querySelector('.font-import-button').click(); await t.frame();
     t.assert(imports.length === 0 && edits.length === 0, 'Cancel imported or edited a layer');

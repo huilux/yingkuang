@@ -4,6 +4,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{
+    collections::HashMap,
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -178,31 +179,59 @@ struct FontFile {
 
 fn builtin_bytes(path: &str) -> Option<&'static [u8]> {
     match path {
-        "noto-sans-sc/NotoSansSC[wght].ttf" => Some(include_bytes!(
-            "../../public/fonts/noto-sans-sc/NotoSansSC[wght].ttf"
+        "manrope/Manrope[wght].ttf" => Some(include_bytes!(
+            "../../public/fonts/manrope/Manrope[wght].ttf"
         )),
-        "noto-serif-sc/NotoSerifSC[wght].ttf" => Some(include_bytes!(
-            "../../public/fonts/noto-serif-sc/NotoSerifSC[wght].ttf"
+        "barlowsemicondensed/BarlowSemiCondensed-Regular.ttf" => Some(include_bytes!(
+            "../../public/fonts/barlowsemicondensed/BarlowSemiCondensed-Regular.ttf"
         )),
-        "montserrat/Montserrat[wght].ttf" => Some(include_bytes!(
-            "../../public/fonts/montserrat/Montserrat[wght].ttf"
+        "barlowsemicondensed/BarlowSemiCondensed-Medium.ttf" => Some(include_bytes!(
+            "../../public/fonts/barlowsemicondensed/BarlowSemiCondensed-Medium.ttf"
         )),
-        "lato/Lato-Regular.ttf" => Some(include_bytes!("../../public/fonts/lato/Lato-Regular.ttf")),
-        "lato/Lato-Bold.ttf" => Some(include_bytes!("../../public/fonts/lato/Lato-Bold.ttf")),
-        "playfair-display/PlayfairDisplay[wght].ttf" => Some(include_bytes!(
-            "../../public/fonts/playfair-display/PlayfairDisplay[wght].ttf"
+        "barlowsemicondensed/BarlowSemiCondensed-SemiBold.ttf" => Some(include_bytes!(
+            "../../public/fonts/barlowsemicondensed/BarlowSemiCondensed-SemiBold.ttf"
         )),
-        "oswald/Oswald[wght].ttf" => {
-            Some(include_bytes!("../../public/fonts/oswald/Oswald[wght].ttf"))
+        "barlowsemicondensed/BarlowSemiCondensed-Bold.ttf" => Some(include_bytes!(
+            "../../public/fonts/barlowsemicondensed/BarlowSemiCondensed-Bold.ttf"
+        )),
+        "cormorantgaramond/CormorantGaramond[wght].ttf" => Some(include_bytes!(
+            "../../public/fonts/cormorantgaramond/CormorantGaramond[wght].ttf"
+        )),
+        "allura/Allura-Regular.ttf" => Some(include_bytes!(
+            "../../public/fonts/allura/Allura-Regular.ttf"
+        )),
+        "lxgwwenkaitc/LXGWWenKaiTC-Regular.ttf" => Some(include_bytes!(
+            "../../public/fonts/lxgwwenkaitc/LXGWWenKaiTC-Regular.ttf"
+        )),
+        "lxgwwenkaitc/LXGWWenKaiTC-Bold.ttf" => Some(include_bytes!(
+            "../../public/fonts/lxgwwenkaitc/LXGWWenKaiTC-Bold.ttf"
+        )),
+        "zcoolxiaowei/ZCOOLXiaoWei-Regular.ttf" => Some(include_bytes!(
+            "../../public/fonts/zcoolxiaowei/ZCOOLXiaoWei-Regular.ttf"
+        )),
+        "longcang/LongCang-Regular.ttf" => Some(include_bytes!(
+            "../../public/fonts/longcang/LongCang-Regular.ttf"
+        )),
+        "sacramento/Sacramento-Regular.ttf" => Some(include_bytes!(
+            "../../public/fonts/sacramento/Sacramento-Regular.ttf"
+        )),
+        "cinzel/Cinzel[wght].ttf" => {
+            Some(include_bytes!("../../public/fonts/cinzel/Cinzel[wght].ttf"))
         }
-        "space-mono/SpaceMono-Regular.ttf" => Some(include_bytes!(
-            "../../public/fonts/space-mono/SpaceMono-Regular.ttf"
+        "rajdhani/Rajdhani-Regular.ttf" => Some(include_bytes!(
+            "../../public/fonts/rajdhani/Rajdhani-Regular.ttf"
         )),
-        "space-mono/SpaceMono-Bold.ttf" => Some(include_bytes!(
-            "../../public/fonts/space-mono/SpaceMono-Bold.ttf"
+        "rajdhani/Rajdhani-Medium.ttf" => Some(include_bytes!(
+            "../../public/fonts/rajdhani/Rajdhani-Medium.ttf"
         )),
-        "ma-shan-zheng/MaShanZheng-Regular.ttf" => Some(include_bytes!(
-            "../../public/fonts/ma-shan-zheng/MaShanZheng-Regular.ttf"
+        "rajdhani/Rajdhani-SemiBold.ttf" => Some(include_bytes!(
+            "../../public/fonts/rajdhani/Rajdhani-SemiBold.ttf"
+        )),
+        "rajdhani/Rajdhani-Bold.ttf" => Some(include_bytes!(
+            "../../public/fonts/rajdhani/Rajdhani-Bold.ttf"
+        )),
+        "bebasneue/BebasNeue-Regular.ttf" => Some(include_bytes!(
+            "../../public/fonts/bebasneue/BebasNeue-Regular.ttf"
         )),
         _ => None,
     }
@@ -214,6 +243,12 @@ pub fn builtin_font(family: &str, weight: u16) -> Option<Result<FontArc, String>
         serde_json::from_str(include_str!("../../src/font-catalog.json"))
             .expect("valid built-in font catalog")
     });
+    static RETIRED: OnceLock<HashMap<String, String>> = OnceLock::new();
+    let retired = RETIRED.get_or_init(|| {
+        serde_json::from_str(include_str!("../../src/retired-fonts.json"))
+            .expect("valid retired font mapping")
+    });
+    let family = retired.get(family).map(String::as_str).unwrap_or(family);
     let font = catalog.iter().find(|font| font.family == family)?;
     Some((|| {
         let file = font
@@ -257,8 +292,13 @@ mod tests {
                 for c in "50mm f/2.8 ISO100".chars() {
                     assert_ne!(font.glyph_id(c).0, 0, "{} missing {c}", entry.family);
                 }
-                if entry.family.starts_with("Noto") || entry.family == "Ma Shan Zheng" {
-                    for c in "映框摄影".chars() {
+                if ["ZCOOL XiaoWei", "Long Cang"].contains(&entry.family.as_str()) {
+                    for c in "映框摄影照片版权署名镜头参数".chars() {
+                        assert_ne!(font.glyph_id(c).0, 0, "{} missing {c}", entry.family);
+                    }
+                }
+                if entry.family == "LXGW WenKai TC" {
+                    for c in "映框摄影照片版权署名镜头参数時間光圈©".chars() {
                         assert_ne!(font.glyph_id(c).0, 0, "{} missing {c}", entry.family);
                     }
                 }
@@ -272,7 +312,7 @@ mod tests {
         let directory = root.path().join("library");
         initialize(directory.clone());
         let source = root.path().join("Title.TTF");
-        let bytes = builtin_bytes("montserrat/Montserrat[wght].ttf").unwrap();
+        let bytes = builtin_bytes("manrope/Manrope[wght].ttf").unwrap();
         fs::write(&source, bytes).unwrap();
         let first = import_at(&directory, &source).unwrap();
         let renamed = root.path().join("Renamed.ttf");
@@ -319,9 +359,28 @@ mod tests {
     }
 
     #[test]
+    fn retired_bundled_names_resolve_to_replacements() {
+        let retired: HashMap<String, String> =
+            serde_json::from_str(include_str!("../../src/retired-fonts.json")).unwrap();
+        for (old, new) in retired {
+            if new == "monospace" {
+                continue;
+            }
+            for weight in [400, 500, 600, 700] {
+                let old_font = builtin_font(&old, weight).unwrap().unwrap();
+                let new_font = builtin_font(&new, weight).unwrap().unwrap();
+                assert_eq!(
+                    old_font.h_advance_unscaled(old_font.glyph_id('M')),
+                    new_font.h_advance_unscaled(new_font.glyph_id('M'))
+                );
+            }
+        }
+    }
+
+    #[test]
     fn variable_font_weight_changes_outlines() {
-        let regular = builtin_font("Montserrat", 400).unwrap().unwrap();
-        let bold = builtin_font("Montserrat", 700).unwrap().unwrap();
+        let regular = builtin_font("Manrope", 400).unwrap().unwrap();
+        let bold = builtin_font("Manrope", 700).unwrap().unwrap();
         let glyph = regular.glyph_id('M').with_scale(40.0);
         let outline = |font: FontArc| {
             let mut coverage = 0.0;

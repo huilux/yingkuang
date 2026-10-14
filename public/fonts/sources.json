@@ -3,94 +3,149 @@
   "revision": "51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca",
   "files": [
     {
-      "file": "noto-sans-sc/NotoSansSC[wght].ttf",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf",
-      "sha256": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da"
+      "file": "manrope/Manrope[wght].ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/manrope/Manrope%5Bwght%5D.ttf",
+      "sha256": "3ae11c49db0455a3cc33e37d380f20fdb8c7f8b41dc07625c177e3d87a9d6ae6"
     },
     {
-      "file": "noto-sans-sc/OFL.txt",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/notosanssc/OFL.txt",
-      "sha256": "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9"
+      "file": "manrope/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/manrope/OFL.txt",
+      "sha256": "58172e0c0fac2cda8a37b348164bb55e44b0e69051e557e92b1d3f6910141f7b"
     },
     {
-      "file": "noto-serif-sc/NotoSerifSC[wght].ttf",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/notoserifsc/NotoSerifSC%5Bwght%5D.ttf",
-      "sha256": "050080d9255a86808f2945bffac582b31ef32bc36411ce29563b4961670c66f9"
+      "file": "barlowsemicondensed/BarlowSemiCondensed-Regular.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/barlowsemicondensed/BarlowSemiCondensed-Regular.ttf",
+      "sha256": "e8c7242f612b13d026e18a94b63b0fd079e91a3faf009d1b6981dbb5f16d1153"
     },
     {
-      "file": "noto-serif-sc/OFL.txt",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/notoserifsc/OFL.txt",
-      "sha256": "5e0da210fb04058a8c0087985d2d456b931c2579811a49655721d3cf0c36b6d6"
+      "file": "barlowsemicondensed/BarlowSemiCondensed-Medium.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/barlowsemicondensed/BarlowSemiCondensed-Medium.ttf",
+      "sha256": "4998b693a190b76f2b11315844345a8546c1e2e6a320905507a9eed04edf8b48"
     },
     {
-      "file": "montserrat/Montserrat[wght].ttf",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/montserrat/Montserrat%5Bwght%5D.ttf",
-      "sha256": "0f7b311b2f3279e4eef9b2f968bcdbab6e28f4daeb1f049f4f278a902bcd82f7"
+      "file": "barlowsemicondensed/BarlowSemiCondensed-SemiBold.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/barlowsemicondensed/BarlowSemiCondensed-SemiBold.ttf",
+      "sha256": "bd299f4bc5b44d30be8d42e9bad3a5df7d66af1cd55d0ed72a8b8916360a1424"
     },
     {
-      "file": "montserrat/OFL.txt",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/montserrat/OFL.txt",
-      "sha256": "8b7141c03fa4f8d44e6345d5d4931709290f0f67875e452e95ac1fd3a027802e"
+      "file": "barlowsemicondensed/BarlowSemiCondensed-Bold.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/barlowsemicondensed/BarlowSemiCondensed-Bold.ttf",
+      "sha256": "5bd6757e459a110da81b44532f0f43058e2dab2401688abca84f2fdbde193cbb"
     },
     {
-      "file": "playfair-display/PlayfairDisplay[wght].ttf",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf",
-      "sha256": "c40f2293766a503bc70cce9e512ef844a4ccb7cbcde792fe2ea31d191917d8d6"
+      "file": "barlowsemicondensed/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/barlowsemicondensed/OFL.txt",
+      "sha256": "186d750eb496a4c17a76385f82be6aea2ac1cf2de074a811d63786cf374ea73f"
     },
     {
-      "file": "playfair-display/OFL.txt",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/playfairdisplay/OFL.txt",
-      "sha256": "566be814f8e96e93dfa16101331557eb6b5467e9e03f627c0910fe93ca12300e"
+      "file": "cormorantgaramond/CormorantGaramond[wght].ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/cormorantgaramond/CormorantGaramond%5Bwght%5D.ttf",
+      "sha256": "b20b7d9626dd956b2c5e558692ad328b1f19e3275e2782db4fa07670d83f35e0"
     },
     {
-      "file": "oswald/Oswald[wght].ttf",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/oswald/Oswald%5Bwght%5D.ttf",
-      "sha256": "5b38c246e255a12f5712d640d56bcced0472466fc68983d2d0410ec0457c2817"
+      "file": "cormorantgaramond/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/cormorantgaramond/OFL.txt",
+      "sha256": "60700d351cac4650c51f3f9db318d2a420f8b45052dba2715eb5fec41f0f6956"
     },
     {
-      "file": "oswald/OFL.txt",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/oswald/OFL.txt",
-      "sha256": "0fd731a904b729a4e02eaf5e8ebd06783edd9abe400e8882760160230675b652"
+      "file": "allura/Allura-Regular.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/allura/Allura-Regular.ttf",
+      "sha256": "9c142b2e515832c0dfc4ff8b8ea18f40314943bf937b72e2b23c4661bac14cc6"
     },
     {
-      "file": "lato/Lato-Regular.ttf",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/lato/Lato-Regular.ttf",
-      "sha256": "d636e4683231f931eda222d588e944d082bfd3bdba02f928bee461c0f185b251"
+      "file": "allura/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/allura/OFL.txt",
+      "sha256": "c8cb4c94a558b6cb82ac5dc981a73a0b8aee35a5c52c8a7832fc0280c289ad49"
     },
     {
-      "file": "lato/Lato-Bold.ttf",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/lato/Lato-Bold.ttf",
-      "sha256": "8a0aace75d33794eece4b28187bfc1df0bbd2888b5d8a56e01788c8d65d16be1"
+      "file": "lxgwwenkaitc/LXGWWenKaiTC-Regular.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/lxgwwenkaitc/LXGWWenKaiTC-Regular.ttf",
+      "sha256": "4fcc5aec11cbbf737b0cfab7b63796f7f280087a7a656b2f13342cd5e5318d95"
     },
     {
-      "file": "lato/OFL.txt",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/lato/OFL.txt",
-      "sha256": "74ba064d03f1f1c4a952da936c3eb71866c34404916734de3cae73b34357e59e"
+      "file": "lxgwwenkaitc/LXGWWenKaiTC-Bold.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/lxgwwenkaitc/LXGWWenKaiTC-Bold.ttf",
+      "sha256": "5c9feadfd928f3ae3860e7d001ad3d0d0c55b0157fff08cd4d51b51aca677f23"
     },
     {
-      "file": "space-mono/SpaceMono-Regular.ttf",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/spacemono/SpaceMono-Regular.ttf",
-      "sha256": "95837e182baeeada83368f7748db28357f0a1b75c6b84ff7065b5edf933c8e18"
+      "file": "lxgwwenkaitc/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/lxgwwenkaitc/OFL.txt",
+      "sha256": "4fff27d35db0e22cd81d58da6f20e09f415cf354a3338e3cf1fc0eb9222c7174"
     },
     {
-      "file": "space-mono/SpaceMono-Bold.ttf",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/spacemono/SpaceMono-Bold.ttf",
-      "sha256": "405e73d41afb7e5906efce206a326af5c956f38e255f35421c260e861e599c59"
+      "file": "zcoolxiaowei/ZCOOLXiaoWei-Regular.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/zcoolxiaowei/ZCOOLXiaoWei-Regular.ttf",
+      "sha256": "a42b620140f493db42f741351dfbf343c0936d58588ee8004b8b2a218d997ff1"
     },
     {
-      "file": "space-mono/OFL.txt",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/spacemono/OFL.txt",
-      "sha256": "8e4ee42b2553e1e01504e61cb0d46d148cd8c9e5eacaa3622a7df2d4f2955b9f"
+      "file": "zcoolxiaowei/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/zcoolxiaowei/OFL.txt",
+      "sha256": "a094514ca57cf8f9c5e8d8d1adab5d8cd3a377297ff016f9df2c05b3ecd77f0a"
     },
     {
-      "file": "ma-shan-zheng/MaShanZheng-Regular.ttf",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/mashanzheng/MaShanZheng-Regular.ttf",
-      "sha256": "6d2546bb189c732a8ca29af9e22457b152387d158aa459e4ac2ce1e51788b7fb"
+      "file": "longcang/LongCang-Regular.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/longcang/LongCang-Regular.ttf",
+      "sha256": "e5bf2c3f24ef2327c6f136d8f73e2f9dfdf44896fdbeb35a9515f44777bb91bc"
     },
     {
-      "file": "ma-shan-zheng/OFL.txt",
-      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/mashanzheng/OFL.txt",
-      "sha256": "d7bdb1cee215b689e23c2f95672a6084c790542170648267a55114103d756a08"
+      "file": "longcang/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/longcang/OFL.txt",
+      "sha256": "603546b7219a94bb59bf8294458194a5010119486354092b66a09a3fd61aeacc"
+    },
+    {
+      "file": "sacramento/Sacramento-Regular.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/sacramento/Sacramento-Regular.ttf",
+      "sha256": "9341fda10adbfeb7efc94302b34507a3e227d7e7f5c432df3f5ac8753ff73d24"
+    },
+    {
+      "file": "sacramento/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/sacramento/OFL.txt",
+      "sha256": "2e2cb5a98da665f2ab82a9fd01fb18c2337f845761b0c163f690ed65f3b94677"
+    },
+    {
+      "file": "cinzel/Cinzel[wght].ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/cinzel/Cinzel%5Bwght%5D.ttf",
+      "sha256": "f4d83d34d1f6c741193e4acf4b3dff9531e5a67b6aa65228d00a7db72a4e0f34"
+    },
+    {
+      "file": "cinzel/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/cinzel/OFL.txt",
+      "sha256": "f2b3029aba64c378bf0963b62945eee15e564fe4330b934c8f2eb058282b5e83"
+    },
+    {
+      "file": "rajdhani/Rajdhani-Regular.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/rajdhani/Rajdhani-Regular.ttf",
+      "sha256": "6e1fc228a8318251a6e569502ec57bac1e4656c582f92f59ccecc4688e039b98"
+    },
+    {
+      "file": "rajdhani/Rajdhani-Medium.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/rajdhani/Rajdhani-Medium.ttf",
+      "sha256": "12ff7dcfe4c206e3875ac53b1762eab57de6a2fa7f5a86c26b97b88d6591eac2"
+    },
+    {
+      "file": "rajdhani/Rajdhani-SemiBold.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/rajdhani/Rajdhani-SemiBold.ttf",
+      "sha256": "94bbd25a18ca665999feb05a537de9fd2b860dcfb78bbe9ca00270825bf235da"
+    },
+    {
+      "file": "rajdhani/Rajdhani-Bold.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/rajdhani/Rajdhani-Bold.ttf",
+      "sha256": "691470dd3286a14e9677940d0bf75796179841ba5215cbda1a2c8910a3226afd"
+    },
+    {
+      "file": "rajdhani/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/rajdhani/OFL.txt",
+      "sha256": "f62ef357d3a1c3d27edd35a6e1ba350e8a8d13499797964eeadefbf0b3b15d1f"
+    },
+    {
+      "file": "bebasneue/BebasNeue-Regular.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/bebasneue/BebasNeue-Regular.ttf",
+      "sha256": "08e4623805102d819f58601e46e345648846075e363b2ceb23313c2d1c83ec73"
+    },
+    {
+      "file": "bebasneue/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/51303ca9e8ac9dcea7b12d307ba568fd0e6fcfca/ofl/bebasneue/OFL.txt",
+      "sha256": "72082f6cb4d04be2ecf7cc7d9e1e7d73787f0af8a5a278a47cade70c16b78341"
     }
   ]
 }

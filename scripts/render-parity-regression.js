@@ -31,7 +31,7 @@
     { ...common, type: 'solid', radius: 12, shadow: 100 }, (x, y) => x >= 80 && x < 600 && y >= 444 && y < 540);
   const scaled = await compare('scaled_background', { width: 680, height: 580, photo: { x: 40, y: 40, width: 600, height: 400 } },
     { ...common, type: 'blur' }, (x, y) => x >= 80 && x < 600 && y >= 480 && y < 560);
-  async function textBounds(name, rotation, fontFamily = 'Noto Sans CJK SC, sans-serif', fontWeight = 400) {
+  async function textBounds(name, rotation, fontFamily = 'LXGW WenKai TC, sans-serif', fontWeight = 400) {
     const { ensureFontsLoaded, previewFontFamily } = await import('/src/font-library.ts');
     await ensureFontsLoaded([fontFamily]);
     await document.fonts.ready;
@@ -68,12 +68,14 @@
   }
   const text = await textBounds('text', 0);
   const textRotated = await textBounds('text_rotated', 90);
-  const montserrat = await textBounds('montserrat_mixed', 0, 'Montserrat, Noto Sans CJK SC, sans-serif');
-  const montserratBold = await textBounds('montserrat_bold', 0, 'Montserrat, Noto Sans CJK SC, sans-serif', 700);
-  const serif = await textBounds('serif_mixed', 0, 'Noto Serif CJK SC, serif', 600);
+  const retiredSans = await textBounds('retired_sans', 0, 'DejaVu Sans, sans-serif');
+  const systemMono = await textBounds('system_mono', 0, 'monospace');
+  const manrope = await textBounds('manrope_mixed', 0, 'Manrope, LXGW WenKai TC, sans-serif');
+  const manropeBold = await textBounds('manrope_bold', 0, 'Manrope, LXGW WenKai TC, sans-serif', 700);
+  const serif = await textBounds('serif_mixed', 0, 'Cormorant Garamond, LXGW WenKai TC, serif', 600);
   const { importFont } = await import('/src/font-library.ts');
-  const fontBytes = await (await fetch('/fonts/space-mono/SpaceMono-Regular.ttf')).arrayBuffer();
-  const imported = await importFont(new File([fontBytes], 'SpaceMono.ttf'));
+  const fontBytes = await (await fetch('/fonts/barlowsemicondensed/BarlowSemiCondensed-Regular.ttf')).arrayBuffer();
+  const imported = await importFont(new File([fontBytes], 'BarlowSemiCondensed.ttf'));
   const importedText = await textBounds('imported_mixed', 0, imported.value);
-  return { background, shadow, strongShadow, scaled, text, textRotated, montserrat, montserratBold, serif, importedText };
+  return { background, shadow, strongShadow, scaled, text, textRotated, retiredSans, systemMono, manrope, manropeBold, serif, importedText };
 })();

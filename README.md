@@ -67,7 +67,7 @@
 
 照片阴影范围扩展为 0–100，高强度段继续加深阴影；编辑预览和导出保持一致，详见 [阴影说明](docs/photo-shadow.md)。
 
-水印字体内置思源黑体、思源宋体、Montserrat、Lato、Playfair Display、Oswald、Space Mono 和马善政毛笔楷书，均可离线使用。在「水印 → 字体」点击「导入字体」可批量导入 TTF/OTF（每个最多 32 MB），保存到本机并在重启后恢复；选择字体支持撤销和多图层应用。完整操作、字体来源与验证见 [字体库说明](docs/font-library.md)。
+水印字体内置Manrope、Barlow Semi Condensed、Cormorant Garamond、Allura、霞鹜文楷 TC、站酷小薇、龙藏体、Sacramento、Cinzel、Rajdhani 和 Bebas Neue，共 11 款（均附 OFL 1.1 许可证），并保留系统等宽字体，均可离线使用。在「水印 → 字体」点击「导入字体」可批量导入 TTF/OTF（每个最多 32 MB），保存到本机并在重启后恢复；选择字体支持撤销和多图层应用。完整操作、字体来源与验证见 [字体库说明](docs/font-library.md)。
 
 工作区用左侧纵向照片列表管理勾选、移除和批量套用；中央保留完整画布；右侧按「模板」「相框」「水印」分开套用样式、微调相框和编辑文字图层。照片只在左侧列出一次，画布下方不再重复显示缩略条。
 
