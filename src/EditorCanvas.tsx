@@ -268,7 +268,7 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
   }
 
   return <div className="canvas-viewport design-canvas" ref={viewportRef} tabIndex={0} role="group"
-    aria-label={`${photo.fileName} 的相框设计画布`} aria-describedby={helpId} title="Ctrl + 滚轮缩放 · 滚轮平移 · 空格或中键拖动平移"
+    aria-label={`${photo.fileName} 的相框设计画布`} aria-describedby={helpId} title="Ctrl/⌘ + 滚轮缩放 · 滚轮平移 · 空格或中键拖动平移"
     onBlur={event => { spacePressed.current = false; if (!pan.current) event.currentTarget.style.cursor = ""; }}
     onContextMenu={event => event.preventDefault()}
     onPointerDownCapture={event => {
@@ -350,7 +350,7 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
     {!image && <div className="canvas-preview-status" role="status">{error ? "相框预览生成失败，请重新选择照片" : "正在生成相框预览…"}</div>}
     {image && error && <div className="canvas-preview-status" role="status">相框预览更新失败，请重新选择照片</div>}
     {image && (photoError || photoLoading) && <div className="canvas-photo-status" role="status">{photoError ? "高清照片读取失败，当前显示缩略图；请确认原文件仍可访问" : "正在加载高清照片…"}</div>}
-    <span id={helpId} className="sr-only">Ctrl 加滚轮缩放，滚轮平移，空格加拖动或鼠标中键平移。Shift 点选可多选，Ctrl 拖动临时关闭吸附。可在右侧图层列表选择水印，聚焦画布后用方向键微调，Shift 加方向键移动十个单位，Escape 取消拖动。</span>
+    <span id={helpId} className="sr-only">Ctrl 或 Command 加滚轮缩放，滚轮平移，空格加拖动或鼠标中键平移。Shift 点选可多选，Ctrl 或 Command 拖动临时关闭吸附。可在右侧图层列表选择水印，聚焦画布后用方向键微调，Shift 加方向键移动十个单位，Escape 取消拖动。</span>
   </div>;
 }));
 
