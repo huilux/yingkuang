@@ -44,7 +44,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libfuse2
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libfuse2 python3-gi gir1.2-webkit2-4.1 xvfb
       - name: Install pinned Rust toolchain
         shell: bash
         run: rustup show active-toolchain
@@ -63,6 +63,9 @@ jobs:
           path: test-output/licenses/
       - run: npm test
       - run: npm run build
+      - name: Verify production CSP in WebKit
+        if: runner.os == 'Linux'
+        run: xvfb-run -a /usr/bin/python3 scripts/check-csp.py
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings

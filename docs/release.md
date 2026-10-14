@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-项目目标为 Linux、Windows、macOS。已有 Arch Linux 历史验收；新加入的 CI 配置尚需在远端运行，Windows/macOS 安装包尚未完成实机验收。不能把构建成功当作已全面支持该系统。
+项目目标为 Linux、Windows、macOS。已有 Arch Linux 历史验收；CI 已开始远端验证，结果以对应提交的 Actions 记录为准，Windows/macOS 安装包尚未完成实机验收。不能把构建成功当作已全面支持该系统。
 
 | 平台 | CI 环境 | 产物 |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ npm run tauri build -- --bundles dmg
 
 - 当前演示照片已由维护者确认原创并按 MIT 提供，图标已替换为项目新生成素材。检查新增图片的来源、元数据和待公开内容，历史提交中的旧图标也已替换，并保留原提交树结构。不得打包本机备份、私人原片、签名证书或密钥。
 - 生成 npm/Rust/原生库完整的第三方许可证清单并随包提供。
-- 配置并验证 CSP、IPC 权限边界；当前 CSP 仍关闭，尚未完成安全审计。
+- 生产 CSP 已启用并通过 Linux WebKit 资源与拦截检查；继续核对各平台原生 IPC 与权限边界，尚未完成全面安全审计。
 - macOS 窗口风格与平台快捷键提示仍待适配。
 - 在 GitHub 启用私密漏洞报告、分支保护；确认仓库地址与下载入口后更新 README。
 - 普通用户正式分发前配置 Windows 代码签名、macOS Developer ID 签名及公证，私钥仅存 CI Secrets。

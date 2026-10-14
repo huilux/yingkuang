@@ -2528,7 +2528,7 @@ mod tests {
     }
 
     #[test]
-    fn preflight_rejects_names_that_the_filesystem_cannot_create() {
+    fn preflight_matches_filesystem_filename_limits() {
         let root = tempfile::tempdir().unwrap();
         for stem in ["a".repeat(249), "图".repeat(83), "📷".repeat(62)] {
             let input = root.path().join(format!("{stem}.png"));
@@ -2543,22 +2543,41 @@ mod tests {
                 output_suffix: None,
                 crop: None,
             };
-            let output_error = unique_output_path(&input, &settings).unwrap_err();
-            assert!(output_error.contains("请缩短"), "{output_error}");
+            // APFS/NTFS and common Linux filesystems count Unicode filename
+            // lengths differently. Check against the filesystem, not UTF-8 bytes.
+            let candidate = root.path().join(format!("{stem}-frame.jpg"));
+            let can_create = match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&candidate)
+            {
+                Ok(file) => {
+                    drop(file);
+                    fs::remove_file(&candidate).unwrap();
+                    true
+                }
+                Err(_) => false,
+            };
+            let planned = unique_output_path(&input, &settings);
+            if can_create {
+                assert_eq!(planned.unwrap(), Some(candidate));
+            } else {
+                let error = planned.unwrap_err();
+                assert!(error.contains("请缩短"), "{error}");
+            }
             let preflight = preflight_export_sync(&ExportRequest {
                 items: vec![item],
                 settings,
             });
-            assert!(
-                !preflight.ready,
-                "Preflight accepted an output filename rejected by the filesystem"
-            );
-            assert!(
-                preflight
-                    .errors
-                    .iter()
-                    .any(|error| error.contains("输出文件"))
-            );
+            assert_eq!(preflight.ready, can_create, "{:?}", preflight.errors);
+            if !can_create {
+                assert!(
+                    preflight
+                        .errors
+                        .iter()
+                        .any(|error| error.contains("输出文件"))
+                );
+            }
         }
     }
 

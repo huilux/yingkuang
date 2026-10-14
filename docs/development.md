@@ -85,3 +85,7 @@ python3 scripts/benchmark-export.py \
 保留源码、构建脚本、锁文件、测试代码及可公开样本。`test-output/`、`assets/origin/`、`assets/image/`、本机配置和 `.local-dev/` 不提交。演示图须保持最长边不超过 1920px、文件不超过 600 KiB，且无 EXIF/XMP/IPTC 等附加元数据；`npm test` 会检查。
 
 版本变更使用 `npm run version:set -- <版本>`，它同步 npm、Cargo 和 Tauri 的版本。新增行为应补充相关回归，并说明实际测试的平台、模拟范围和未验证部分。
+
+## 生产 CSP 检查
+
+运行 `npm run build` 后，执行 `xvfb-run -a python3 scripts/check-csp.py`。脚本启动临时本地服务，按 Tauri 配置发送生产 CSP，并用 WebKit 验证编辑器、本地图像和字体可加载，内联脚本、动态代码及外部连接被阻止。它不替代原生 IPC 和其他平台 WebView 的验收。开发 CSP 单独允许 Vite 的内联脚本和本机 WebSocket。
