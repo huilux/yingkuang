@@ -10,6 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use tauri::Manager;
+use tauri_plugin_opener::OpenerExt;
 
 mod export;
 mod fonts;
@@ -547,6 +548,23 @@ async fn write_template_backup(path: String, content: String) -> Result<(), Stri
     .map_err(|error| format!("保存备份任务异常结束：{error}"))?
 }
 
+fn validated_export_directory(path: &Path) -> Result<PathBuf, String> {
+    let directory =
+        fs::canonicalize(path).map_err(|error| format!("无法访问输出文件夹：{error}"))?;
+    if !directory.is_dir() {
+        return Err("只能打开已存在的文件夹".into());
+    }
+    Ok(directory)
+}
+
+#[tauri::command]
+fn open_export_directory(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let directory = validated_export_directory(Path::new(&path))?;
+    app.opener()
+        .open_path(directory.to_string_lossy(), None::<&str>)
+        .map_err(|error| format!("无法打开输出文件夹：{error}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -564,6 +582,7 @@ pub fn run() {
             list_image_files,
             read_template_backup,
             write_template_backup,
+            open_export_directory,
             load_editor_photo,
             export::preflight_export,
             resolve_photo_paths,
@@ -577,6 +596,20 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn opening_export_directory_rejects_files_missing_paths_and_urls() {
+        let root = tempfile::tempdir().unwrap();
+        assert_eq!(
+            validated_export_directory(root.path()).unwrap(),
+            fs::canonicalize(root.path()).unwrap()
+        );
+        let file = root.path().join("program.exe");
+        fs::write(&file, b"not a directory").unwrap();
+        assert!(validated_export_directory(&file).is_err());
+        assert!(validated_export_directory(&root.path().join("missing")).is_err());
+        assert!(validated_export_directory(Path::new("https://example.invalid")).is_err());
+    }
 
     #[test]
     fn recovery_backup_keeps_raw_content_and_cleans_failed_writes() {

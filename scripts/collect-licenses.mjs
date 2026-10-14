@@ -31,7 +31,7 @@ async function collect(directory, prefix = '') {
   }
   return found;
 }
-async function add(ecosystem, name, version, license, directory, extraFile) {
+async function add(ecosystem, name, version, license, directory, extraFile, authors = []) {
   const files = await collect(directory);
   const supplementalSources = [];
   const supplement = supplements.find(entry => entry.ecosystem === ecosystem && entry.name === name && entry.version === version);
@@ -57,7 +57,7 @@ async function add(ecosystem, name, version, license, directory, extraFile) {
     const file = relative(directory, extraFile).replaceAll('\\', '/');
     if (!files.some(item => item.file === file)) files.push({ file, text: await readFile(extraFile, 'utf8') });
   }
-  const record = { ecosystem, name, version, license, files: files.map(item => item.file), supplementalSources };
+  const record = { ecosystem, name, version, license, authors, files: files.map(item => item.file), supplementalSources, reviewRequired: supplement?.reviewRequired ?? null };
   packages.push(record);
   for (const item of files) texts.push(`===== ${ecosystem}: ${name}@${version} / ${item.file} =====\nDeclared license: ${license ?? 'UNKNOWN'}\n\n${item.text}`);
 }
@@ -77,12 +77,13 @@ for (const [path, entry] of Object.entries(lock.packages).sort(([a], [b]) => a.l
 }
 for (const entry of metadata.packages.sort((a, b) => `${a.name}@${a.version}`.localeCompare(`${b.name}@${b.version}`, 'en'))) {
   if (!entry.source) continue;
-  await add('cargo', entry.name, entry.version, entry.license, dirname(entry.manifest_path), entry.license_file);
+  await add('cargo', entry.name, entry.version, entry.license, dirname(entry.manifest_path), entry.license_file, entry.authors);
 }
 const missingTexts = packages.filter(entry => entry.files.length === 0).map(({ ecosystem, name, version, license }) => ({ ecosystem, name, version, license }));
+const reviewRequired = packages.filter(entry => entry.reviewRequired).map(({ ecosystem, name, version, reviewRequired }) => ({ ecosystem, name, version, reason: reviewRequired }));
 const output = join(root, 'test-output', 'licenses', target);
 await mkdir(output, { recursive: true });
 const scope = 'Dependency-source inventory, including build/development dependencies. Not an audit or an exact linked-binary inventory. System libraries and packaging-tool payloads require separate review. Missing license texts require manual follow-up.';
-await writeFile(join(output, 'inventory.json'), JSON.stringify({ target, scope, packages, absentOptional, missingTexts }, null, 2) + '\n');
+await writeFile(join(output, 'inventory.json'), JSON.stringify({ target, scope, packages, absentOptional, missingTexts, reviewRequired }, null, 2) + '\n');
 await writeFile(join(output, 'LICENSE-TEXTS.txt'), `${scope}\n\n${texts.join('\n\n')}\n`);
-console.log(`${packages.length} packages; ${missingTexts.length} without separate license text. Output: test-output/licenses/${target}`);
+console.log(`${packages.length} packages; ${missingTexts.length} without separate license text; ${reviewRequired.length} explicit review items. Output: test-output/licenses/${target}`);

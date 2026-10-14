@@ -4,7 +4,6 @@ import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "rea
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { importDirectoryKey, readImportDirectory, selectedImportDirectory } from "./import-location";
 import { usePhotoDrop } from "./use-photo-drop";
 import { cropPixels } from "./photo-crop";
@@ -1248,7 +1247,7 @@ function App() {
             <div className="dialog-footer">
               <button className="button secondary" type="button" onClick={() => setExportResult(null)}>关闭</button>
               {!!exportResult.failures.some((failure) => failure.path) && <button className="button secondary" type="button" onClick={() => { const paths = new Set(exportResult.failures.map((failure) => failure.path).filter(Boolean)); setExportResult(null); void startExport(paths); }}>重试失败项</button>}
-              <button className="button primary" type="button" onClick={() => { void openPath(exportResult.outputDirectory).catch((error) => setMessage(`无法打开输出文件夹：${String(error)}`)); }}><FolderSimple /> 打开输出文件夹</button>
+              <button className="button primary" type="button" onClick={() => { void invoke("open_export_directory", { path: exportResult.outputDirectory }).catch((error) => setMessage(`无法打开输出文件夹：${String(error)}`)); }}><FolderSimple /> 打开输出文件夹</button>
             </div>
           </section>
         </Modal>
