@@ -1473,6 +1473,16 @@ fn export_one_with_renderer(
     mut on_stage: impl FnMut(&'static str),
 ) -> Result<Option<(PathBuf, Vec<String>)>, String> {
     let mut item_settings = settings.clone();
+    #[cfg(windows)]
+    {
+        // tempfile persists via MoveFileExW, unlike std::fs it does not add the
+        // extended-length prefix. Use canonical paths for both the temporary
+        // file and destination so valid long filenames survive the final move.
+        item_settings.directory = fs::canonicalize(&settings.directory)
+            .map_err(|error| format!("无法访问输出文件夹：{error}"))?
+            .to_string_lossy()
+            .into_owned();
+    }
     if let Some(suffix) = &item.output_suffix {
         item_settings.suffix.clone_from(suffix);
     }
