@@ -71,7 +71,7 @@ try {
   }
   for (const [key, code, keyCode] of [['Enter', 'Enter', 13], [' ', 'Space', 32]]) {
     await evaluate(`document.querySelector('button.theme-control').focus()`);
-    await send('Input.dispatchKeyEvent', {type: 'keyDown', key, code, windowsVirtualKeyCode: keyCode});
+    await send('Input.dispatchKeyEvent', {type: 'keyDown', key, code, windowsVirtualKeyCode: keyCode, text: key === 'Enter' ? '\r' : key, unmodifiedText: key === 'Enter' ? '\r' : key});
     await send('Input.dispatchKeyEvent', {type: 'keyUp', key, code, windowsVirtualKeyCode: keyCode});
     preference = order[(order.indexOf(preference) + 1) % 3]; await check(preference);
   }
