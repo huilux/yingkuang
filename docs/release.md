@@ -31,7 +31,7 @@ npm run tauri build -- --bundles dmg
 
 产物位于 `src-tauri/target/release/bundle/`。AppImage 脚本固定打包插件版本和校验值，首次构建需要联网。Linux 应使用计划支持的最旧基础系统构建，避免 Arch 的新 glibc 提高分发要求。参见 [Tauri AppImage 文档](https://tauri.app/distribute/appimage/)。
 
-`.github/workflows/desktop.yml` 对 PR、main/master 推送、v 标签和手动运行执行测试并上传安装包到 Actions artifacts；不创建 Release、不公开发布产物。macOS CI 使用 ad-hoc 签名，仅供验收，未经过 Developer ID 签名和公证。Windows CI 包未进行代码签名。
+`.github/workflows/desktop.yml` 对 PR、main/master 推送、v 标签和手动运行执行测试和安装包构建；源码公开阶段已暂停上传安装包到 Actions artifacts，仅保留许可审查材料附件，不创建 Release。macOS CI 使用 ad-hoc 签名，仅供验收，未经过 Developer ID 签名和公证。Windows CI 包未进行代码签名。
 
 ## 发布前验收
 

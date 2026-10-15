@@ -24,7 +24,7 @@ Linux x64、Windows x64、macOS Apple Silicon 与 Intel 已通过[跨平台 CI �
 | Windows x64 | exe（NSIS） |
 | macOS Apple Silicon / Intel | dmg |
 
-测试安装包可从 [Actions](https://github.com/huilux/yingkuang/actions/workflows/desktop.yml) 的 artifacts 获取，需要相应仓库访问权限，保留 14 天。尚未发布正式 Release；Windows 包未做代码签名，macOS 包仅使用 ad-hoc 签名、未公证。也可使用源码构建。最低系统版本将在实机验收后公布。[构建与发布说明](docs/release.md)包含各平台命令与验证范围。
+当前先开放源码，暂不提供预编译安装包下载，也未创建正式 Release。CI 继续验证各平台构建，但暂停上传安装包；待依赖许可核对和实机验收完成后再开放下载。已有构建中 Windows 包未签名，macOS 包仅使用 ad-hoc 签名、未公证。可按下方步骤从源码运行。[构建与发布说明](docs/release.md)包含各平台命令与验证范围。
 
 ## 开发启动
 
