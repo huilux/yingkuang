@@ -53,8 +53,9 @@ def verify_elf(payload, original):
         expected = expected.replace(b'/usr', b'././')
     before, after = elf_sections(expected), elf_sections(payload.read_bytes())
     ignored = {'.dynamic', '.dynstr', '.shstrtab'}
-    if set(before) != set(after) or any(before[k] != after[k] for k in set(before) - ignored):
-        raise ValueError(f'Unexpected ELF code/data transformation: {payload}')
+    differences = sorted(k for k in set(before) & set(after) - ignored if before[k] != after[k])
+    if set(before) != set(after) or differences:
+        raise ValueError(f'Unexpected ELF code/data transformation: {payload}; changed={differences}; added={sorted(set(after)-set(before))}; removed={sorted(set(before)-set(after))}')
     def dynamic(path):
         text = run('readelf', '-d', path).decode()
         return sorted(re.findall(r'\((NEEDED|SONAME)\).*?\[(.*?)\]', text))
@@ -143,6 +144,13 @@ def finalize(appdir, output, materials, runtime):
     shutil.copytree(materials / 'payload/common-licenses', notices / 'common-licenses')
     shutil.copytree(runtime / 'notices', notices / 'runtime')
     shutil.copy2(ROOT / 'scripts/appimage/AppRun', materials / 'AppRun')
+    plugin = ROOT / 'src-tauri/target/.tauri/linuxdeploy-plugin-gtk.sh'
+    if audit.digest(plugin) != '95eeb15c2eb3e595c102ec8284b017b2a369ac0afddf1c8475fab04c069a0aa9':
+        raise ValueError('Actual GTK packaging plugin differs from pinned source/patch')
+    shutil.copy2(plugin, materials / 'linuxdeploy-plugin-gtk.sh')
+    shutil.copytree(ROOT / 'licenses/packaging', materials / 'packaging-notices')
+    for name in ['build-appimage.mjs', 'audit-appimage.py']:
+        shutil.copy2(ROOT / 'scripts' / name, materials / name)
     for file in sorted((ROOT / 'scripts/appimage').iterdir()):
         if file.is_file():
             target = materials / 'build-recipes' / file.name

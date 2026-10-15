@@ -45,6 +45,15 @@ class DeliveryTests(unittest.TestCase):
         self.assertIsNone(runtime.pinned_origin('/usr/include/stdlib.h'))
         self.assertIsNone(runtime.pinned_origin('/usr/local/lib/unrelated.a'))
 
+    def test_abuild_cache_links_are_removed_while_real_recipe_and_sources_remain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); recipe = root / 'recipe'; recipe.mkdir()
+            original = recipe / 'fix.patch'; original.write_text('original patch')
+            (recipe / 'src').mkdir(); link = recipe / 'src/fix.patch'; link.symlink_to(original)
+            runtime.remove_transient_links(recipe)
+            self.assertFalse(link.is_symlink())
+            self.assertEqual(original.read_text(), 'original patch')
+
     def test_source_descriptor_identity_and_every_original_archive_checked(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

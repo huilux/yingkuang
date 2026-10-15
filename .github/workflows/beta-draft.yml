@@ -113,6 +113,19 @@ jobs:
           python scripts/appimage/finalize.py src-tauri/target/release/bundle/appimage/yingkuang.AppDir test-output/yingkuang.AppImage test-output/appimage-materials test-output/appimage-runtime
           xvfb-run -a python scripts/appimage/native-check.py test-output/yingkuang.AppImage test-output/appimage-materials/native-checks.json
           xvfb-run -a python scripts/appimage/stage.py test-output/yingkuang.AppImage test-output/appimage-materials
+      - name: Preserve AppImage source review diagnostics
+        if: failure() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: appimage-source-diagnostics
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            test-output/appimage-materials/payload/
+            test-output/appimage-runtime/manifest.json
+            test-output/appimage-runtime/link.log
+            test-output/appimage-runtime/headers.txt
+            test-output/appimage-runtime/ALPINE-IMAGE.txt
       - name: Stage AppImage only in the existing unpublished draft
         if: runner.os == 'Linux'
         run: node scripts/beta-release.mjs upload-appimage "$RELEASE_TAG" "$GITHUB_SHA"

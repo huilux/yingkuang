@@ -20,6 +20,13 @@ def pinned_origin(path):
     return None
 
 
+def remove_transient_links(directory):
+    # Initial aports recipes reject symlinks. abuild fetch/verify creates links
+    # under src/ pointing to its container-only cache. Keep copied real sources.
+    for file in directory.rglob('*'):
+        if file.is_symlink(): file.unlink()
+
+
 def collect(out):
     packages = {}
     for block in (out / 'apk-installed.txt').read_text().split('\n\n'):
@@ -69,6 +76,7 @@ def collect(out):
         for file in cache.iterdir():
             if file.is_file():
                 shutil.copy2(file, destination / file.name)
+        remove_transient_links(destination)
         records.append({'origin': origin, 'version': owner['V'], 'aportsCommit': commit, 'license': owner.get('L'), 'directory': destination.relative_to(out).as_posix()})
     # Keep original notices verbatim. Sources remain intact alongside the recipes.
     for archive in sorted((out / 'sources').rglob('*')):
