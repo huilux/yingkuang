@@ -10,6 +10,15 @@ spec.loader.exec_module(audit)
 
 
 class ProvenanceTests(unittest.TestCase):
+    def test_multiarch_copyright_paths_are_portable_and_distinct(self):
+        root = Path('report')
+        names = ['libc6:amd64', 'libc6:arm64', 'libc6%3Aamd64']
+        paths = [audit.copyright_destination(root, name) for name in names]
+        self.assertEqual(len(set(paths)), len(names))
+        for path in paths:
+            self.assertNotRegex(path.as_posix(), r'[":<>|*?\r\n]')
+        self.assertEqual(paths[0].as_posix(), 'report/copyright/libc6%3Aamd64/copyright')
+
     def test_matching_filename_alone_does_not_prove_origin(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -12,6 +12,13 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+from urllib.parse import quote
+
+
+def copyright_destination(output, package):
+    # Debian multiarch names contain ':', which artifact downloads on Windows
+    # cannot represent. Keep the original name in JSON, encode only the path.
+    return output / 'copyright' / quote(package, safe='') / 'copyright'
 
 
 def digest(path):
@@ -104,7 +111,7 @@ def audit(appdir, output):
         copyright_file = Path('/usr/share/doc') / name.split(':')[0] / 'copyright'
         record['copyrightFile'] = None
         if copyright_file.is_file():
-            destination = output / 'copyright' / name / 'copyright'
+            destination = copyright_destination(output, name)
             destination.parent.mkdir(parents=True)
             shutil.copyfile(copyright_file, destination)
             record['copyrightFile'] = destination.relative_to(output).as_posix()
@@ -125,6 +132,8 @@ def audit(appdir, output):
     (output / 'inventory.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
     print(f'{len(files)} payload entries; {len(records)} system packages; '
           f'{len(unresolved)} unresolved files; {len(report["missingCopyright"])} missing copyright files')
+    for local in unresolved:
+        print(f'Unresolved payload file: {local}')
 
 
 if __name__ == '__main__':
