@@ -56,12 +56,14 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-appimage-check-', ignore_clea
             else:
                 raise RuntimeError('Native AppImage window not observed: ' + (work / 'startup.log').read_text())
             # Require an actual WebKit renderer, not just an empty native frame.
-            for _ in range(30):
+            for _ in range(90):
+                if process.poll() is not None:
+                    raise RuntimeError('AppImage exited: ' + (work / 'startup.log').read_text())
                 if renderer_children(native_pid):
                     break
                 time.sleep(.5)
             else:
-                raise RuntimeError('Bundled WebKit renderer not observed')
+                raise RuntimeError(f'Bundled WebKit renderer not observed for native PID {native_pid}: ' + (work / 'startup.log').read_text())
         finally:
             stop_process_group(process)
 native = json.loads((materials / 'native-checks.json').read_text())
