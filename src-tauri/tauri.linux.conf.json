@@ -1,6 +1,7 @@
 {
   "productName": "yingkuang",
   "bundle": {
+    "category": "Photography",
     "linux": {
       "deb": {
         "desktopTemplate": "linux/yingkuang.desktop.hbs"

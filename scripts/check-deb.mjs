@@ -13,6 +13,14 @@ export function checkDeb(path, version) {
   }));
   if (fields.Package !== 'yingkuang') throw new Error(`Invalid Debian package name: ${fields.Package}`);
   if (fields.Version !== version || fields.Architecture !== 'amd64') throw new Error('Unexpected Debian package version or architecture');
+  // Stream the actual payload through tar; the archive path is a positional
+  // argument, never interpolated into shell source.
+  const desktop = spawnSync('bash', ['-o', 'pipefail', '-c', 'dpkg-deb --fsys-tarfile "$1" | tar -xOf - usr/share/applications/yingkuang.desktop', 'check-deb', path], { encoding: 'utf8', timeout: 60000 });
+  if (desktop.error) throw desktop.error;
+  if (desktop.status !== 0) throw new Error(desktop.stderr.trim());
+  const lines = desktop.stdout.split('\n');
+  const categories = lines.find(line => line.startsWith('Categories='))?.slice(11).split(';') ?? [];
+  if (!lines.includes('Name=映框') || !lines.includes('Exec=yingkuang') || !categories.includes('Photography')) throw new Error('Invalid desktop display name, executable or photography category');
   return fields;
 }
 
