@@ -19,7 +19,7 @@
   "launcher": {
     "file": "scripts/appimage/AppRun",
     "license": "MIT",
-    "sha256": "d49e02b090ad6ca8e14c80dc2bee04af91df2ebe93cfc2feefc322fd9c2d3b3a",
+    "sha256": "9a470a6ffe5b30b74ce48c54064ff4ac34ff17d4960376dc898c5242a982f295",
     "replaces": [
       "legacy AppRun.wrapped binary",
       "generated AppRun wrapper and GTK hook"

@@ -54,6 +54,18 @@ class DeliveryTests(unittest.TestCase):
             self.assertFalse(link.is_symlink())
             self.assertEqual(original.read_text(), 'original patch')
 
+    def test_launcher_runs_patched_webkit_helpers_from_outside_the_appdir(self):
+        with tempfile.TemporaryDirectory() as directory:
+            appdir = Path(directory) / 'application'; (appdir / 'usr/bin').mkdir(parents=True)
+            helper = appdir / 'usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess'
+            helper.parent.mkdir(parents=True); helper.write_text('#!/bin/sh\nexit 0\n'); helper.chmod(0o755)
+            app = appdir / 'usr/bin/yingkuang'
+            app.write_text('#!/bin/sh\nexec ././/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess\n'); app.chmod(0o755)
+            launcher = appdir / 'AppRun'
+            shutil.copy2(Path(__file__).parent / 'appimage/AppRun', launcher); launcher.chmod(0o755)
+            result = subprocess.run([str(launcher)], cwd=directory, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_source_descriptor_identity_and_every_original_archive_checked(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

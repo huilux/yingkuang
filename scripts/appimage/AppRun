@@ -28,6 +28,7 @@ for directory in "$APPDIR/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1" "$APPDIR/usr/
         break
     fi
 done
-# WebKit's bundled data paths are made relative by the pinned GTK plugin.
-cd "$APPDIR"
+# The pinned GTK plugin rewrites /usr to ././ in WebKit; helper/data
+# paths must therefore resolve from the bundled usr directory.
+cd "$APPDIR/usr"
 exec "$APPDIR/usr/bin/yingkuang" "$@"

@@ -124,6 +124,15 @@ jobs:
           python scripts/appimage/finalize.py src-tauri/target/release/bundle/appimage/yingkuang.AppDir test-output/yingkuang.AppImage test-output/appimage-materials test-output/appimage-runtime
           xvfb-run -a python scripts/appimage/native-check.py test-output/yingkuang.AppImage test-output/appimage-materials/native-checks.json
           xvfb-run -a python scripts/appimage/stage.py test-output/yingkuang.AppImage test-output/appimage-materials
+      - name: Preserve finished debugging inputs only in the private draft
+        if: failure() && runner.os == 'Linux'
+        continue-on-error: true
+        run: |
+          if [ -f test-output/yingkuang.AppImage ]; then
+            node scripts/beta-release.mjs validate "$RELEASE_TAG" "$GITHUB_SHA"
+            python scripts/appimage/save-debug.py
+            gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" test-output/appimage-debug/* --clobber
+          fi
       - name: Preserve AppImage source review diagnostics
         if: failure() && runner.os == 'Linux'
         uses: actions/upload-artifact@v4
