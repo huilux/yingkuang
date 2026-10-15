@@ -37,7 +37,7 @@ xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422
 xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 font-library-regression.js native-font-import-regression.js
 ```
 
-回归通过 DOM 事件驱动界面，并使用 Konva 公共 API 观测结果。含原生 IPC 模拟的测试只能证明界面请求和状态处理，不等于真实文件对话框、解码或安装包验收。WebKitGTK 结果不能替代 Windows WebView2、macOS WKWebView 的原生运行检查。
+回归通过 DOM 事件驱动界面，并使用 Konva 公共 API 观测结果。标题栏检查包含鼠标按下事件，防止交互控件被误判为窗口拖动；裁切加载回归用可控的延迟模块验证布局、取消和焦点恢复。Windows 测试包流程还会在真实安装后的 WebView2 中通过 CDP 发送鼠标与键盘事件，检查主题循环、实际背景色、重新加载后保留选择和系统主题响应；调试端口仅由 CI 测试进程的临时环境变量开启。含原生 IPC 模拟的测试只能证明界面请求和状态处理，不等于真实文件对话框、解码或安装包验收。WebKitGTK 结果不能替代 Windows WebView2、macOS WKWebView 的原生运行检查。
 
 ## 预览与 Rust 渲染对比
 

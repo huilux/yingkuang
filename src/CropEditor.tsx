@@ -179,7 +179,7 @@ export default function CropEditor({ photo, onApply, onCancel }: {
               {rotating && <span className="crop-angle-badge" aria-hidden="true">{fine > 0 ? "+" : ""}{fine.toFixed(1)}°</span>}
             </div>
             {handles.map(h => <button key={h.id} className={`crop-handle crop-handle-${h.id}`} data-crop-handle={h.id} type="button" aria-label={`调整裁切${h.label}`} style={{ left: left + h.x * width, top: top + h.y * height }} />)}
-            {(!image || error || loading) && <span className="crop-image-status" role="status">{error ? "高清照片读取失败，当前使用缩略图" : "正在加载照片…"}</span>}
+            {(!image || error || loading) && <span className="crop-image-status" role="status">{!error && <i className="loading-spinner" aria-hidden="true" />}{error ? "高清照片读取失败，当前使用缩略图" : "正在加载照片…"}</span>}
           </div>
           <div className="crop-view-tools"><span id="crop-help">拖动选区或边角 · 方向键微调 · 空格拖动平移</span><div><button className="tool-button" type="button" aria-label="缩小裁切视图" onClick={() => zoom(1 / 1.25)}><Minus /></button><button className="tool-button" type="button" onClick={fit}>适应</button><button className="tool-button" type="button" aria-label="放大裁切视图" onClick={() => zoom(1.25)}><Plus /></button></div></div>
         </div>

@@ -6,6 +6,9 @@
   const {default:React} = await import(moduleUrl('react'));
   const {default:{createRoot}} = await import(moduleUrl('react-dom_client'));
   const {createDefaultDocument} = await import('/src/editor-model.ts');
+  const {SelectControl} = await import('/src/SelectControl.tsx');
+  const {themePreferenceKey, parseThemePreference, saveThemePreference} = await import('/src/theme.ts');
+  const savedTheme = localStorage.getItem(themePreferenceKey);
   const key='yingkuang-session-v2', saved=localStorage.getItem(key), calls=[];
   let maximized=false, resolvePreflight;
   localStorage.setItem(key,JSON.stringify({paths:['ui.jpg'],activePath:'ui.jpg',checkedPaths:['ui.jpg'],documentsByPath:{'ui.jpg':createDefaultDocument()},exportSettings:{directory:'/output',range:'current'}}));
@@ -38,6 +41,31 @@
     await t.waitFor(()=>host.querySelector('.photo-row')&&host.querySelector('.design-canvas'),'App did not restore');
     t.near(host.querySelector('.app-header').getBoundingClientRect().height,48,'Header height');
     t.assert(host.querySelector('.theme-control').getBoundingClientRect().right <= host.querySelector('.window-controls').getBoundingClientRect().left, 'Theme control overlaps native window buttons');
+    // Real pointer input includes mousedown: click() alone missed the titlebar bug.
+    const themeButton = host.querySelector('button.theme-control');
+    const initialTheme = document.documentElement.dataset.themePreference;
+    const nextTheme = { system: 'light', light: 'dark', dark: 'system' };
+    let expectedTheme = initialTheme;
+    const dragCount = calls.filter(x => x.command === 'plugin:window|start_dragging').length;
+    for (let i = 0; i < 3; i++) {
+      themeButton.querySelector('svg').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 1 }));
+      themeButton.click(); await t.frame(); expectedTheme = nextTheme[expectedTheme];
+      t.assert(document.documentElement.dataset.themePreference === expectedTheme, 'Theme icon failed to cycle');
+    }
+    t.assert(calls.filter(x => x.command === 'plugin:window|start_dragging').length === dragCount, 'Theme icon starts native window dragging');
+    // Retain coverage of the original failure: a shared popup mounted in the header.
+    const pickerHost = document.createElement('span'); host.querySelector('.header-actions').append(pickerHost);
+    const pickerRoot = createRoot(pickerHost); let picked;
+    try {
+      pickerRoot.render(React.createElement(SelectControl, { value: 'light', 'aria-label': '标题栏测试选项', onChange: e => { picked = e.currentTarget.value; } },
+        React.createElement('option', { value: 'light' }, '浅色'), React.createElement('option', { value: 'dark' }, '深色')));
+      await t.frame(); pickerHost.querySelector('button').click(); await t.frame();
+      const option = pickerHost.querySelector('[role="option"][data-index="1"]');
+      option.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 1 }));
+      await t.frame();
+      t.assert(calls.filter(x => x.command === 'plugin:window|start_dragging').length === dragCount, 'Header menu starts native window dragging instead of selecting');
+      option.click(); await t.frame(); t.assert(picked === 'dark', 'Header menu selection was blocked');
+    } finally { pickerRoot.unmount(); pickerHost.remove(); }
     t.assert(![...host.querySelectorAll('.canvas-toolbar button')].some(x=>x.textContent.trim()==='编辑'),'Dead edit button remains');
     button('添加照片').click();await t.frame();
     const extensions=calls.find(x=>x.command==='plugin:dialog|open').args.options.filters[0].extensions;
@@ -103,6 +131,9 @@
     return {alignedExportFields:true,compactHeader:true,noDeadEditButton:true,keyboardAndMouseSelection:true,pointerReleaseCommits:true,escapeKeepsModal:true,viewportMenu:true,disabledFieldset:true,windowControlsDuringModal:true,dragResizeAndClose:true,comboboxGuardsCanvas:true,caseInsensitivePhotoFilter:true};
   } finally {
     root.unmount();host.remove();clearMocks();
+    saveThemePreference(parseThemePreference(savedTheme));
+    if (savedTheme === null) localStorage.removeItem(themePreferenceKey);
+    window.dispatchEvent(new StorageEvent('storage', { key: themePreferenceKey, newValue: savedTheme }));
     if(saved===null)localStorage.removeItem(key);else localStorage.setItem(key,saved);
   }
 })();

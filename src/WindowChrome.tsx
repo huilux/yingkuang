@@ -41,7 +41,7 @@ export function WindowChrome({ enabled }: { enabled: boolean }) {
     const drag = (event: MouseEvent) => {
       const target = event.target;
       if (event.button !== 0 || !(target instanceof Element) || !target.closest("[data-window-drag]")
-        || target.closest('button, input, select, [role="combobox"], [inert]')) return;
+        || target.closest('button, input, select, [role="combobox"], [role="listbox"], [inert]')) return;
       event.preventDefault();
       void run(() => event.detail === 2 ? toggleMaximize() : getCurrentWindow().startDragging());
     };

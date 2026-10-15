@@ -1,4 +1,5 @@
 import { ThemeControl } from "./ThemeControl";
+import { CropLoading } from "./CropLoading";
 import { WindowChrome } from "./WindowChrome";
 import { SelectControl } from "./SelectControl";
 import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -1233,7 +1234,7 @@ function App() {
         </Modal>
       )}
 
-      {showCrop && activePhoto && <Suspense fallback={<Modal onClose={() => setShowCrop(false)}><section className="progress-dialog" role="dialog" aria-modal="true" aria-label="裁切照片"><p role="status">正在加载裁切工具…</p><button className="button secondary" type="button" onClick={() => setShowCrop(false)}>取消</button></section></Modal>}><CropEditor photo={activePhoto} onApply={applyCrop} onCancel={() => setShowCrop(false)} /></Suspense>}
+      {showCrop && activePhoto && <Suspense fallback={<CropLoading photo={activePhoto} onCancel={() => setShowCrop(false)} />}><CropEditor photo={activePhoto} onApply={applyCrop} onCancel={() => setShowCrop(false)} /></Suspense>}
 
       {!exportRunning && exportResult && (
         <Modal onClose={() => setExportResult(null)}>

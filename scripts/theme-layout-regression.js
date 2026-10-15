@@ -3,13 +3,14 @@
   const t = await import('/scripts/konva-test-utils.js');
   const { themePreferenceKey } = await import('/src/theme.ts');
   const saved = localStorage.getItem(themePreferenceKey);
-  const select = document.querySelector('[role="combobox"][aria-label="界面主题"]');
-  t.assert(select, 'Theme control missing');
+  const button = document.querySelector('button.theme-control');
+  t.assert(button && !button.textContent.trim(), 'Icon-only theme button missing');
   const choose = async value => {
-    const indices = { system: 0, light: 1, dark: 2 };
-    select.click(); await t.frame();
-    document.querySelector(`.select-menu [data-index="${indices[value]}"]`).click();
-    await t.frame();
+    for (let i = 0; i < 3 && document.documentElement.dataset.themePreference !== value; i++) {
+      button.click(); await t.frame();
+    }
+    t.assert(document.documentElement.dataset.themePreference === value, 'Theme button did not reach requested preference');
+    t.assert(button.getAttribute('aria-label').includes({system: '跟随系统', light: '浅色', dark: '深色'}[value]), 'Current theme not accessible');
   };
   const luminance = value => {
     const channels = value.match(/[\d.]+/g).slice(0, 3).map(Number).map(x => x / 255).map(x => x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4);
@@ -26,6 +27,11 @@
     t.near((items[0].top + items.at(-1).bottom) / 2, viewport.y + viewport.height / 2, 'Empty-state group not vertically centered', 1);
   };
   try {
+    await choose('system');
+    for (const preference of ['light', 'dark', 'system']) {
+      button.click(); await t.frame();
+      t.assert(document.documentElement.dataset.themePreference === preference, 'Theme cycle order is wrong');
+    }
     const ctx = await t.context();
     const pixels = ctx.stage.toDataURL();
     const camera = { x: ctx.world.x(), y: ctx.world.y(), scale: ctx.world.scaleX() };

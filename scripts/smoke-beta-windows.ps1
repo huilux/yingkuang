@@ -9,6 +9,8 @@ $setup = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$installDi
 if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
 $app = Join-Path $installDir 'yingkuang.exe'
 if (!(Test-Path $app)) { throw 'Installed executable missing' }
+$previousBrowserArgs = $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9223'
 $process = Start-Process -FilePath $app -PassThru
 try {
     $visible = $false
@@ -19,14 +21,17 @@ try {
         if ($process.MainWindowHandle -ne 0 -and $process.MainWindowTitle -match '映框') { $visible = $true; break }
     }
     if (!$visible) { throw 'Native application window not observed' }
+    & node scripts/check-installed-theme.mjs 'http://127.0.0.1:9223'
+    if ($LASTEXITCODE -ne 0) { throw 'Installed WebView2 theme interaction check failed' }
 } finally {
+    $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = $previousBrowserArgs
     if (!$process.HasExited) {
         $null = $process.CloseMainWindow()
         if (!$process.WaitForExit(10000)) { $process.Kill(); $process.WaitForExit() }
     }
 }
 # Verify the real installed resources before the uninstaller removes them.
-@{ platform='windows-x64'; packageCheck='passed'; startup='passed'; method='NSIS silent installation and native window observed on Windows Server 2022'; installation='passed'; uninstall='pending'; interactiveAcceptance='pending' } | ConvertTo-Json | Set-Content -Encoding utf8NoBOM test-output/beta-smoke-windows-x64.json
+@{ platform='windows-x64'; packageCheck='passed'; startup='passed'; method='NSIS silent installation, native window and WebView2 pointer/keyboard theme checks on Windows Server 2022'; installation='passed'; themeSwitching='passed'; themeChecks=(Get-Content test-output/beta-theme-windows-x64.json | ConvertFrom-Json); uninstall='pending'; interactiveAcceptance='pending' } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8NoBOM test-output/beta-smoke-windows-x64.json
 & node scripts/beta-release.mjs stage windows-x64 $installDir $env:GITHUB_SHA
 if ($LASTEXITCODE -ne 0) { throw 'Installed license verification failed' }
 $uninstaller = @(Get-ChildItem $installDir -Filter '*uninstall*.exe')

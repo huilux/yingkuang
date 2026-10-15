@@ -78,7 +78,7 @@ jobs:
             curl --fail --silent http://127.0.0.1:1422 > /dev/null && break
             sleep 1
           done
-          WATERMARK_TEST_WIDTH=1100 WATERMARK_TEST_HEIGHT=720 xvfb-run -a /usr/bin/python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 interface-controls-regression.js theme-layout-regression.js
+          WATERMARK_TEST_WIDTH=1100 WATERMARK_TEST_HEIGHT=720 xvfb-run -a /usr/bin/python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 interface-controls-regression.js crop-loading-regression.js theme-layout-regression.js
       - name: Extract deb, observe native window and verify installed notices
         if: runner.os == 'Linux'
         run: |

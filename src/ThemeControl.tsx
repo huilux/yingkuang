@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Desktop, Moon, Sun } from "@phosphor-icons/react";
-import { SelectControl } from "./SelectControl";
 import { applyTheme, parseThemePreference, readThemePreference, saveThemePreference, themePreferenceKey } from "./theme";
+
+const themes = { system: { label: "跟随系统", next: "light" }, light: { label: "浅色", next: "dark" }, dark: { label: "深色", next: "system" } } as const;
 
 export function ThemeControl() {
   const [preference, setPreference] = useState(readThemePreference);
@@ -17,14 +18,12 @@ export function ThemeControl() {
     return () => { media.removeEventListener("change", update); window.removeEventListener("storage", sync); };
   }, [preference]);
   const Icon = preference === "system" ? Desktop : preference === "light" ? Sun : Moon;
-  return <span className="theme-control" title="界面主题">
+  const next = themes[preference].next;
+  const label = `界面主题：${themes[preference].label}；点击切换为${themes[next].label}`;
+  return <button className="icon-button theme-control" type="button" aria-label={label} title={label} onClick={() => {
+    saveThemePreference(next);
+    setPreference(next);
+  }}>
     <Icon aria-hidden="true" />
-    <SelectControl aria-label="界面主题" value={preference} onChange={event => {
-      const next = parseThemePreference(event.currentTarget.value);
-      saveThemePreference(next);
-      setPreference(next);
-    }}>
-      <option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option>
-    </SelectControl>
-  </span>;
+  </button>;
 }
