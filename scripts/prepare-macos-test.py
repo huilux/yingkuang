@@ -48,6 +48,9 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-macos-') as temporary:
         app = apps[0]
         binary = app / 'Contents/MacOS/yingkuang'
         assert run('lipo', '-archs', str(binary)).stdout.strip() == targets[platform][1]
+        linked_libraries = [line.strip().split(' (', 1)[0] for line in run('otool', '-L', str(binary)).stdout.splitlines()[1:]]
+        external_libraries = [name for name in linked_libraries if not name.startswith(('/System/Library/', '/usr/lib/'))]
+        assert not external_libraries, f'Unexpected non-system libraries in standalone app: {external_libraries}'
         run('codesign', '--verify', '--deep', '--strict', str(app))
         signature = run('codesign', '-dv', '--verbose=4', str(app)).stderr
         assert 'Signature=adhoc' in signature, 'Expected the documented ad-hoc test signature'
@@ -96,7 +99,7 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-macos-') as temporary:
         sources.append({'name': package['name'], 'version': package['version'], 'license': package['license'], 'sha256': digest, 'archive': 'sources/' + filename, 'url': source_url})
     (staged / 'sources.json').write_text(json.dumps({'projectCommit': commit, 'projectSource': f'https://github.com/huilux/yingkuang/tree/{commit}', 'packages': sources}, indent=2) + '\n')
     shutil.copy2(packages[0], staged / (prefix + '.dmg'))
-    report = {'version': version, 'commit': commit, 'platform': platform, 'architecture': targets[platform][1], 'dmgMounted': 'passed', 'installedLicenseFilesVerified': len(pairs), 'signature': 'ad-hoc verified', 'notarized': False, 'nativeWindow': 'passed', 'dependencyReview': 'pending' if inventory['reviewRequired'] else 'passed', 'upstreamReviewItems': inventory['reviewRequired'], 'originalSourceArchives': len(sources), 'interactiveAcceptance': 'pending', 'scope': 'Automated DMG mounting, architecture, signature, installed notices and native-window checks. Gatekeeper, installation and photo editing/export require a real tester.'}
+    report = {'version': version, 'commit': commit, 'platform': platform, 'architecture': targets[platform][1], 'dmgMounted': 'passed', 'installedLicenseFilesVerified': len(pairs), 'signature': 'ad-hoc verified', 'notarized': False, 'nativeWindow': 'passed', 'systemLibrariesOnly': 'passed', 'linkedLibraries': linked_libraries, 'dependencyReview': 'pending' if inventory['reviewRequired'] else 'passed', 'upstreamReviewItems': inventory['reviewRequired'], 'originalSourceArchives': len(sources), 'interactiveAcceptance': 'pending', 'scope': 'Automated DMG mounting, architecture, signature, linked libraries, installed notices and native-window checks. Gatekeeper, installation and photo editing/export require a real tester.'}
     (staged / 'checks.json').write_text(json.dumps(report, indent=2) + '\n')
     shutil.copy2(root / 'docs/macos-testing.md', staged / 'TESTING.md')
     sums = [f'{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.relative_to(staged).as_posix()}' for file in sorted(staged.rglob('*')) if file.is_file()]

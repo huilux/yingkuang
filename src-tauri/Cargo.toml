@@ -35,6 +35,10 @@ tempfile = "3.27.0"
 sha2 = "0.10.9"
 ttf-parser = "0.25.1"
 
+# Standalone Mac packages must not depend on Homebrew libraries on the builder.
+[target.'cfg(target_os = "macos")'.dependencies]
+lcms2 = { version = "6.1.1", features = ["static"] }
+
 # Keep photo decoding and thumbnail generation interactive in `tauri dev`.
 # The application itself retains normal debug builds and debugging information.
 [profile.dev.package.image]
