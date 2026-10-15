@@ -3,6 +3,8 @@ import { join, resolve, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { createReadStream } from 'node:fs';
+async function fileHash(path) { const hash = createHash('sha256'); for await (const chunk of createReadStream(path)) hash.update(chunk); return hash.digest('hex'); }
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const repo = 'huilux/yingkuang';
@@ -96,23 +98,34 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     run(['release', 'upload', tag, ...files, '--repo', repo, '--clobber']);
     console.log(`Staged ${platform} files privately; assembly will combine the supporting files`);
   }
+  else if (command === 'upload-appimage') {
+    const [tag, commit] = args;
+    const version = await validate(tag, commit);
+    const directory = join(root, 'test-output/beta/linux-appimage-x64');
+    const prefix = `yingkuang_${version}_linux-appimage-x64`;
+    const expected = [prefix + '.AppImage', prefix + '_materials.zip', prefix + '_SHA256SUMS.txt'].sort();
+    const names = (await readdir(directory)).sort();
+    if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Unexpected AppImage staging files');
+    run(['release', 'upload', tag, ...names.map(name => join(directory, name)), '--repo', repo, '--clobber']);
+  }
   else if (command === 'upload') {
     const [tag, commit] = args;
     const version = await validate(tag, commit);
     const directory = join(root, 'test-output/beta-release');
     const files = (await readdir(directory)).sort().map(name => join(directory, name));
-    const expected = ['SHA256SUMS.txt', `yingkuang_${version}_linux-x64.deb`, `yingkuang_${version}_windows-x64.exe`, `yingkuang_${version}_release-materials.zip`].sort();
-    if (JSON.stringify(files.map(file => basename(file))) !== JSON.stringify(expected)) throw new Error('Expected two installers, one materials archive and one checksum file');
+    const expected = ['SHA256SUMS.txt', `yingkuang_${version}_linux-x64.deb`, `yingkuang_${version}_windows-x64.exe`, `yingkuang_${version}_release-materials.zip`, `yingkuang_${version}_linux-x64.AppImage`].sort();
+    if (JSON.stringify(files.map(file => basename(file))) !== JSON.stringify(expected)) throw new Error('Expected three packages, one materials archive and one checksum file');
     const sums = new Map((await readFile(join(directory, 'SHA256SUMS.txt'), 'utf8')).trim().split('\n').map(line => line.split('  ')));
-    if (sums.size !== 3) throw new Error('Expected three release checksums');
+    if (sums.size !== 4) throw new Error('Expected four release checksums');
     for (const file of files.filter(file => basename(file) !== 'SHA256SUMS.txt')) {
-      const checksum = createHash('sha256').update(await readFile(file)).digest('hex');
+      const checksum = await fileHash(file);
       if (sums.get(checksum) !== basename(file)) throw new Error('Release checksum mismatch');
     }
     run(['release', 'upload', tag, ...files, '--repo', repo, '--clobber']);
     // Only an exact-source unpublished draft can be cleaned up; installers stay
     // byte-for-byte identical and all supporting records remain inside the ZIP.
     await validate(tag, commit);
+    for (const suffix of ['.AppImage', '_materials.zip', '_SHA256SUMS.txt']) run(['release', 'delete-asset', tag, `yingkuang_${version}_linux-appimage-x64${suffix}`, '--yes', '--repo', repo]);
     for (const platform of Object.keys(platforms)) {
       for (const suffix of ['_dependency-inventory.json', '_LICENSES.txt', '_checks.json', '_SHA256SUMS.txt']) {
         run(['release', 'delete-asset', tag, `yingkuang_${version}_${platform}${suffix}`, '--yes', '--repo', repo]);
@@ -120,6 +133,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }
     const { assets } = JSON.parse(run(['release', 'view', tag, '--repo', repo, '--json', 'assets']));
     if (JSON.stringify(assets.map(asset => asset.name).sort()) !== JSON.stringify(expected)) throw new Error('Unexpected remaining draft assets');
-    console.log(`Uploaded four Windows/Linux assets to draft ${tag}; draft remains unpublished`);
+    console.log(`Uploaded five Windows/Linux assets to draft ${tag}; draft remains unpublished`);
   } else throw new Error('Expected validate, package, stage, upload-platform or upload command');
 }

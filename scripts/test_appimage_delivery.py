@@ -1,0 +1,56 @@
+"""Guard source identity and ELF transformations, beyond matching build IDs."""
+import hashlib
+import importlib.util
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+
+def module(name, filename):
+    spec = importlib.util.spec_from_file_location(name, Path(__file__).parent / 'appimage' / filename)
+    value = importlib.util.module_from_spec(spec); spec.loader.exec_module(value)
+    return value
+
+
+finalize = module('appimage_finalize', 'finalize.py')
+sources = module('ubuntu_sources', 'ubuntu-sources.py')
+
+
+class DeliveryTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('cc') and shutil.which('patchelf'), 'Requires ELF tools')
+    def test_rpath_change_allowed_but_changed_code_with_same_build_id_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'source.c'; original = root / 'original'; payload = root / 'payload'
+            source.write_text('int main(void) { return 0; }\n')
+            subprocess.run(['cc', str(source), '-o', str(original)], check=True)
+            shutil.copy2(original, payload)
+            subprocess.run(['patchelf', '--set-rpath', '$ORIGIN', str(payload)], check=True)
+            finalize.verify_elf(payload, original)
+            sections = finalize.elf_sections(payload.read_bytes())
+            data = payload.read_bytes()
+            code = sections['.text']; offset = data.index(code)
+            modified = bytearray(data); modified[offset] ^= 1
+            payload.write_bytes(modified)
+            self.assertEqual(finalize.audit.build_id(payload), finalize.audit.build_id(original))
+            with self.assertRaisesRegex(ValueError, 'code/data transformation'):
+                finalize.verify_elf(payload, original)
+
+    def test_source_descriptor_identity_and_every_original_archive_checked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / 'sample.orig.tar.xz'; archive.write_bytes(b'original source')
+            descriptor = root / 'sample.dsc'
+            descriptor.write_text(f'Source: sample\nVersion: 1:2.0-1ubuntu1\nChecksums-Sha256:\n {hashlib.sha256(archive.read_bytes()).hexdigest()} {archive.stat().st_size} {archive.name}\n')
+            self.assertEqual(len(sources.verify_source(root, 'sample', '1:2.0-1ubuntu1')), 2)
+            with self.assertRaisesRegex(ValueError, 'identity'):
+                sources.verify_source(root, 'sample', '2.0')
+            archive.write_bytes(b'different source')
+            with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                sources.verify_source(root, 'sample', '1:2.0-1ubuntu1')
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -37,6 +37,23 @@ class ReleaseAssemblyTests(unittest.TestCase):
             (self.inputs / (prefix + '_checks.json')).write_text(json.dumps(checks))
             self.rehash(platform)
 
+        prefix = f'yingkuang_{self.version}_linux-appimage-x64'
+        image = self.inputs / (prefix + '.AppImage'); image.write_bytes(b'AppImage fixture')
+        source_bytes = b'Ubuntu original source archive'
+        source_hash = hashlib.sha256(source_bytes).hexdigest()
+        archive_files = {
+            'checks.json': json.dumps({'version': self.version, 'commit': self.commit, **dict.fromkeys(['packageCheck', 'startup', 'extraction', 'notices'], 'passed')}).encode(),
+            'payload/inventory.json': json.dumps({'unresolvedFiles': [], 'missingCopyright': [], 'remainingReview': [], 'packages': {'sample': {'sourcePackage': 'sample', 'sourceVersion': '1.0'}}}).encode(),
+            'ubuntu-sources/sample/source.tar.gz': source_bytes,
+            'ubuntu-sources/manifest.json': json.dumps({'packages': [{'name': 'sample', 'version': '1.0', 'directory': 'sample', 'sha256': {'source.tar.gz': source_hash}}]}).encode(),
+            'runtime/manifest.json': json.dumps({'linkInputs': ['fixture'], 'alpineSources': [{'origin': n} for n in ['musl', 'zstd', 'zlib', 'mimalloc']], 'sha256': {}}).encode(),
+        }
+        shipment = {'version': self.version, 'commit': self.commit, 'appImageSha256': assembly.digest(image), 'sha256': {n: hashlib.sha256(b).hexdigest() for n, b in archive_files.items()}}
+        with zipfile.ZipFile(self.inputs / (prefix + '_materials.zip'), 'w') as bundle:
+            for name, data in archive_files.items(): bundle.writestr(name, data)
+            bundle.writestr('SHIPMENT.json', json.dumps(shipment))
+        self.rehash('linux-appimage-x64')
+
     def rehash(self, platform):
         prefix = f'yingkuang_{self.version}_{platform}'
         paths = sorted(p for p in self.inputs.glob(prefix + '*') if not p.name.endswith('_SHA256SUMS.txt'))
@@ -48,10 +65,11 @@ class ReleaseAssemblyTests(unittest.TestCase):
     def build(self, fetch=None):
         return assembly.assemble(self.root, self.inputs, self.output, self.commit, fetch or self.fetch)
 
-    def test_four_assets_preserve_installers_licenses_reports_and_original_sources(self):
+    def test_five_assets_preserve_installers_licenses_reports_and_original_sources(self):
         result = self.build()
-        self.assertEqual(len(result['assets']), 4)
+        self.assertEqual(len(result['assets']), 5)
         self.assertEqual(result['originalSourceArchives'], 1)
+        self.assertEqual((self.output / f'yingkuang_{self.version}_linux-x64.AppImage').read_bytes(), b'AppImage fixture')
         for platform, (_, extension) in assembly.PLATFORMS.items():
             name = f'yingkuang_{self.version}_{platform}{extension}'
             self.assertEqual((self.output / name).read_bytes(), (self.inputs / name).read_bytes())
@@ -86,6 +104,11 @@ class ReleaseAssemblyTests(unittest.TestCase):
         report = json.loads(path.read_text()); report['uninstall'] = 'pending'
         path.write_text(json.dumps(report)); self.rehash('linux-x64')
         with self.assertRaisesRegex(ValueError, 'uninstall did not pass'):
+            self.build()
+
+    def test_appimage_tampering_is_rejected(self):
+        (self.inputs / f'yingkuang_{self.version}_linux-appimage-x64.AppImage').write_bytes(b'wrong binary')
+        with self.assertRaisesRegex(ValueError, 'AppImage staged checksum mismatch'):
             self.build()
 
     def test_source_archive_must_match_lock_file(self):

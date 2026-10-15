@@ -94,8 +94,8 @@ def audit(appdir, output):
             continue
         # Application-owned resources are covered by the project's MIT/font and
         # npm/Cargo reports. Everything else must have provenance evidence.
-        project = (local == 'usr/bin/yingkuang' or local.startswith('usr/lib/映框/')
-                   or local in ['映框.png', 'usr/share/applications/映框.desktop']
+        project = (local == 'usr/bin/yingkuang' or local.startswith(('usr/lib/映框/licenses/', 'usr/lib/yingkuang/licenses/'))
+                   or local in ['映框.png', 'yingkuang.png', 'usr/share/applications/映框.desktop', 'usr/share/applications/yingkuang.desktop']
                    or (local.startswith('usr/share/icons/') and path.name == 'yingkuang.png'))
         if project:
             files.append({'path': local, 'sha256': digest(path), 'origin': 'project'})

@@ -30,7 +30,7 @@ jobs:
             platform: windows-x64
             bundles: nsis
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ inputs.release_tag }}
@@ -50,7 +50,17 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf python3-gi gir1.2-webkit2-4.1 xvfb xdotool
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf python3-gi gir1.2-webkit2-4.1 xvfb xdotool squashfs-tools
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Enable exact Ubuntu corresponding-source downloads
+        if: runner.os == 'Linux'
+        run: |
+          echo 'deb-src http://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse' | sudo tee /etc/apt/sources.list.d/yingkuang-source.list
+          echo 'deb-src http://archive.ubuntu.com/ubuntu jammy-updates main restricted universe multiverse' | sudo tee -a /etc/apt/sources.list.d/yingkuang-source.list
+          echo 'deb-src http://security.ubuntu.com/ubuntu jammy-security main restricted universe multiverse' | sudo tee -a /etc/apt/sources.list.d/yingkuang-source.list
+          sudo apt-get update
       - run: rustup show active-toolchain
       - uses: Swatinem/rust-cache@v2
         with:
@@ -61,6 +71,9 @@ jobs:
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Test AppImage provenance and source guards
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s scripts -p 'test_appimage*.py'
       - name: Build beta installer with dependency licenses
         run: npm run tauri build -- --bundles ${{ matrix.bundles }} --ci
       - name: Check Linux CSP
@@ -89,6 +102,19 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/smoke-beta-windows.ps1
+      - name: Build AppImage payload and source-controlled static runtime
+        if: runner.os == 'Linux'
+        run: |
+          npm run build:appimage
+          bash scripts/appimage/build-runtime.sh
+      - name: Complete AppImage provenance, original notices and exact sources
+        if: runner.os == 'Linux'
+        run: |
+          python scripts/appimage/finalize.py src-tauri/target/release/bundle/appimage/yingkuang.AppDir test-output/yingkuang.AppImage test-output/appimage-materials test-output/appimage-runtime
+          xvfb-run -a python scripts/appimage/stage.py test-output/yingkuang.AppImage test-output/appimage-materials
+      - name: Stage AppImage only in the existing unpublished draft
+        if: runner.os == 'Linux'
+        run: node scripts/beta-release.mjs upload-appimage "$RELEASE_TAG" "$GITHUB_SHA"
       - name: Stage Linux files only in the existing unpublished draft
         if: runner.os == 'Linux'
         run: node scripts/beta-release.mjs upload-platform linux-x64 "$RELEASE_TAG" "$GITHUB_SHA"
@@ -99,7 +125,7 @@ jobs:
   assemble:
     needs: beta
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: write
     env:
@@ -116,10 +142,10 @@ jobs:
       - name: Download verified files from the private draft
         run: |
           node scripts/beta-release.mjs validate "$RELEASE_TAG" "$GITHUB_SHA"
-          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*_linux-x64*' --pattern '*_windows-x64*' --dir test-output/beta-staging
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*_linux-x64*' --pattern '*_windows-x64*' --pattern '*_linux-appimage-x64*' --dir test-output/beta-staging
       - name: Test release assembly guards
         run: python -m unittest discover -s scripts -p 'test_beta_release.py'
-      - name: Assemble two installers, materials and checksums
+      - name: Assemble three packages, materials and checksums
         run: python scripts/assemble-beta-release.py test-output/beta-staging test-output/beta-release "$GITHUB_SHA"
-      - name: Upload four assets only to the existing draft
+      - name: Upload five assets only to the existing draft
         run: node scripts/beta-release.mjs upload "$RELEASE_TAG" "$GITHUB_SHA"

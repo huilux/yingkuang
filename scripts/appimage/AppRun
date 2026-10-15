@@ -1,0 +1,33 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Yingkuang contributors
+set -e
+export APPDIR="$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd)"
+export PATH="$APPDIR/usr/bin:$PATH"
+export LD_LIBRARY_PATH="$APPDIR/usr/lib:$APPDIR/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export XDG_DATA_DIRS="$APPDIR/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export GTK_DATA_PREFIX="$APPDIR"
+export GTK_EXE_PREFIX="$APPDIR/usr"
+export GTK_PATH="$APPDIR/usr/lib/gtk-3.0"
+export GTK_IM_MODULE_FILE="$APPDIR/usr/lib/gtk-3.0/3.0.0/immodules.cache"
+export GDK_PIXBUF_MODULEDIR="$APPDIR/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders"
+export GDK_PIXBUF_MODULE_FILE="$APPDIR/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
+export GI_TYPELIB_PATH="$APPDIR/usr/lib/girepository-1.0"
+export GSETTINGS_SCHEMA_DIR="$APPDIR/usr/share/glib-2.0/schemas"
+export GIO_EXTRA_MODULES="$APPDIR/usr/lib/gio/modules"
+# The pinned Tauri GTK bundler supports X11/XWayland.
+export GDK_BACKEND=x11
+if [ -z "${GTK_THEME:-}" ]; then
+    scheme="$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || true)"
+    case "$scheme" in *prefer-dark*) export GTK_THEME=Adwaita:dark;; *) export GTK_THEME=Adwaita:light;; esac
+fi
+for directory in "$APPDIR/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1" "$APPDIR/usr/lib/webkit2gtk-4.1" "$APPDIR/usr/libexec/webkit2gtk-4.1"; do
+    if [ -x "$directory/WebKitWebProcess" ]; then
+        export WEBKIT_EXEC_PATH="$directory"
+        export WEBKIT_INJECTED_BUNDLE_PATH="$directory/injected-bundle"
+        break
+    fi
+done
+# WebKit's bundled data paths are made relative by the pinned GTK plugin.
+cd "$APPDIR"
+exec "$APPDIR/usr/bin/yingkuang" "$@"
