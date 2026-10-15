@@ -86,6 +86,8 @@ const demoPhoto: PhotoAsset = {
   megapixels: 24,
   thumbnailDataUrl: "/demo.jpg",
   metadata: {
+    make: "LUMIX",
+    model: "DC-S5M2",
     camera: "LUMIX DC-S5M2",
     lens: "LUMIX S 50mm F1.8",
     focalLength: "50mm",

@@ -26,8 +26,11 @@ inventory_path = root / 'test-output/licenses' / target / 'inventory.json'
 inventory = json.loads(inventory_path.read_text())
 assert inventory['target'] == target and not inventory['missingTexts']
 
-def run(*command):
-    return subprocess.run(command, check=True, capture_output=True, text=True, timeout=90)
+def run(*command, input_text=None):
+    result = subprocess.run(command, input=input_text, capture_output=True, text=True, timeout=90)
+    if result.returncode:
+        raise RuntimeError(f'{command[0]} failed ({result.returncode}):\n{result.stdout}\n{result.stderr}')
+    return result
 
 prefix = f'yingkuang_{version}_{platform}'
 output = root / 'test-output/macos-test' / platform
@@ -37,7 +40,9 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-macos-') as temporary:
     volume = working / 'volume'; volume.mkdir()
     staged = working / 'staged'; staged.mkdir()
     run('swiftc', str(root / 'scripts/macos-window.swift'), '-o', str(working / 'window-check'))
-    run('hdiutil', 'attach', str(packages[0]), '-readonly', '-nobrowse', '-mountpoint', str(volume))
+    # A DMG can prompt for its embedded project MIT agreement during attach.
+    # Provide acceptance on stdin for unattended CI.
+    run('hdiutil', 'attach', str(packages[0]), '-readonly', '-nobrowse', '-mountpoint', str(volume), input_text='Y\n')
     try:
         apps = list(volume.glob('*.app')); assert len(apps) == 1
         app = apps[0]

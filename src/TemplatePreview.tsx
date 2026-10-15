@@ -6,7 +6,7 @@ import { rasterize } from "./use-preview-backdrop";
 import type { PhotoAsset, TemplateRecord } from "./types";
 
 const sampleMetadata = {
-  camera: "CAMERA X", lens: "50mm F1.8", focalLength: "50mm", aperture: "f/2.8",
+  make: "CAMERA", model: "X", camera: "CAMERA X", lens: "50mm F1.8", focalLength: "50mm", aperture: "f/2.8",
   shutter: "1/250s", iso: "ISO100", capturedAt: "2026:08:22",
 };
 
