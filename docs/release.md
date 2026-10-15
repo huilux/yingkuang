@@ -70,6 +70,8 @@ Linux CI 在 AppImage 构建完成后，会从实际产物提取文件，并在�
 
 报告中的 `unresolvedFiles`、`missingCopyright` 和 `remainingReview` 必须在分发前核对。AppImage 外层运行时、生成脚本以及适用许可证要求的对应源码仍需另行处理。该 artifact 是审查材料，目前未自动嵌入 AppImage，也不代表分发许可检查已通过。只在同一 Debian/Ubuntu 构建机上运行 `python3 scripts/audit-appimage.py <已提取的 AppDir> <新的输出目录>`；不要用本地 Arch 包数据库替代 Ubuntu CI 的来源证据。
 
+2026-10-15 已核对[运行 38662434121 的 Linux 审查附件](https://github.com/huilux/yingkuang/actions/runs/38662434121)：326 个文件条目关联到 153 个系统包，版权文件缺失为 0，153 份版权文件的 SHA-256 均与清单一致。仍有 6 个来源待核对项：`AppRun`、`AppRun.wrapped`、`apprun-hooks/linuxdeploy-plugin-gtk.sh`，以及 `loaders.cache`、`immodules.cache`、`gschemas.compiled`。固定版本 GTK 打包脚本包含生成钩子与缓存的步骤，但这些文件仍须保留在审查清单中，不能仅凭用途推断就标为许可审查完成。外层 AppImage 运行时与对应源码交付也尚未结项。
+
 参考：[Tauri GitHub 流水线](https://v2.tauri.app/distribute/pipelines/github/)、[macOS 签名](https://v2.tauri.app/distribute/sign/macos/)、[Windows 安装包](https://v2.tauri.app/distribute/windows-installer/)。
 
 
