@@ -4,9 +4,9 @@
 
 ## 当前状态
 
-2026-10-15 补充核对发现 beta.3 的 DEB 控制文件使用 `Package: 映框`，不符合 Debian 包名要求，dpkg/APT 安装会失败。旧的解包及启动检查没有覆盖该问题；beta.5 使用 Linux 专用英文包名并增加元数据和真实安装/卸载检查，桌面中文显示名保持不变。修复包尚未发布前，不推荐安装旧 DEB。
+2026-10-15 补充核对发现 beta.3 的 DEB 控制文件使用 `Package: 映框`，不符合 Debian 包名要求，dpkg/APT 安装会失败。旧的解包及启动检查没有覆盖该问题；已发布的 beta.5 使用 Linux 专用英文包名并增加元数据、桌面入口和真实安装/卸载检查，桌面中文显示名保持不变。旧 DEB 已在原发布页标注问题，不推荐继续安装。
 
-2026-10-15，已发布 [0.5.8-beta.3 Pre-release](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.3)，固定源码提交 `9cbc595`，提供 Windows x64 EXE 和 Linux x64 deb。[受控测试包流程](https://github.com/huilux/yingkuang/actions/runs/38685099011)两个作业全部通过，含标题栏鼠标事件、主题/空画布和裁切延迟加载 WebKit 回归、包内许可及原生窗口检查。Windows 另通过静默安装、真实 WebView2 中的鼠标/键盘主题循环、实际颜色、重新加载后设置保留、系统主题变化与卸载检查。12 个附件和 9 项 SHA-256 校验引用已核对，两平台均验证 16 份包内许可文件。beta.1 已收到 Windows 11 用户未发现功能问题的反馈；beta.3 完整照片编辑、导出、升级及 Linux 系统安装、卸载仍待实机验收。macOS 双架构已构建成功，但分发依赖许可核对和 Mac 安装验收尚未完成，暂不提供 dmg；AppImage 也不在本版下载范围。
+2026-10-15，已发布 [0.5.8-beta.5 Pre-release](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.5)，固定源码提交 `8d6c71f`，提供 Windows x64 EXE 和 Linux x64 DEB，包含同步后的默认模板。[受控测试包流程](https://github.com/huilux/yingkuang/actions/runs/38727645154)两平台和汇总作业全部通过。Linux 完成 APT 实际安装、包数据库、原生窗口、许可文件和卸载检查；Windows 完成 NSIS 安装、实际 WebView2 主题循环、颜色、设置保留、系统响应和卸载检查。两平台各验证 16 份包内许可；下载后核对四份发布附件、三项外层 SHA-256、17 份归档内部材料和五份原始 MPL 依赖源码。实际 DEB 中的包名、中文桌面名、启动命令及摄影分类也已核对。Windows 可信签名、完整照片编辑与导出、升级和干净用户环境仍待后续验证；Linux CI 使用 Ubuntu 22.04 且保留构建依赖。AppImage 与 macOS 不在本轮下载范围。
 
 项目目标为 Linux、Windows、macOS。2026-10-14，运行代码提交 `6f767c4` 已通过[四平台 CI 的测试、Clippy 与安装包构建](https://github.com/huilux/yingkuang/actions/runs/38541170291)。Linux CI 同时通过生产 CSP 的 WebKit 检查。许可证随包构建提交 `ac08fd8` 也已通过[四平台 CI](https://github.com/huilux/yingkuang/actions/runs/38561583230)，其本地 deb 已解包逐字节核对 npm/Rust 清单与正文、项目 MIT、第三方声明及 12 份字体许可。已有 Arch Linux 历史桌面验收；新生成安装包的干净环境安装和完整实机验收仍待完成，不能把构建成功当作已全面支持该系统。
 
@@ -70,7 +70,7 @@ macOS 的发布目标为 GitHub Releases 下载 DMG，分别提供 Apple Silicon
 - macOS 使用 Command 或 Ctrl 的编辑快捷键，界面提示已覆盖；原生窗口风格仍待实机评估。
 - 在 GitHub 启用私密漏洞报告、分支保护；确认仓库地址与下载入口后更新 README。
 - 明确各安装包的签名与公证状态；如配置 Windows 代码签名或 macOS Developer ID 签名及公证，私钥仅通过受控的签名服务或 CI Secrets 使用，不提交到仓库。
-- 三平台验收完成后，再创建正式 Release 并附校验和、变更说明及已知问题。
+- 按本轮交付的平台范围完成验收，再创建正式 Release 并附校验和、变更说明及已知问题；暂缓的平台不影响已就绪平台的测试版交付。
 
 ### 依赖许可材料
 
@@ -117,13 +117,13 @@ Linux CI 在 AppImage 构建完成后，会从实际产物提取文件，并在�
 
 ## 预发布草稿流程
 
-测试包范围为 Windows x64 NSIS 和 Linux x64 deb，下一轮版本为 `0.5.8-beta.5`；AppImage 与 macOS 暂不进入此流程。日常桌面 CI 继续关闭安装包附件上传。手动工作流 `.github/workflows/beta-draft.yml` 只接受与源码版本一致、指向本次完整提交 SHA 的已有预发布草稿；上传前再次核对草稿状态，禁止向已发布版本上传。
+测试包范围为 Windows x64 NSIS 和 Linux x64 deb，当前公开预发布版本为 `0.5.8-beta.5`；AppImage 与 macOS 暂不进入此流程。日常桌面 CI 继续关闭安装包附件上传。手动工作流 `.github/workflows/beta-draft.yml` 只接受与源码版本一致、指向本次完整提交 SHA 的已有预发布草稿；上传前再次核对草稿状态，禁止向已发布版本上传。
 
 先完成版本同步、提交和推送，确认 `v<版本>` 标签指向该完整提交；新标签可用 `git tag v<版本> <完整提交SHA>` 和 `git push origin v<版本>` 创建。使用 `gh release create v<版本> --draft --prerelease --target <完整提交SHA> --title <标题> --notes-file <说明文件>` 创建草稿，再执行 `gh workflow run beta-draft.yml --ref main -f release_tag=v<版本>`。若默认分支在其间变化，应重新核对草稿的目标提交，不能混用不同提交的安装包。已发布版本的标签和附件保持不变，后续修复使用新版本。
 
 工作流运行测试、构建和包内许可核对；Linux 在 Ubuntu 22.04 CI 通过 APT 实际安装 DEB、核对包数据库及安装后的许可、在 Xvfb 中观察原生窗口并卸载；构建依赖仍在机上，不能视为干净用户系统验收。Windows 检查真实 NSIS 静默安装、原生窗口、WebView2 主题交互与实际颜色、设置保留、系统响应和卸载。
 
-两个平台全部通过后，汇总作业核对源码提交与文件摘要，并将公开附件收敛为四份：
+两个平台全部通过后，汇总作业从同一未发布草稿读取已验证的分平台文件，核对源码提交与文件摘要，合并辅助材料并删除草稿中的临时散件，将最终公开附件收敛为四份；不通过公开 Actions artifacts 中转安装包：
 
 | 附件 | 用途 |
 | --- | --- |
