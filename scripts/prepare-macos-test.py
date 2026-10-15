@@ -101,7 +101,7 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-macos-') as temporary:
     shutil.copy2(packages[0], staged / (prefix + '.dmg'))
     report = {'version': version, 'commit': commit, 'platform': platform, 'architecture': targets[platform][1], 'dmgMounted': 'passed', 'installedLicenseFilesVerified': len(pairs), 'signature': 'ad-hoc verified', 'notarized': False, 'nativeWindow': 'passed', 'systemLibrariesOnly': 'passed', 'linkedLibraries': linked_libraries, 'dependencyReview': 'pending' if inventory['reviewRequired'] else 'passed', 'upstreamReviewItems': inventory['reviewRequired'], 'originalSourceArchives': len(sources), 'interactiveAcceptance': 'pending', 'scope': 'Automated DMG mounting, architecture, signature, linked libraries, installed notices and native-window checks. Gatekeeper, installation and photo editing/export require a real tester.'}
     (staged / 'checks.json').write_text(json.dumps(report, indent=2) + '\n')
-    shutil.copy2(root / 'docs/macos-testing.md', staged / 'TESTING.md')
+    shutil.copy2(root / 'docs/user-guide.md', staged / 'TESTING.md')
     sums = [f'{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.relative_to(staged).as_posix()}' for file in sorted(staged.rglob('*')) if file.is_file()]
     (staged / 'SHA256SUMS.txt').write_text('\n'.join(sums) + '\n')
     archive = output / (prefix + '-test.zip')

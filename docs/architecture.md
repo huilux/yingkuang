@@ -1,6 +1,6 @@
 # 架构
 
-映框采用 React/TypeScript 界面、Konva 画布和 Tauri 2/Rust 桌面后端。前端管理交互、编辑文档和预览，Rust 读取原图、转换颜色并编码导出。平台状态见 [构建与发布](release.md)。
+映框采用 React/TypeScript 界面、Konva 画布和 Tauri 2/Rust 桌面后端。前端管理交互、编辑文档和预览，Rust 读取原图、转换颜色并编码导出。平台下载见 [README](../README.md)。
 
 ## 模块职责
 

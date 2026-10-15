@@ -17,19 +17,16 @@
 
 ## 平台与安装
 
-已发布 [0.5.8-beta.5 预发布测试版](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.5)，修复旧 DEB 包名不合法、无法安装的问题，并包含维护者更新后的三个默认模板。两平台通过[本版测试、构建、真实安装与卸载检查](https://github.com/huilux/yingkuang/actions/runs/38727645154)，Windows 还核对实际主题切换、颜色、设置保留及系统主题响应。本轮优先 Linux 与 Windows，macOS 暂缓公开交付。
+当前测试版为 [0.5.8-beta.5](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.5)。普通用户只需下载对应系统的安装包。
 
-| 平台 | 本版测试包 | CI 构建范围 |
-| --- | --- | --- |
-| Linux x64（Debian/Ubuntu） | [下载 DEB](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.5/yingkuang_0.5.8-beta.5_linux-x64.deb) | deb、AppImage |
-| Windows x64 | [下载 EXE（NSIS）](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.5/yingkuang_0.5.8-beta.5_windows-x64.exe) | EXE（NSIS） |
-| macOS Apple Silicon / Intel | 暂未提供 | dmg |
+| 系统 | 下载 |
+| --- | --- |
+| Windows x64 | [EXE 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.5/yingkuang_0.5.8-beta.5_windows-x64.exe) |
+| Debian/Ubuntu x64 | [DEB 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.5/yingkuang_0.5.8-beta.5_linux-x64.deb) |
 
-在 [Release 页面](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.5) 下载对应安装包，按需使用统一的 `SHA256SUMS.txt` 校验。公开附件共四份：两个安装包、校验文件和 `release-materials.zip`；技术材料 ZIP 保留许可证、依赖清单、检查记录与 MPL 依赖源码。Windows 测试包未做可信代码签名；缺少 WebView2 的电脑首次安装需要联网获取运行时。AppImage 尚未公开提供。
+校验文件和技术材料在同一发布页；许可证已随安装包保留。GitHub 的 `Source code` 是项目源码，不是安装包。
 
-普通用户只需下载 Windows 的 `.exe` 或 Debian/Ubuntu 的 `.deb`，安装包内已包含许可证。技术材料 ZIP 无需解压；GitHub 另外自动提供的两份 `Source code` 是项目源码，也不是安装包。
-
-已有 Arch Linux 桌面使用验证及 beta.1 的 Windows 11 用户测试反馈；beta.5 的完整照片编辑与导出复测、干净用户环境及升级验收仍待完成，最低系统版本尚未确认。Linux 安装验证使用 Ubuntu 22.04 CI，构建依赖仍在机上。日常 CI 保持安装包附件上传关闭，测试包通过受控流程进入 Release。[构建与发布说明](docs/release.md)包含命令与验证范围。
+Windows 测试包暂未可信签名，缺少 WebView2 时需要联网安装运行时。Linux DEB 在 Ubuntu 22.04 验证；其他发行版、完整照片编辑导出和升级仍需实机测试。AppImage 尚未公开提供，macOS 暂缓交付。
 
 ## 开发启动
 

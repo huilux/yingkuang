@@ -29,6 +29,8 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 ```
 
+发布材料检查需要 Python 3.11+，相关命令见 [开发验证](docs/development.md)。
+
 默认测试使用生成样本和仓库内字体，不需要 `assets/origin/`。带 `#[ignore]` 的真实照片性能测试需要自备本地素材，勿在常规 CI 中使用 `--include-ignored`。Linux WebKitGTK 流程测试参见 [开发验证](docs/development.md)，不代表 Windows/macOS 的原生验收。
 
 提交应聚焦一个问题，注明复现方式、验证结果及模板/会话兼容性。增加导出行为时同时检查预览和 Rust 导出。不要提交原片、生成目录、证书或本机配置。版本变更使用 `npm run version:set -- <版本>`。

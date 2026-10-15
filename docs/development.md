@@ -1,91 +1,56 @@
 # 开发验证
 
-所有命令从仓库根目录运行。工具链和系统依赖见 [贡献指南](../CONTRIBUTING.md)。常规测试使用生成图片与仓库内字体，不需要私人原片。
+所有命令从仓库根目录运行，环境见 [贡献指南](../CONTRIBUTING.md)。常规测试使用生成图片与仓库内字体，无需私人原片。
 
 ## 常规检查
 
 ```sh
 npm test
 npm run build
-npm run version:check
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 ```
 
-`npm test` 执行 Node 测试，包括几何、模板、会话、导出流程、字体完整性和演示图隐私检查。`npm run build` 执行版本一致性、类型与指定回归检查，生成前端产物并验证启动体积。Rust 测试检查真实 JPEG/PNG 编码、EXIF/ICC、字体及文件写入行为。默认忽略的专项测试不应使用 `--include-ignored` 一次性加入普通 CI。
+Node 测试覆盖模板、会话、几何、导出流程、字体与演示图隐私；前端构建还检查版本、类型和启动体积。Rust 测试覆盖真实编码、EXIF/ICC、字体与文件写入。专项入口包括 `npm run test:crop`、`test:camera`、`test:selection`、`test:templates`。
 
-针对改动可运行 `npm run test:crop`、`npm run test:camera`、`npm run test:selection` 或 `npm run test:templates`。测试数量随代码变化，以实际输出为准。
+发布归档使用 Python 3.11+ 验证：
 
-## Linux 界面回归
+```sh
+python3 -m unittest discover -s scripts -p 'test_beta_release.py'
+python3 -m unittest discover -s scripts -p 'test_appimage_audit.py'
+```
 
-需要系统 Python、PyGObject、GTK 3、WebKitGTK 4.1 和 Xvfb。先启动独立开发服务器：
+不要把所有 `#[ignore]` 测试加入常规 CI：部分真实照片压力测试需要本机素材。
+
+## Linux 界面与 CSP
+
+需要系统 Python、PyGObject、GTK 3、WebKitGTK 4.1 和 Xvfb。先启动开发服务器：
 
 ```sh
 npm run dev -- --host 127.0.0.1 --port 1422 --strictPort
 ```
 
-保持该终端运行，在另一个终端执行：
+另一个终端执行全部界面回归，或在 URL 后指定相关脚本名：
 
 ```sh
 xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422
 ```
 
-也可以只运行相关脚本：
+界面回归覆盖标题栏事件、主题、画布与裁切加载等交互。使用 IPC 模拟的测试只验证界面请求和状态；Windows 发布流程另外在真实安装后的 WebView2 中验证主题交互，调试端口仅由测试进程临时开启。
+
+构建前端后检查生产 CSP：
 
 ```sh
-xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 font-library-regression.js native-font-import-regression.js
+xvfb-run -a python3 scripts/check-csp.py
 ```
 
-回归通过 DOM 事件驱动界面，并使用 Konva 公共 API 观测结果。标题栏检查包含鼠标按下事件，防止交互控件被误判为窗口拖动；裁切加载回归用可控的延迟模块验证布局、取消和焦点恢复。Windows 测试包流程还会在真实安装后的 WebView2 中通过 CDP 发送鼠标与键盘事件，检查主题循环、实际背景色、重新加载后保留选择和系统主题响应；调试端口仅由 CI 测试进程的临时环境变量开启。含原生 IPC 模拟的测试只能证明界面请求和状态处理，不等于真实文件对话框、解码或安装包验收。WebKitGTK 结果不能替代 Windows WebView2、macOS WKWebView 的原生运行检查。
+该检查验证本地图像、字体与编辑器资源可加载，并拒绝内联脚本、动态代码和外部连接。它不替代原生 IPC 或其他平台 WebView 验收。
 
-## 预览与 Rust 渲染对比
+## 渲染与性能
 
-保持上述服务器运行，执行：
+保持开发服务器运行，执行 `python3 scripts/render-parity.py http://127.0.0.1:1422`，对比浏览器预览与 Rust 输出。修改几何、字体、模糊或阴影时，检查中文、字重、文字边界、透明 PNG 和不同成品尺寸。
 
-```sh
-python3 scripts/render-parity.py http://127.0.0.1:1422
-```
+原生导出基准工具为 `scripts/benchmark-export.py`，用 `--help` 查看所需的 release 测试程序与输入参数。画布性能脚本为 `scripts/zoom-performance.js`，可通过上述 WebKit 回归入口单独运行。测量时记录系统、CPU、构建模式、输入像素、模板、格式和重复次数，分别报告预览与导出耗时。
 
-脚本在临时目录运行 Rust 的 `preview_parity_fixtures` 专项测试生成图片，再启动 WebKitGTK 对比相框、阴影和文字。默认使用生成样本与内置字体；不要将本机真实照片扩展模式作为公共 CI 的必要输入。
-
-修改字体或几何时，检查中文回退、不同字重、旋转后的文字边界以及透明 PNG；修改阴影或模糊时，同时检查不同强度、成品尺寸和边缘裁切。
-
-## 性能测量
-
-性能测量单独运行，避免与其他测试争用 CPU。记录操作系统、CPU、构建模式、输入像素、模板、格式和重复次数；浏览器预览耗时与原生导出耗时分别报告。
-
-画布缩放测量：
-
-```sh
-xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 zoom-performance.js
-```
-
-Linux 原生导出测量需要 Python 和 GNU `/usr/bin/time`。先编译 release 测试程序：
-
-```sh
-cargo test --manifest-path src-tauri/Cargo.toml --lib --release --no-run --locked
-python3 scripts/benchmark-export.py --help
-```
-
-将 Cargo 输出的测试可执行文件传给 `--binary`，自行准备有权使用的 JPEG 并传给 `--input`：
-
-```sh
-python3 scripts/benchmark-export.py \
-  --binary /absolute/path/to/test-executable \
-  --input /absolute/path/to/photo.jpg \
-  --label local-release --repeats 3 --matrix \
-  --output test-output/benchmark.json
-```
-
-上面两个绝对路径是需替换的示例值。报告包含本机路径，不直接提交到公开仓库。其他被忽略的真实照片压力测试可能依赖 `assets/origin/` 中的特定素材，运行前检查对应测试源码；公共仓库不提供这些原片。
-
-## 测试资料与提交范围
-
-保留源码、构建脚本、锁文件、测试代码及可公开样本。`test-output/`、`assets/origin/`、`assets/image/`、本机配置和 `.local-dev/` 不提交。演示图须保持最长边不超过 1920px、文件不超过 600 KiB，且无 EXIF/XMP/IPTC 等附加元数据；`npm test` 会检查。
-
-版本变更使用 `npm run version:set -- <版本>`，它同步 npm、Cargo 和 Tauri 的版本。新增行为应补充相关回归，并说明实际测试的平台、模拟范围和未验证部分。
-
-## 生产 CSP 检查
-
-运行 `npm run build` 后，执行 `xvfb-run -a python3 scripts/check-csp.py`。脚本启动临时本地服务，按 Tauri 配置发送生产 CSP，并用 WebKit 验证编辑器、本地图像和字体可加载，内联脚本、动态代码及外部连接被阻止。它不替代原生 IPC 和其他平台 WebView 的验收。开发 CSP 单独允许 Vite 的内联脚本和本机 WebSocket。
+生成输出放在 `test-output/`；含本机路径、真实照片或任务记录的材料不提交。演示图必须保留合法来源、限制尺寸与体积，并移除附加元数据，`npm test` 会检查。

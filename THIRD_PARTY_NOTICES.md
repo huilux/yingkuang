@@ -1,22 +1,16 @@
 # 第三方与素材许可
 
-本项目的 MIT 许可证适用于原创代码和文档，不替换第三方许可。
+根目录 MIT 适用于项目原创代码和文档，不替换第三方许可证。
 
-| 内容 | 来源与许可记录 |
+| 内容 | 来源与许可 |
 | --- | --- |
-| 内置字体（包括 Space Mono） | [来源、固定提交与 SHA-256](public/fonts/sources.json)，各目录 `OFL.txt`；字体未经修改 |
-| npm 依赖 | `package-lock.json` 固定版本；保留各包的版权与许可证 |
-| Rust 依赖及其原生依赖 | `src-tauri/Cargo.lock` 固定版本；保留各 crate 和原生库的许可证 |
-| 用户导入字体及照片 | 用户本机文件，不属于本仓库的再分发授权 |
+| 内置字体 | [固定来源与摘要](public/fonts/sources.json)，各字体目录保留原始 `OFL.txt` |
+| npm / Rust 依赖 | `package-lock.json` 与 `src-tauri/Cargo.lock` 固定版本，许可材料随安装包提供 |
+| AppImage 系统库与打包组件 | [来源记录](licenses/README.md)，按实际交付提供原始声明和所需对应源码 |
+| 用户导入的照片与字体 | 用户本机素材，不属于本仓库的再分发授权 |
 
-正式分发前应从实际构建依赖生成完整的第三方许可汇总，并随安装包提供。此文件是来源索引，不是完整的传递依赖许可审计。
+`public/demo.jpg` 为 Ming 原创摄影，按项目 MIT 提供；已移除 EXIF/GPS、XMP、IPTC 等附加元数据。更换演示图时需重新核对来源与元数据。
 
-运行 `npm run licenses:collect` 可收集本机目标的依赖许可声明和正文；CI 按平台上传材料，人工核对范围和缺项见[发布指南](docs/release.md#依赖许可材料)。
+项目图标按 MIT 提供，来源和转换方法见 [图标说明](assets/branding/README.md)。
 
-`public/demo.jpg` 为 Ming 原创摄影作品，维护者于 2026-10-14 确认原创来源，随本项目按根目录 MIT 许可证提供，允许随公开源码仓库及安装包分发。
-
-当前 `src-tauri/icons/` 来自为本项目新生成的图标，按 MIT 提供，生成来源与转换方法见[图标说明](assets/branding/README.md)。
-
-演示图已按维护者要求进行发布预处理：1920 × 1280，JPEG 质量 85，224,496 字节；已清除 EXIF/GPS、XMP、IPTC 等附加元数据。`npm test` 检查尺寸、体积及 JPEG 元数据段。后续替换图片时需重新检查来源和元数据。
-
-一次性原型已移出当前公开源码目录。其内嵌 ExifReader 与原始许可证一并保留在本地归档；若另行分发原型或历史版本，仍需保留对应的 MPL 2.0 声明。
+运行 `npm run licenses:collect` 收集锁定依赖的许可声明与正文。此文件是来源索引，实际分发核对见 [发布指南](docs/release.md#许可证与源码)。第三方许可原文不得因文档精简而删除。

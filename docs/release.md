@@ -1,139 +1,65 @@
 # 构建与发布
 
-当前交付优先级为 Linux 与 Windows；macOS 保留已有未发布的验收草稿，暂不推进新发布。
-
-## 当前状态
-
-2026-10-15 补充核对发现 beta.3 的 DEB 控制文件使用 `Package: 映框`，不符合 Debian 包名要求，dpkg/APT 安装会失败。旧的解包及启动检查没有覆盖该问题；已发布的 beta.5 使用 Linux 专用英文包名并增加元数据、桌面入口和真实安装/卸载检查，桌面中文显示名保持不变。旧 DEB 已在原发布页标注问题，不推荐继续安装。
-
-2026-10-15，已发布 [0.5.8-beta.5 Pre-release](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.5)，固定源码提交 `8d6c71f`，提供 Windows x64 EXE 和 Linux x64 DEB，包含同步后的默认模板。[受控测试包流程](https://github.com/huilux/yingkuang/actions/runs/38727645154)两平台和汇总作业全部通过。Linux 完成 APT 实际安装、包数据库、原生窗口、许可文件和卸载检查；Windows 完成 NSIS 安装、实际 WebView2 主题循环、颜色、设置保留、系统响应和卸载检查。两平台各验证 16 份包内许可；下载后核对四份发布附件、三项外层 SHA-256、17 份归档内部材料和五份原始 MPL 依赖源码。实际 DEB 中的包名、中文桌面名、启动命令及摄影分类也已核对。Windows 可信签名、完整照片编辑与导出、升级和干净用户环境仍待后续验证；Linux CI 使用 Ubuntu 22.04 且保留构建依赖。AppImage 与 macOS 不在本轮下载范围。
-
-项目目标为 Linux、Windows、macOS。2026-10-14，运行代码提交 `6f767c4` 已通过[四平台 CI 的测试、Clippy 与安装包构建](https://github.com/huilux/yingkuang/actions/runs/38541170291)。Linux CI 同时通过生产 CSP 的 WebKit 检查。许可证随包构建提交 `ac08fd8` 也已通过[四平台 CI](https://github.com/huilux/yingkuang/actions/runs/38561583230)，其本地 deb 已解包逐字节核对 npm/Rust 清单与正文、项目 MIT、第三方声明及 12 份字体许可。已有 Arch Linux 历史桌面验收；新生成安装包的干净环境安装和完整实机验收仍待完成，不能把构建成功当作已全面支持该系统。
-
-| 平台 | CI 环境 | 产物 |
-| --- | --- | --- |
-| Linux x64 | Ubuntu 22.04 | deb、AppImage |
-| Windows x64 | Windows Server 2022 | NSIS exe |
-| macOS Apple Silicon | macOS 15 ARM | dmg |
-| macOS Intel | macOS 15 Intel | dmg |
-
-最低用户系统版本须在测试后公布；CI 操作系统版本不等于最低运行版本。Linux ARM、Windows ARM 暂未纳入矩阵。
+安装包通过 [GitHub Releases](https://github.com/huilux/yingkuang/releases) 分发。当前优先 Linux x64 与 Windows x64，macOS 暂缓公开交付；可下载的平台和限制以 README、发布说明为准。
 
 ## 构建
 
-先按 [贡献指南](../CONTRIBUTING.md) 安装开发依赖，在对应系统运行：
+先按 [贡献指南](../CONTRIBUTING.md) 安装工具链与系统依赖，在对应系统运行：
 
 ```sh
-# Linux
+# Debian/Ubuntu
 npm run tauri build -- --bundles deb
+# Linux AppImage
 npm run build:appimage
-
 # Windows
 npm run tauri build -- --bundles nsis
-
-# macOS（在对应架构的 Mac 上）
-npm run tauri build -- --bundles dmg
 ```
 
-产物位于 `src-tauri/target/release/bundle/`。AppImage 脚本固定打包插件版本和校验值，首次构建需要联网。Linux 应使用计划支持的最旧基础系统构建，避免 Arch 的新 glibc 提高分发要求。参见 [Tauri AppImage 文档](https://tauri.app/distribute/appimage/)。
+产物位于 `src-tauri/target/release/bundle/`。Linux 发布构建使用 Ubuntu 22.04，不能用更新发行版构建后直接宣称兼容旧系统。AppImage 构建成功不代表运行、许可和对应源码交付均已验收。
 
-`.github/workflows/desktop.yml` 对 PR、main/master 推送、v 标签和手动运行执行测试和安装包构建；源码公开阶段已暂停上传安装包到 Actions artifacts，仅保留许可审查材料附件，不创建 Release。macOS CI 使用 ad-hoc 签名，仅供验收，未经过 Developer ID 签名和公证。Windows CI 包未进行代码签名。
+使用项目脚本打包，不绕过 `npm run tauri`：脚本会从锁文件收集当前平台的依赖许可，拒绝缺少必要正文的构建，并把项目 MIT、第三方声明、字体 OFL 与依赖材料放入安装包。
 
-## 发布前验收
+## 发布流程
 
-- 在没有 Node、Rust、fontconfig、vips 的干净用户环境安装、启动、卸载；验证升级后会话恢复。
-- JPEG/PNG 导入、文件夹拖放、中文及空格路径、UNC（Windows）、长路径、只读目录和重名文件。
-- 内置及导入字体、旧模板 monospace 映射、中文回退、裁切、旋转、阴影和带 ICC 图片。
-- 原尺寸及批量导出、取消重试、保留/移除 EXIF 与 GPS、文件占用、磁盘写入失败。
-- macOS Command 快捷键与窗口行为；Windows 高 DPI；Linux Wayland/X11。
-- 每个平台记录系统版本、架构、安装包哈希、通过项及失败项。
+1. 使用 `npm run version:set -- <版本>` 同步版本，完成 [开发验证](development.md)，更新 CHANGELOG。
+2. 提交并推送源码，创建指向该完整提交 SHA 的 `v<版本>` 标签及 Pre-release 草稿。
+3. 运行受控测试包流程：
 
-## 源码公开与安装包发布
+   ```sh
+   gh workflow run beta-draft.yml --ref main -f release_tag=v<版本>
+   ```
 
-源码仓库公开与安装包发布分别验收。源码公开前检查提交历史、隐私、素材授权和仓库文档；不要求购买签名证书，也不要求先发布安装包。安装包仍须完成依赖许可核对和相应平台的实际使用验证。
+4. 下载草稿附件，核对 SHA-256、检查报告、依赖材料和实际运行结果，再发布草稿。
 
-测试版可以暂不做 Windows 可信签名或 macOS Developer ID 签名与公证，但必须明确标注状态及系统可能提示或拦截的限制，不建议用户关闭系统安全防护。面向普通用户长期分发时，再评估签名成本与配置。
+标签、草稿与本轮源码必须一致。工作流只写入已有未发布草稿；已经公开的安装包与标签保持原样，修复使用新版本。日常 CI 不上传公开安装包，临时文件通过草稿中转，汇总后只保留最终下载文件。
 
-### macOS 通过 GitHub 下载
+普通用户只需对应系统的安装包。校验文件与技术材料单独提供；许可证仍随安装包保留。技术材料包含依赖清单、许可正文、检查记录及需要提供的对应源码。GitHub 自动附加的两份 `Source code` 是项目源码，不是安装包。
 
-macOS 的发布目标为 GitHub Releases 下载 DMG，分别提供 Apple Silicon 和 Intel 版本；测试交付可使用包含 DMG、校验和及许可材料的 ZIP。本项目当前不计划上架 Mac App Store。
+## 验收范围
 
-现阶段沿用 ad-hoc 临时签名，不做 Apple 公证；购买付费开发者会员不作为 GitHub 下载版的发布前置条件。临时签名不能免除 macOS 的安全提示：首次打开时，用户可能需要在确认来源及校验和后，按 [Apple 官方说明](https://support.apple.com/zh-cn/102445)使用「系统设置 → 隐私与安全性 → 仍要打开」。不能保证所有系统或受管理设备均提供此入口；实际安装结果由实机验收记录，不要求用户关闭系统安全检查。
+- Linux DEB：元数据、中文桌面入口、APT 实际安装、原生窗口、安装后的许可文件及卸载。
+- Windows EXE：NSIS 安装、原生窗口、实际主题切换与颜色、设置保留、系统主题响应及卸载。
+- AppImage：运行时与打包来源、载荷和对应源码核对，以及实际启动和功能检查。
+- 实机回归：JPEG/PNG 导入、中文与空格路径、字体、裁切旋转、当前与批量导出、取消重试、升级后的模板和会话恢复。
 
-今后若要减少开发者身份验证和公证相关的安装阻碍，可接入 Developer ID Application 签名与 Apple 公证，仍通过 GitHub 分发，无需上架商店。两者的配置见 [Tauri macOS 签名说明](https://v2.tauri.app/distribute/sign/macos/)。是否公开当前测试包，继续以依赖分发许可核对、实机验收和准确说明签名状态为依据。
+CI 记录操作系统、架构、文件摘要和通过范围。构建机保留开发依赖，不能等同于干净用户环境；模拟 IPC 的界面测试也不能代替真实文件处理。未验收的系统与最低版本不作兼容承诺。
 
-## 安装包分发前检查
+Windows 测试包暂未做可信代码签名；缺少 WebView2 时安装程序需要联网获取运行时。测试说明应准确列出这些安装限制。
 
-- 当前演示照片已由维护者确认原创并按 MIT 提供，图标已替换为项目新生成素材。检查新增图片的来源、元数据和待公开内容，历史提交中的旧图标也已替换，并保留原提交树结构。不得打包本机备份、私人原片、签名证书或密钥。
-- 生成 npm/Rust/原生库完整的第三方许可证清单并随包提供。
-- 生产 CSP 已启用并通过 Linux WebKit 资源与拦截检查；继续核对各平台原生 IPC 与权限边界，尚未完成全面安全审计。
-- macOS 使用 Command 或 Ctrl 的编辑快捷键，界面提示已覆盖；原生窗口风格仍待实机评估。
-- 在 GitHub 启用私密漏洞报告、分支保护；确认仓库地址与下载入口后更新 README。
-- 明确各安装包的签名与公证状态；如配置 Windows 代码签名或 macOS Developer ID 签名及公证，私钥仅通过受控的签名服务或 CI Secrets 使用，不提交到仓库。
-- 按本轮交付的平台范围完成验收，再创建正式 Release 并附校验和、变更说明及已知问题；暂缓的平台不影响已就绪平台的测试版交付。
+## 许可证与源码
 
-### 依赖许可材料
+`npm run licenses:collect` 生成本机 Rust 目标的 `inventory.json` 与 `LICENSE-TEXTS.txt`；指定目标时使用 `npm run licenses:collect -- <目标三元组>`。升级依赖后重新收集，不能沿用旧版本材料。
 
-安装依赖后运行 `npm run licenses:collect`，按本机 Rust 目标生成 `test-output/licenses/<目标>/inventory.json` 和 `LICENSE-TEXTS.txt`。交叉构建时使用 `npm run licenses:collect -- <Rust 目标三元组>`。CI 在各平台执行并上传独立的许可材料 artifact。使用 `npm run tauri build`、`npm run tauri bundle` 或 `npm run build:appimage` 时，包装脚本会重新收集对应 Rust 目标的材料，并通过临时配置将正文及清单放入资源目录的 `licenses/dependencies/<目标>/`。项目 MIT、第三方声明和字体 OFL 仍随包保留。macOS universal 构建会同时收集两种架构。开发运行和 Cargo 测试无需预先生成这些文件。不要绕过项目脚本直接调用 Tauri CLI 制作分发包。
+- `missingTexts`：缺少必要许可正文，打包必须失败。
+- `reviewRequired`：上游署名或 SDK 等待核对事项，材料齐全不等于核对完成。
+- AppImage：另外核对实际携带的系统库、启动脚本、生成缓存和外层运行时；随分发提供适用的原始声明与对应源码。
 
-脚本从 npm 锁文件及安装目录、Cargo 锁定解析结果提取许可声明与许可证正文，包含构建和开发依赖。补充正文从 `licenses/upstream/sources.json` 按名称、版本和 SHA-256 校验后纳入；`missingTexts` 列出仍没有许可证正文的包，`absentOptional` 列出未安装的 npm 可选依赖，`reviewRequired` 列出上游署名或 SDK 条款等仍需人工核对的事项。安装版本不匹配或必要依赖缺失会使脚本失败。打包入口还会拒绝 `missingTexts` 非空的材料；`reviewRequired` 会输出提醒并保存在随包清单中，仍需在正式发布前处理。
-
-发布者仍需逐项处理缺失正文，并核对原生静态库、系统动态库及 AppImage 等打包工具带入的库。此报告不是最终安装包的精确依赖清单，也不代表许可审计通过；npm/Rust 正文与声明已接入打包流程，系统库与打包工具载荷仍需单独补齐并验收。生成材料不提交到源码仓库。
-
-Linux CI 在 AppImage 构建完成后，会从实际产物提取文件，并在同一构建机上生成 `yingkuang-appimage-system-review` artifact：记录产物 SHA-256、文件摘要、匹配的 Debian/Ubuntu 二进制包及源码包版本、版权文件和公共许可证正文。来源匹配区分字节完全一致与 ELF build ID 一致；后者用于辅助核对经过 patchelf 修改的库，不能视为字节一致。仅文件名相同不会判定为已确认来源。
-
-报告中的 `unresolvedFiles`、`missingCopyright` 和 `remainingReview` 必须在分发前核对。AppImage 外层运行时、生成脚本以及适用许可证要求的对应源码仍需另行处理。该 artifact 是审查材料，目前未自动嵌入 AppImage，也不代表分发许可检查已通过。只在同一 Debian/Ubuntu 构建机上运行 `python3 scripts/audit-appimage.py <已提取的 AppDir> <新的输出目录>`；不要用本地 Arch 包数据库替代 Ubuntu CI 的来源证据。
-
-2026-10-15 已核对[运行 38662434121 的 Linux 审查附件](https://github.com/huilux/yingkuang/actions/runs/38662434121)：326 个文件条目关联到 153 个系统包，版权文件缺失为 0，153 份版权文件的 SHA-256 均与清单一致。仍有 6 个不能直接匹配 Debian 系统包的文件：`AppRun`、`AppRun.wrapped`、`apprun-hooks/linuxdeploy-plugin-gtk.sh`，以及 `loaders.cache`、`immodules.cache`、`gschemas.compiled`。固定版本 GTK 打包脚本包含生成钩子与缓存的步骤，但这些文件仍须保留在审查清单中，不能仅凭用途推断就标为许可审查完成。后续[来源核对记录](../licenses/packaging/sources.json)已确认启动包装脚本模板和 `AppRun.wrapped` 的镜像摘要，并补存两份打包组件许可；这不等于全部许可事项结项。外层 AppImage 运行时与对应源码交付也尚未结项。
-
-参考：[Tauri GitHub 流水线](https://v2.tauri.app/distribute/pipelines/github/)、[macOS 签名](https://v2.tauri.app/distribute/sign/macos/)、[Windows 安装包](https://v2.tauri.app/distribute/windows-installer/)。
-
+来源索引见 [`licenses/`](../licenses/README.md) 和 [第三方许可说明](../THIRD_PARTY_NOTICES.md)。许可正文保持原样；生成清单与构建日志放在交付材料中，不提交到源码仓库。
 
 ## 发布内置模板
 
-内置模板发布源为 [`src/data/builtin-templates.json`](../src/data/builtin-templates.json)，包含模板 ID、名称、横竖图布局和默认模板 ID。安装包构建时将其打包。
+内置模板源为 `src/data/builtin-templates.json`，包含横竖布局与默认模板 ID，构建时打包。
 
-可以直接修改该 JSON，也可以在应用中调整模板、点击「更新原模板」，再在模板库中「导出内置文件」，用所得文件替换发布源。导出时默认模板必须是内置模板；导出文件采用项目示例封面，不包含本机照片缩略图。
+在应用中调整模板并「更新原模板」，然后在模板库「导出内置文件」，替换上述 JSON，再运行 `npm run test:templates` 和 `npm run build`。该导出使用项目演示图封面，不包含本机照片缩略图。
 
-不要用「导出完整备份」替换发布源：它还包含自定义模板和本机照片封面，格式与用途不同。应用内修改只保存在本机，不会自动改写源码。升级时，未修改的内置模板采用新版，本机修改过的版本继续保留，用户可以选择重置。
-
-修改发布模板后执行 `npm run test:templates` 和 `npm run build`，检查默认模板、横竖布局和旧用户模板兼容性。
-
-本机当前内置模板已同步为下一版发布源，默认仍是「模糊-底部文字」。导入仅包含三个内置模板的样式，封面统一使用项目演示图、更新时间归零；个人自定义模板保持在本机。已经发布的安装包不会因此改变，新样式随下一版构建提供。
-
-## macOS 实机验收包
-
-`.github/workflows/macos-test.yml` 手动构建 Apple Silicon 与 Intel 的 DMG，核对架构、ad-hoc 签名、包内许可文件及原生窗口，再将包含 DMG、校验和、完整许可材料和原始依赖源码的 ZIP 上传到版本及完整源码提交一致的已有 Release 草稿。草稿保持未发布，日常 CI 的安装包附件仍关闭。依赖清单中的上游 SDK/署名审查事项继续保留，验收包不表示分发许可或正式签名已完成。
-
-维护者下载对应架构的 ZIP 和校验文件交给测试者即可，朋友无需安装编译工具或购买开发者账号。安装、Gatekeeper 提示处理、功能检查与反馈表见 [macOS 实机测试](macos-testing.md)。收到反馈后记录芯片、系统版本与具体通过范围，再决定公开分发范围。
-
-## 版本与交付
-
-使用 `npm run version:set -- <版本>` 同步版本，然后完成开发检查和各平台安装包验收。维护 [CHANGELOG](../CHANGELOG.md)，明确新增、修复和已知限制，不把 CI 构建成功写作实机验收通过。
-
-通过验收后再创建正式 Release，提供对应架构的安装包、校验和、许可文件和变更说明。只推送计划公开的分支与版本标签，不上传完整本地工作目录或使用镜像推送。
-
-2026-10-15，提交 `d2d56b4` 的[四平台 CI](https://github.com/huilux/yingkuang/actions/runs/38662434121) 已全部通过，包括 Linux 实际 AppImage 审查及附件上传。实机验收范围不因此扩大。
-
-## 预发布草稿流程
-
-测试包范围为 Windows x64 NSIS 和 Linux x64 deb，当前公开预发布版本为 `0.5.8-beta.5`；AppImage 与 macOS 暂不进入此流程。日常桌面 CI 继续关闭安装包附件上传。手动工作流 `.github/workflows/beta-draft.yml` 只接受与源码版本一致、指向本次完整提交 SHA 的已有预发布草稿；上传前再次核对草稿状态，禁止向已发布版本上传。
-
-先完成版本同步、提交和推送，确认 `v<版本>` 标签指向该完整提交；新标签可用 `git tag v<版本> <完整提交SHA>` 和 `git push origin v<版本>` 创建。使用 `gh release create v<版本> --draft --prerelease --target <完整提交SHA> --title <标题> --notes-file <说明文件>` 创建草稿，再执行 `gh workflow run beta-draft.yml --ref main -f release_tag=v<版本>`。若默认分支在其间变化，应重新核对草稿的目标提交，不能混用不同提交的安装包。已发布版本的标签和附件保持不变，后续修复使用新版本。
-
-工作流运行测试、构建和包内许可核对；Linux 在 Ubuntu 22.04 CI 通过 APT 实际安装 DEB、核对包数据库及安装后的许可、在 Xvfb 中观察原生窗口并卸载；构建依赖仍在机上，不能视为干净用户系统验收。Windows 检查真实 NSIS 静默安装、原生窗口、WebView2 主题交互与实际颜色、设置保留、系统响应和卸载。
-
-两个平台全部通过后，汇总作业从同一未发布草稿读取已验证的分平台文件，核对源码提交与文件摘要，合并辅助材料并删除草稿中的临时散件，将最终公开附件收敛为四份；不通过公开 Actions artifacts 中转安装包：
-
-| 附件 | 用途 |
-| --- | --- |
-| `yingkuang_<版本>_windows-x64.exe` | Windows 安装包，普通用户下载此项 |
-| `yingkuang_<版本>_linux-x64.deb` | Debian/Ubuntu 安装包，普通用户下载此项 |
-| `SHA256SUMS.txt` | 两个安装包及技术材料 ZIP 的 SHA-256 |
-| `yingkuang_<版本>_release-materials.zip` | 两平台许可正文、依赖清单、自动检查、构建摘要及未修改的 MPL 依赖源码 |
-
-普通用户只需对应系统的安装包，许可证仍随安装包保留。GitHub 另外自动提供 `Source code (zip)` 和 `Source code (tar.gz)`，是开发者使用的项目源码归档，不是安装包。历史版本已发布的附件保持原样，新格式从 beta.5 开始使用。
-
-归档脚本为 `scripts/assemble-beta-release.py`，修改后运行 `python3 -m unittest discover -s scripts -p 'test_beta_release.py'`（Python 3.11+）。汇总后只向已有草稿上传四份附件，不会自动发布草稿，也不会恢复公开 Actions 安装包附件。草稿仅对有权限的维护者可见，发布后才适合向测试用户分发。
-
-自动窗口检查不覆盖照片导入、编辑、导出、升级和所有干净用户环境；测试版说明须列出这些未验收范围以及未签名状态。发布前下载草稿附件、核对校验和与检查结果，补充实际交互验收，再将草稿发布为 Pre-release。
+不要用「导出完整备份」替换发布源：完整备份还包含个人模板与本机封面。应用内修改仅保存在本机；升级保留个人修改，用户可选择重置内置模板。
