@@ -2,7 +2,7 @@
   "name": "yingkuang",
   "private": true,
   "license": "MIT",
-  "version": "0.5.8-beta.1",
+  "version": "0.5.8-beta.2",
   "type": "module",
   "scripts": {
     "dev": "vite",

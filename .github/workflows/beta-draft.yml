@@ -66,6 +66,19 @@ jobs:
       - name: Check Linux CSP
         if: runner.os == 'Linux'
         run: xvfb-run -a /usr/bin/python3 scripts/check-csp.py
+      - name: Verify themes and empty canvas in WebKit
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p test-output
+          node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 1422 --strictPort > test-output/theme-vite.log 2>&1 &
+          theme_server_pid=$!
+          trap 'kill "$theme_server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:1422 > /dev/null && break
+            sleep 1
+          done
+          WATERMARK_TEST_WIDTH=1100 WATERMARK_TEST_HEIGHT=720 xvfb-run -a /usr/bin/python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 interface-controls-regression.js theme-layout-regression.js
       - name: Extract deb, observe native window and verify installed notices
         if: runner.os == 'Linux'
         run: |

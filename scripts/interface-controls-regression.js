@@ -37,6 +37,7 @@
     root.render(React.createElement(React.StrictMode,null,React.createElement(App)));
     await t.waitFor(()=>host.querySelector('.photo-row')&&host.querySelector('.design-canvas'),'App did not restore');
     t.near(host.querySelector('.app-header').getBoundingClientRect().height,48,'Header height');
+    t.assert(host.querySelector('.theme-control').getBoundingClientRect().right <= host.querySelector('.window-controls').getBoundingClientRect().left, 'Theme control overlaps native window buttons');
     t.assert(![...host.querySelectorAll('.canvas-toolbar button')].some(x=>x.textContent.trim()==='编辑'),'Dead edit button remains');
     button('添加照片').click();await t.frame();
     const extensions=calls.find(x=>x.command==='plugin:dialog|open').args.options.filters[0].extensions;

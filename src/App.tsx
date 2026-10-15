@@ -1,3 +1,4 @@
+import { ThemeControl } from "./ThemeControl";
 import { WindowChrome } from "./WindowChrome";
 import { SelectControl } from "./SelectControl";
 import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -1033,6 +1034,7 @@ function App() {
         <div className="brand-block"><span className="brand-mark"><FrameCorners weight="bold" /></span><h1>映框</h1></div>
         <div className="project-title"><strong title={activePhoto?.fileName}>{activePhoto?.fileName ?? "未导入照片"}</strong></div>
         <div className="header-actions">
+          <ThemeControl />
           <button className="icon-button" type="button" aria-label="撤销" disabled={!canUndo} onClick={undo}><ArrowCounterClockwise /></button>
           <button className="icon-button" type="button" aria-label="重做" disabled={!canRedo} onClick={redo}><ArrowClockwise /></button>
           <span className="header-divider" />

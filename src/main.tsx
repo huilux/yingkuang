@@ -1,5 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { applyTheme, readThemePreference } from "./theme";
+
+// Resolve the stored preference before loading and painting the application.
+applyTheme(readThemePreference());
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 

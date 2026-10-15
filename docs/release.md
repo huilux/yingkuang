@@ -95,7 +95,7 @@ Linux CI 在 AppImage 构建完成后，会从实际产物提取文件，并在�
 
 ## 预发布草稿流程
 
-首批测试包范围为 Windows x64 NSIS 和 Linux x64 deb，版本 `0.5.8-beta.1`；AppImage 与 macOS 暂不进入此流程。日常桌面 CI 继续关闭安装包附件上传。手动工作流 `.github/workflows/beta-draft.yml` 只接受与源码版本一致、指向本次完整提交 SHA 的已有预发布草稿；上传前再次核对草稿状态，禁止向已发布版本上传。
+首批测试包范围为 Windows x64 NSIS 和 Linux x64 deb，当前版本 `0.5.8-beta.2`；AppImage 与 macOS 暂不进入此流程。日常桌面 CI 继续关闭安装包附件上传。手动工作流 `.github/workflows/beta-draft.yml` 只接受与源码版本一致、指向本次完整提交 SHA 的已有预发布草稿；上传前再次核对草稿状态，禁止向已发布版本上传。
 
 先完成版本同步和提交，使用 `gh release create v<版本> --draft --prerelease --target <完整提交SHA> --title <标题> --notes-file <说明文件>` 创建草稿，再执行 `gh workflow run beta-draft.yml --ref main -f release_tag=v<版本>`。若默认分支在其间变化，应重新核对草稿的目标提交，不能混用不同提交的安装包。
 
