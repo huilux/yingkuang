@@ -10,7 +10,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const repo = 'huilux/yingkuang';
 const platforms = { 'linux-x64': { target: 'x86_64-unknown-linux-gnu', bundle: 'deb', extension: '.deb' }, 'windows-x64': { target: 'x86_64-pc-windows-msvc', bundle: 'nsis', extension: '.exe' } };
 const run = args => {
-  const result = spawnSync('gh', args, { cwd: root, encoding: 'utf8', timeout: 60000 });
+  const result = spawnSync('gh', args, { cwd: root, encoding: 'utf8', timeout: 600000 });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(result.stderr);
   return result.stdout;

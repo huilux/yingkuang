@@ -78,7 +78,7 @@ jobs:
           APPLE_SIGNING_IDENTITY: '-'
       - name: Build Linux AppImage
         if: runner.os == 'Linux'
-        run: npm run build:appimage
+        run: npm run build:appimage -- --bundle-only
       - name: Validate actual Debian package metadata
         if: runner.os == 'Linux'
         run: |

@@ -65,7 +65,9 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-appimage-check-') as director
                 process.wait(timeout=20)
             except subprocess.TimeoutExpired:
                 process.kill(); process.wait()
-checks = {'version': version, 'commit': commit, 'platform': 'linux-appimage-x64', 'packageCheck': 'passed', 'startup': 'passed', 'extraction': 'passed', 'notices': 'passed', 'method': 'Finished AppImage extract, payload hashes/notices, extract-and-run native window and bundled WebKit process under Xvfb on Ubuntu 22.04. Host build dependencies remain installed; interactive editing, FUSE mount and other distributions are not covered.'}
+native = json.loads((materials / 'native-checks.json').read_text())
+assert native['nativePhotoProcessing'] == 'passed'
+checks = {'nativePhotoProcessing': 'passed', 'version': version, 'commit': commit, 'platform': 'linux-appimage-x64', 'packageCheck': 'passed', 'startup': 'passed', 'extraction': 'passed', 'notices': 'passed', 'method': 'Finished AppImage extract, payload hashes/notices, extract-and-run native window and bundled WebKit process under Xvfb on Ubuntu 22.04. Host build dependencies remain installed; interactive editing, FUSE mount and other distributions are not covered.'}
 (materials / 'checks.json').write_text(json.dumps(checks, indent=2) + '\n')
 files = {p.relative_to(materials).as_posix(): digest(p) for p in sorted(materials.rglob('*')) if p.is_file()}
 (materials / 'SHIPMENT.json').write_text(json.dumps({'version': version, 'commit': commit, 'appImageSha256': digest(package), 'sha256': files}, indent=2) + '\n')

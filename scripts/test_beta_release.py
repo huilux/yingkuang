@@ -42,7 +42,7 @@ class ReleaseAssemblyTests(unittest.TestCase):
         source_bytes = b'Ubuntu original source archive'
         source_hash = hashlib.sha256(source_bytes).hexdigest()
         archive_files = {
-            'checks.json': json.dumps({'version': self.version, 'commit': self.commit, **dict.fromkeys(['packageCheck', 'startup', 'extraction', 'notices'], 'passed')}).encode(),
+            'checks.json': json.dumps({'version': self.version, 'commit': self.commit, **dict.fromkeys(['packageCheck', 'startup', 'extraction', 'notices', 'nativePhotoProcessing'], 'passed')}).encode(),
             'payload/inventory.json': json.dumps({'unresolvedFiles': [], 'missingCopyright': [], 'remainingReview': [], 'packages': {'sample': {'sourcePackage': 'sample', 'sourceVersion': '1.0'}}}).encode(),
             'ubuntu-sources/sample/source.tar.gz': source_bytes,
             'ubuntu-sources/manifest.json': json.dumps({'packages': [{'name': 'sample', 'version': '1.0', 'directory': 'sample', 'sha256': {'source.tar.gz': source_hash}}]}).encode(),

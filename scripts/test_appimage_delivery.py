@@ -16,6 +16,7 @@ def module(name, filename):
 
 finalize = module('appimage_finalize', 'finalize.py')
 sources = module('ubuntu_sources', 'ubuntu-sources.py')
+runtime = module('runtime_sources', 'runtime-sources.py')
 
 
 class DeliveryTests(unittest.TestCase):
@@ -37,6 +38,12 @@ class DeliveryTests(unittest.TestCase):
             self.assertEqual(finalize.audit.build_id(payload), finalize.audit.build_id(original))
             with self.assertRaisesRegex(ValueError, 'code/data transformation'):
                 finalize.verify_elf(payload, original)
+
+    def test_source_built_fuse_headers_do_not_require_an_apk_owner(self):
+        self.assertIn('libfuse 3.15.0', runtime.pinned_origin('/usr/include/fuse3/fuse.h'))
+        self.assertIn('squashfuse 0.5.2', runtime.pinned_origin('/usr/local/include/squashfuse/squashfuse.h'))
+        self.assertIsNone(runtime.pinned_origin('/usr/include/stdlib.h'))
+        self.assertIsNone(runtime.pinned_origin('/usr/local/lib/unrelated.a'))
 
     def test_source_descriptor_identity_and_every_original_archive_checked(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -68,7 +68,7 @@ def unpack_appimage(inputs, materials, version, commit):
     if (shipment['version'], shipment['commit']) != (version, commit) or shipment['appImageSha256'] != digest(inputs / (prefix + '.AppImage')):
         raise ValueError('AppImage shipment does not match release source/binary')
     checks = json.loads((destination / 'checks.json').read_text())
-    if (checks['version'], checks['commit']) != (version, commit) or any(checks.get(k) != 'passed' for k in ['packageCheck', 'startup', 'extraction', 'notices']):
+    if (checks['version'], checks['commit']) != (version, commit) or any(checks.get(k) != 'passed' for k in ['packageCheck', 'startup', 'extraction', 'notices', 'nativePhotoProcessing']):
         raise ValueError('AppImage acceptance did not pass')
     inventory = json.loads((destination / 'payload/inventory.json').read_text())
     if inventory['unresolvedFiles'] or inventory['missingCopyright'] or inventory['remainingReview']:

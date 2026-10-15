@@ -50,7 +50,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf python3-gi gir1.2-webkit2-4.1 xvfb xdotool squashfs-tools
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf python3-gi gir1.2-webkit2-4.1 xvfb xdotool squashfs-tools webkit2gtk-driver
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -105,12 +105,13 @@ jobs:
       - name: Build AppImage payload and source-controlled static runtime
         if: runner.os == 'Linux'
         run: |
-          npm run build:appimage
+          npm run build:appimage -- --bundle-only
           bash scripts/appimage/build-runtime.sh
       - name: Complete AppImage provenance, original notices and exact sources
         if: runner.os == 'Linux'
         run: |
           python scripts/appimage/finalize.py src-tauri/target/release/bundle/appimage/yingkuang.AppDir test-output/yingkuang.AppImage test-output/appimage-materials test-output/appimage-runtime
+          xvfb-run -a python scripts/appimage/native-check.py test-output/yingkuang.AppImage test-output/appimage-materials/native-checks.json
           xvfb-run -a python scripts/appimage/stage.py test-output/yingkuang.AppImage test-output/appimage-materials
       - name: Stage AppImage only in the existing unpublished draft
         if: runner.os == 'Linux'

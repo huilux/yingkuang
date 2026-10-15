@@ -13,7 +13,8 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = source => createHash('sha256').update(source).digest('hex');
 
 if (process.platform !== 'linux') throw new Error('AppImage builds require Linux');
-if (process.argv.length > 2) throw new Error('Run npm run build:appimage without extra arguments');
+const bundleOnly = process.argv.length === 3 && process.argv[2] === '--bundle-only';
+if (process.argv.length > 2 && !bundleOnly) throw new Error('Expected no arguments, or --bundle-only after tauri build');
 const metadata = spawnSync('cargo', ['metadata', '--no-deps', '--format-version', '1'], {
   cwd: join(root, 'src-tauri'), encoding: 'utf8',
 });
@@ -43,7 +44,7 @@ await chmod(plugin, 0o770);
 
 // Cargo already strips the application. linuxdeploy's older strip cannot read
 // modern Arch RELR sections in system libraries; leave those libraries intact.
-const result = spawnSync(process.execPath, ['scripts/tauri.mjs', 'build', '--bundles', 'appimage', '--verbose', '--config', JSON.stringify({ bundle: { useLocalToolsDir: true } })], {
+const result = spawnSync(process.execPath, ['scripts/tauri.mjs', bundleOnly ? 'bundle' : 'build', '--bundles', 'appimage', '--verbose', '--config', JSON.stringify({ bundle: { useLocalToolsDir: true } })], {
   cwd: root, stdio: 'inherit', env: { ...process.env, NO_STRIP: '1' },
 });
 if (result.error) throw result.error;
