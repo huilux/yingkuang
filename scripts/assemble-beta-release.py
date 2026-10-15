@@ -84,7 +84,9 @@ def unpack_appimage(inputs, materials, version, commit):
             if digest(destination / 'ubuntu-sources' / source['directory'] / name) != checksum:
                 raise ValueError('System source archive checksum mismatch')
     runtime = json.loads((destination / 'runtime/manifest.json').read_text())
-    if not runtime['linkInputs'] or not {'musl', 'zstd', 'zlib', 'mimalloc'} <= {p['origin'] for p in runtime['alpineSources']}:
+    required_origins = {(p['origin'], p['aportsCommit']) for p in runtime['linkInputs'] if isinstance(p, dict) and 'origin' in p}
+    archived_origins = {(p['origin'], p['aportsCommit']) for p in runtime['alpineSources']}
+    if not required_origins or required_origins != archived_origins:
         raise ValueError('Incomplete static runtime source inventory')
     for name, checksum in runtime['sha256'].items():
         if digest(destination / 'runtime' / name) != checksum:
@@ -165,8 +167,8 @@ def assemble(root, inputs, output, commit, fetch_crate=obtain_crate):
             if digest(destination) != checksum:
                 raise ValueError('Dependency source archive checksum mismatch')
             sources.append({'name': name, 'version': source_version, 'license': license_name, 'sha256': checksum, 'archive': 'sources/' + filename, 'url': f'https://static.crates.io/crates/{name}/{filename}'})
-        (materials / 'sources.json').write_text(json.dumps({'version': version, 'projectCommit': commit, 'projectSource': f'https://github.com/huilux/yingkuang/tree/{commit}', 'packages': sources}, indent=2) + '\n')
-        (materials / 'README.txt').write_text('映框发布技术材料 / Yingkuang release materials\n\n普通用户只需下载对应系统的 EXE、DEB 或 AppImage，无需解压本文件。\n安装包内已经包含项目与第三方许可证。\n\n本归档保存两平台的依赖清单、完整许可正文、安装/启动/卸载检查，以及 MPL 依赖的原始源码。AppImage 子目录同时包含系统库原始源码、完整许可、运行时源码和构建配方。\nBUILD-SHA256SUMS.txt 保留构建阶段原文件名的校验记录；归档内重命名文件以根目录 SHA256SUMS.txt 为准。\n源码提交与原始依赖下载地址见 sources.json。\n自动检查不能代替完整照片编辑、导出、升级和干净用户环境验收。\n', encoding='utf-8')
+        (materials / 'sources.json').write_text(json.dumps({'version': version, 'projectCommit': commit, 'assemblyCommit': os.environ.get('GITHUB_SHA', commit), 'projectSource': f'https://github.com/huilux/yingkuang/tree/{commit}', 'packages': sources}, indent=2) + '\n')
+        (materials / 'README.txt').write_text('映框发布技术材料 / Yingkuang release materials\n\n普通用户只需下载对应系统的 EXE、DEB 或 AppImage，无需解压本文件。\n安装包内已经包含项目与第三方许可证。\n\n本归档保存两平台的依赖清单、完整许可正文、安装/启动/卸载检查，以及 MPL 依赖的原始源码。AppImage 子目录同时包含系统库原始源码、完整许可、运行时源码和构建配方。\nBUILD-SHA256SUMS.txt 保留构建阶段原文件名的校验记录；归档内重命名文件以根目录 SHA256SUMS.txt 为准。\n程序源码提交与原始依赖下载地址见 sources.json；assemblyCommit 记录材料汇总脚本的提交。\n自动检查不能代替完整照片编辑、导出、升级和干净用户环境验收。\n', encoding='utf-8')
         inner = [f'{digest(file)}  {file.relative_to(materials).as_posix()}' for file in sorted(materials.rglob('*')) if file.is_file()]
         (materials / 'SHA256SUMS.txt').write_text('\n'.join(inner) + '\n')
         archive = output / f'yingkuang_{version}_release-materials.zip'

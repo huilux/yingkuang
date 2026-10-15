@@ -46,7 +46,7 @@ class ReleaseAssemblyTests(unittest.TestCase):
             'payload/inventory.json': json.dumps({'unresolvedFiles': [], 'missingCopyright': [], 'remainingReview': [], 'packages': {'sample': {'sourcePackage': 'sample', 'sourceVersion': '1.0'}}}).encode(),
             'ubuntu-sources/sample/source.tar.gz': source_bytes,
             'ubuntu-sources/manifest.json': json.dumps({'packages': [{'name': 'sample', 'version': '1.0', 'directory': 'sample', 'sha256': {'source.tar.gz': source_hash}}]}).encode(),
-            'runtime/manifest.json': json.dumps({'linkInputs': ['fixture'], 'alpineSources': [{'origin': n} for n in ['musl', 'zstd', 'zlib', 'mimalloc']], 'sha256': {}}).encode(),
+            'runtime/manifest.json': json.dumps({'linkInputs': [{'origin': n, 'aportsCommit': 'c' * 40} for n in ['musl', 'zstd', 'zlib', 'mimalloc2']], 'alpineSources': [{'origin': n, 'aportsCommit': 'c' * 40} for n in ['musl', 'zstd', 'zlib', 'mimalloc2']], 'sha256': {}}).encode(),
         }
         shipment = {'version': self.version, 'commit': self.commit, 'appImageSha256': assembly.digest(image), 'sha256': {n: hashlib.sha256(b).hexdigest() for n, b in archive_files.items()}}
         with zipfile.ZipFile(self.inputs / (prefix + '_materials.zip'), 'w') as bundle:
@@ -104,6 +104,23 @@ class ReleaseAssemblyTests(unittest.TestCase):
         report = json.loads(path.read_text()); report['uninstall'] = 'pending'
         path.write_text(json.dumps(report)); self.rehash('linux-x64')
         with self.assertRaisesRegex(ValueError, 'uninstall did not pass'):
+            self.build()
+
+    def test_runtime_source_origin_must_cover_actual_link_inputs(self):
+        prefix = f'yingkuang_{self.version}_linux-appimage-x64'
+        archive = self.inputs / (prefix + '_materials.zip')
+        with zipfile.ZipFile(archive) as bundle:
+            files = {n: bundle.read(n) for n in bundle.namelist()}
+        runtime = json.loads(files['runtime/manifest.json'])
+        runtime['alpineSources'] = [p for p in runtime['alpineSources'] if p['origin'] != 'mimalloc2']
+        files['runtime/manifest.json'] = json.dumps(runtime).encode()
+        shipment = json.loads(files['SHIPMENT.json'])
+        shipment['sha256']['runtime/manifest.json'] = hashlib.sha256(files['runtime/manifest.json']).hexdigest()
+        files['SHIPMENT.json'] = json.dumps(shipment).encode()
+        with zipfile.ZipFile(archive, 'w') as bundle:
+            for name, data in files.items(): bundle.writestr(name, data)
+        self.rehash('linux-appimage-x64')
+        with self.assertRaisesRegex(ValueError, 'static runtime source inventory'):
             self.build()
 
     def test_appimage_tampering_is_rejected(self):

@@ -44,13 +44,16 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-native-') as directory:
             raise RuntimeError(value)
         return value
     with (work / 'driver.log').open('w') as log:
-        driver = subprocess.Popen(['WebKitWebDriver', '--port', str(port)], stdout=log, stderr=log, env=env)
+        driver = subprocess.Popen(['WebKitWebDriver', f'--port={port}'], stdout=log, stderr=log, env=env)
         session = None
         try:
             for _ in range(60):
+                if driver.poll() is not None: raise RuntimeError('WebKitWebDriver exited: ' + (work / 'driver.log').read_text())
                 try:
                     request('GET', '/status'); break
                 except (urllib.error.URLError, ConnectionError): time.sleep(.25)
+            else:
+                raise RuntimeError('WebKitWebDriver did not become ready')
             result = request('POST', '/session', {'capabilities': {'alwaysMatch': {'webkitgtk:browserOptions': {'binary': str(package), 'args': ['--appimage-extract-and-run']}}}})
             session = result['sessionId']
             request('POST', f'/session/{session}/timeouts', {'script': 120000})
@@ -67,25 +70,28 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-native-') as directory:
                   const preview = await invoke('load_editor_photo', {path});
                   if (!preview.startsWith('data:image/')) throw Error('Native preview missing');
                   const request = {items:[{path,document,overrides:{},crop:{x:0,y:0,width:1,height:1,rotation:90}}],settings};
+                  const unrotated = await invoke('preflight_export', {request:{...request,items:[{...request.items[0],crop:{...request.items[0].crop,rotation:0}}]}});
                   const preflight = await invoke('preflight_export', {request});
+                  if (unrotated.largestWidth === preflight.largestWidth && unrotated.largestHeight === preflight.largestHeight) throw Error('Rotation was not applied');
                   if (!preflight.ready) throw Error(JSON.stringify(preflight));
                   const summary = await invoke('export_images', {request});
                   if (summary.succeeded !== 1 || summary.failed !== 0) throw Error(JSON.stringify(summary));
-                  done({passed:true});
+                  done({passed:true,width:preflight.largestWidth,height:preflight.largestHeight});
                 })().catch(error=>done({passed:false,error:String(error)}));''', [str(photo), document, settings])
             if not result.get('passed'): raise RuntimeError(result)
             jpeg, = output.glob('*.jpg')
             assert jpeg.read_bytes().startswith(b'\xff\xd8')
-            result = execute('''const [path, document, settings, done] = arguments;
+            dimensions = result
+            result = execute('''const [path, document, settings, dimensions, done] = arguments;
                 (async () => {
                   const invoke = window.__TAURI_INTERNALS__.invoke;
                   const photos = await invoke('inspect_images', {paths:[path]});
-                  if (photos.length !== 1 || photos[0].width <= 0 || photos[0].height <= 0) throw Error('JPEG reimport failed');
+                  if (photos.length !== 1 || photos[0].width !== dimensions.width || photos[0].height !== dimensions.height) throw Error('JPEG reimport/export dimensions differ from rotated preflight');
                   settings.format='png';
                   const summary = await invoke('export_images', {request:{items:[{path,document,overrides:{}}],settings}});
                   if (summary.succeeded !== 1 || summary.failed !== 0) throw Error(JSON.stringify(summary));
                   done({passed:true});
-                })().catch(error=>done({passed:false,error:String(error)}));''', [str(jpeg), document, settings])
+                })().catch(error=>done({passed:false,error:String(error)}));''', [str(jpeg), document, settings, dimensions])
             if not result.get('passed'): raise RuntimeError(result)
             png, = output.glob('*.png')
             assert png.read_bytes().startswith(b'\x89PNG\r\n\x1a\n')

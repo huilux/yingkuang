@@ -1,7 +1,5 @@
 {
-  "verifiedOn": "2026-10-15",
-  "ciRun": "https://github.com/huilux/yingkuang/actions/runs/38662434121",
-  "scope": "Packaging-source evidence and original notices, not complete binary license clearance. These supplemental files are not yet embedded in installation packages.",
+  "scope": "Pinned packaging inputs. Final release-specific payload evidence, original notices and corresponding source archives are in release-materials.zip/appimage/. This index alone is not a delivery verdict.",
   "licenses": [
     {
       "name": "linuxdeploy",
@@ -18,34 +16,37 @@
       "source": "https://github.com/tauri-apps/linuxdeploy-plugin-gtk/blob/dda522bce37387f1b853d9095713bfaa924c8423/LICENSE.txt"
     }
   ],
-  "evidence": [
-    {
-      "path": "AppRun",
-      "sha256": "eb0b254ac0dae6543e6dd7cd02e1baf40a060de95b927313122d6b46323c00aa",
-      "source": "https://github.com/linuxdeploy/linuxdeploy/blob/659c9db374666be3f29432316a859221eac28e53/src/core/appdir_root_setup.cpp",
-      "status": "Generated shell wrapper matches the local wrapper byte-for-byte; upstream source contains its template."
-    },
-    {
-      "path": "AppRun.wrapped",
-      "sha256": "f30140a43a0a59e46db21bdefdf749b9e9f2c6946e92afabbacf98b8ae73fb4f",
-      "source": "https://github.com/tauri-apps/binary-releases/releases/tag/apprun-old",
-      "status": "Exact match to published AppRun-x86_64 asset digest. Upstream source revision and applicable full binary notices remain to be established."
-    },
-    {
-      "paths": [
-        "apprun-hooks/linuxdeploy-plugin-gtk.sh",
-        "usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache",
-        "usr/lib/gtk-3.0/3.0.0/immodules.cache",
-        "usr/share/glib-2.0/schemas/gschemas.compiled"
-      ],
-      "source": "https://github.com/tauri-apps/linuxdeploy-plugin-gtk/blob/dda522bce37387f1b853d9095713bfaa924c8423/linuxdeploy-plugin-gtk.sh",
-      "status": "Pinned packaging script contains generation steps. This is source inspection, not a byte-for-byte reproduction of generated output."
-    }
-  ],
-  "remaining": [
-    "Establish AppRun binary source revision and redistribution notices",
-    "Pin and review outer AppImage runtime and its corresponding source",
-    "Supply required system-library notices and corresponding source with binary distribution",
-    "Validate generated caches and hook against recorded inputs"
-  ]
+  "launcher": {
+    "file": "scripts/appimage/AppRun",
+    "license": "MIT",
+    "sha256": "d49e02b090ad6ca8e14c80dc2bee04af91df2ebe93cfc2feefc322fd9c2d3b3a",
+    "replaces": [
+      "legacy AppRun.wrapped binary",
+      "generated AppRun wrapper and GTK hook"
+    ]
+  },
+  "gtkPlugin": {
+    "revision": "dda522bce37387f1b853d9095713bfaa924c8423",
+    "source": "https://raw.githubusercontent.com/tauri-apps/linuxdeploy-plugin-gtk/dda522bce37387f1b853d9095713bfaa924c8423/linuxdeploy-plugin-gtk.sh",
+    "originalSha256": "7804c9eef13e59bf2783aad9882ef9db8f3f3f9e8d631874b1d348d550a3693f",
+    "patchedSha256": "95eeb15c2eb3e595c102ec8284b017b2a369ac0afddf1c8475fab04c069a0aa9",
+    "patch": "scripts/build-appimage.mjs limits library discovery to the pkg-config directory itself. The exact patched script and original MIT notices are archived with release materials."
+  },
+  "runtime": {
+    "revision": "8f39b89e2ac31e1640b3d3f7e9a5108e6ce805fa",
+    "source": "https://codeload.github.com/AppImage/type2-runtime/tar.gz/8f39b89e2ac31e1640b3d3f7e9a5108e6ce805fa",
+    "sourceSha256": "c449eb42c2190820872631f5e22f8e15b1e985a36dc4a9e2de3585bb7536c785",
+    "recipe": "scripts/appimage/build-runtime.sh",
+    "provenance": "The build captures actual linked archives/startup objects and included headers, exact Alpine recipes and their original upstream sources, libfuse 3.15.0 with the pinned mount patch, squashfuse 0.5.2 and original notices."
+  },
+  "payload": {
+    "recipe": "scripts/appimage/finalize.py",
+    "checks": [
+      "Exact SHA-256 or verified ELF code/data and symbol/dependency transformations",
+      "Reproduce generated GTK caches and GLib schemas",
+      "Archive exact Ubuntu source descriptors, original sources and distribution patches for all identified packages",
+      "Embed original Ubuntu and runtime notices",
+      "Check finished AppImage extraction, native window, WebKit process and real PNG/JPEG decoding, rotation and exports"
+    ]
+  }
 }

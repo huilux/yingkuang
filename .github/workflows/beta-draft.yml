@@ -8,6 +8,16 @@ on:
         required: true
         type: string
 
+      assemble_only:
+        description: Resume materials assembly from already verified private draft packages
+        required: false
+        default: false
+        type: boolean
+      build_commit:
+        description: Exact binary source SHA (required for assembly-only resume)
+        required: false
+        type: string
+
 permissions:
   contents: read
 
@@ -17,6 +27,7 @@ concurrency:
 
 jobs:
   beta:
+    if: ${{ !inputs.assemble_only }}
     permissions:
       contents: write
     strategy:
@@ -138,6 +149,7 @@ jobs:
 
   assemble:
     needs: beta
+    if: ${{ always() && (needs.beta.result == 'success' || inputs.assemble_only) }}
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     permissions:
@@ -145,21 +157,27 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ inputs.release_tag }}
+      BUILD_COMMIT: ${{ inputs.build_commit || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Require unchanged application source when resuming assembly
+        run: |
+          node scripts/beta-release.mjs validate "$RELEASE_TAG" "$BUILD_COMMIT"
+          git diff --exit-code "$BUILD_COMMIT" HEAD -- . ':(exclude)scripts/assemble-beta-release.py' ':(exclude)scripts/test_beta_release.py' ':(exclude).github/workflows/beta-draft.yml'
       - name: Download verified files from the private draft
         run: |
-          node scripts/beta-release.mjs validate "$RELEASE_TAG" "$GITHUB_SHA"
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*_linux-x64*' --pattern '*_windows-x64*' --pattern '*_linux-appimage-x64*' --dir test-output/beta-staging
       - name: Test release assembly guards
         run: python -m unittest discover -s scripts -p 'test_beta_release.py'
       - name: Assemble three packages, materials and checksums
-        run: python scripts/assemble-beta-release.py test-output/beta-staging test-output/beta-release "$GITHUB_SHA"
+        run: python scripts/assemble-beta-release.py test-output/beta-staging test-output/beta-release "$BUILD_COMMIT"
       - name: Upload five assets only to the existing draft
-        run: node scripts/beta-release.mjs upload "$RELEASE_TAG" "$GITHUB_SHA"
+        run: node scripts/beta-release.mjs upload "$RELEASE_TAG" "$BUILD_COMMIT"
