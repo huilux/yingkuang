@@ -1,6 +1,6 @@
 [package]
 name = "yingkuang"
-version = "0.5.7"
+version = "0.5.8-beta.1"
 description = "Local photography watermark and frame editor"
 authors = ["Ming"]
 license = "MIT"

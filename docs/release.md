@@ -92,3 +92,13 @@ Linux CI 在 AppImage 构建完成后，会从实际产物提取文件，并在�
 通过验收后再创建正式 Release，提供对应架构的安装包、校验和、许可文件和变更说明。只推送计划公开的分支与版本标签，不上传完整本地工作目录或使用镜像推送。
 
 2026-10-15，提交 `d2d56b4` 的[四平台 CI](https://github.com/huilux/yingkuang/actions/runs/38662434121) 已全部通过，包括 Linux 实际 AppImage 审查及附件上传。实机验收范围不因此扩大。
+
+## 预发布草稿流程
+
+首批测试包范围为 Windows x64 NSIS 和 Linux x64 deb，版本 `0.5.8-beta.1`；AppImage 与 macOS 暂不进入此流程。日常桌面 CI 继续关闭安装包附件上传。手动工作流 `.github/workflows/beta-draft.yml` 只接受与源码版本一致、指向本次完整提交 SHA 的已有预发布草稿；上传前再次核对草稿状态，禁止向已发布版本上传。
+
+先完成版本同步和提交，使用 `gh release create v<版本> --draft --prerelease --target <完整提交SHA> --title <标题> --notes-file <说明文件>` 创建草稿，再执行 `gh workflow run beta-draft.yml --ref main -f release_tag=v<版本>`。若默认分支在其间变化，应重新核对草稿的目标提交，不能混用不同提交的安装包。
+
+工作流运行测试、构建和包内许可核对；Linux 在 Xvfb 中观察原生窗口，Windows 检查真实 NSIS 静默安装、原生窗口和卸载。通过后向草稿上传各平台安装包、许可正文、依赖清单、检查结果及 SHA-256 校验文件。不会自动发布草稿，也不会恢复公开 Actions 安装包附件。草稿仅对有权限的维护者可见，发布后才适合向测试用户分发。
+
+自动窗口检查不覆盖照片导入、编辑、导出、升级和所有干净用户环境；测试版说明须列出这些未验收范围以及未签名状态。发布前下载草稿附件、核对校验和与检查结果，补充实际交互验收，再将草稿发布为 Pre-release。
