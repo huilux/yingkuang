@@ -50,6 +50,14 @@ npm run tauri build -- --bundles dmg
 
 测试版可以暂不做 Windows 可信签名或 macOS Developer ID 签名与公证，但必须明确标注状态及系统可能提示或拦截的限制，不建议用户关闭系统安全防护。面向普通用户长期分发时，再评估签名成本与配置。
 
+### macOS 通过 GitHub 下载
+
+macOS 的发布目标为 GitHub Releases 下载 DMG，分别提供 Apple Silicon 和 Intel 版本；测试交付可使用包含 DMG、校验和及许可材料的 ZIP。本项目当前不计划上架 Mac App Store。
+
+现阶段沿用 ad-hoc 临时签名，不做 Apple 公证；购买付费开发者会员不作为 GitHub 下载版的发布前置条件。临时签名不能免除 macOS 的安全提示：首次打开时，用户可能需要在确认来源及校验和后，按 [Apple 官方说明](https://support.apple.com/zh-cn/102445)使用「系统设置 → 隐私与安全性 → 仍要打开」。不能保证所有系统或受管理设备均提供此入口；实际安装结果由实机验收记录，不要求用户关闭系统安全检查。
+
+今后若要减少开发者身份验证和公证相关的安装阻碍，可接入 Developer ID Application 签名与 Apple 公证，仍通过 GitHub 分发，无需上架商店。两者的配置见 [Tauri macOS 签名说明](https://v2.tauri.app/distribute/sign/macos/)。是否公开当前测试包，继续以依赖分发许可核对、实机验收和准确说明签名状态为依据。
+
 ## 安装包分发前检查
 
 - 当前演示照片已由维护者确认原创并按 MIT 提供，图标已替换为项目新生成素材。检查新增图片的来源、元数据和待公开内容，历史提交中的旧图标也已替换，并保留原提交树结构。不得打包本机备份、私人原片、签名证书或密钥。
