@@ -103,7 +103,7 @@ jobs:
           retention-days: 14
           path: test-output/appimage-audit/
       - name: Upload test packages
-        # Source-only publication: re-enable after binary distribution review.
+        # Public packages are staged and verified by beta-draft.yml.
         if: ${{ false }}
         uses: actions/upload-artifact@v4
         with:

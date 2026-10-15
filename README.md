@@ -17,16 +17,28 @@
 
 ## 平台与安装
 
-当前测试版为 [0.5.8-beta.5](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.5)。普通用户只需下载对应系统的安装包。
+当前测试版为 [0.5.8-beta.6](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.6)。普通用户只需下载对应系统的安装包。
 
 | 系统 | 下载 |
 | --- | --- |
-| Windows x64 | [EXE 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.5/yingkuang_0.5.8-beta.5_windows-x64.exe) |
-| Debian/Ubuntu x64 | [DEB 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.5/yingkuang_0.5.8-beta.5_linux-x64.deb) |
+| Windows x64 | [EXE 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.6/yingkuang_0.5.8-beta.6_windows-x64.exe) |
+| Debian/Ubuntu x64 | [DEB 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.6/yingkuang_0.5.8-beta.6_linux-x64.deb) |
+| Linux x64（AppImage） | [AppImage](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.6/yingkuang_0.5.8-beta.6_linux-x64.AppImage) |
 
 校验文件和技术材料在同一发布页；许可证已随安装包保留。GitHub 的 `Source code` 是项目源码，不是安装包。
 
-Windows 测试包暂未可信签名，缺少 WebView2 时需要联网安装运行时。Linux DEB 在 Ubuntu 22.04 验证；其他发行版、完整照片编辑导出和升级仍需实机测试。AppImage 尚未公开提供，macOS 暂缓交付。
+Windows 测试包暂未可信签名，缺少 WebView2 时需要联网安装运行时。DEB 已在 Ubuntu 22.04 验证安装与卸载；AppImage 已在 Ubuntu 22.04 与本机 Arch Linux 验证启动和部分真实图片处理，使用 X11/XWayland。其他系统配置、完整编辑交互和升级仍需实机测试。macOS 暂缓交付。
+
+AppImage 依赖系统 OpenGL/EGL/GLES 与 Wayland 客户端运行库。精简 Debian/Ubuntu 环境缺库时安装 `libgl1 libegl1 libgles2 libwayland-client0`。
+
+AppImage 下载后赋予执行权限并运行：
+
+```sh
+chmod +x yingkuang_0.5.8-beta.6_linux-x64.AppImage
+./yingkuang_0.5.8-beta.6_linux-x64.AppImage
+```
+
+系统不能挂载 AppImage 时，可添加 `--appimage-extract-and-run` 运行；此方式已在 CI 验证。
 
 ## 开发启动
 
