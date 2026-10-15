@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-2026-10-15，已发布 [0.5.8-beta.2 Pre-release](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.2)，固定源码提交 `78b016a`，提供 Windows x64 EXE 和 Linux x64 deb。[受控测试包流程](https://github.com/huilux/yingkuang/actions/runs/38678099922)两个作业全部通过，含新主题/空画布 WebKit 回归、包内许可和原生窗口检查；Windows 另通过安装与卸载检查。beta.1 已收到 Windows 11 用户未发现功能问题的反馈，beta.2 完整交互复测及 Linux 系统安装、卸载仍待完成。AppImage 与 macOS 不在本版下载范围。
+2026-10-15，已发布 [0.5.8-beta.3 Pre-release](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.3)，固定源码提交 `9cbc595`，提供 Windows x64 EXE 和 Linux x64 deb。[受控测试包流程](https://github.com/huilux/yingkuang/actions/runs/38685099011)两个作业全部通过，含标题栏鼠标事件、主题/空画布和裁切延迟加载 WebKit 回归、包内许可及原生窗口检查。Windows 另通过静默安装、真实 WebView2 中的鼠标/键盘主题循环、实际颜色、重新加载后设置保留、系统主题变化与卸载检查。12 个附件和 9 项 SHA-256 校验引用已核对，两平台均验证 16 份包内许可文件。beta.1 已收到 Windows 11 用户未发现功能问题的反馈；beta.3 完整照片编辑、导出、升级及 Linux 系统安装、卸载仍待实机验收。macOS 双架构已构建成功，但分发依赖许可核对和 Mac 安装验收尚未完成，暂不提供 dmg；AppImage 也不在本版下载范围。
 
 项目目标为 Linux、Windows、macOS。2026-10-14，运行代码提交 `6f767c4` 已通过[四平台 CI 的测试、Clippy 与安装包构建](https://github.com/huilux/yingkuang/actions/runs/38541170291)。Linux CI 同时通过生产 CSP 的 WebKit 检查。许可证随包构建提交 `ac08fd8` 也已通过[四平台 CI](https://github.com/huilux/yingkuang/actions/runs/38561583230)，其本地 deb 已解包逐字节核对 npm/Rust 清单与正文、项目 MIT、第三方声明及 12 份字体许可。已有 Arch Linux 历史桌面验收；新生成安装包的干净环境安装和完整实机验收仍待完成，不能把构建成功当作已全面支持该系统。
 
@@ -97,10 +97,10 @@ Linux CI 在 AppImage 构建完成后，会从实际产物提取文件，并在�
 
 ## 预发布草稿流程
 
-首批测试包范围为 Windows x64 NSIS 和 Linux x64 deb，当前版本 `0.5.8-beta.2`；AppImage 与 macOS 暂不进入此流程。日常桌面 CI 继续关闭安装包附件上传。手动工作流 `.github/workflows/beta-draft.yml` 只接受与源码版本一致、指向本次完整提交 SHA 的已有预发布草稿；上传前再次核对草稿状态，禁止向已发布版本上传。
+首批测试包范围为 Windows x64 NSIS 和 Linux x64 deb，当前版本 `0.5.8-beta.3`；AppImage 与 macOS 暂不进入此流程。日常桌面 CI 继续关闭安装包附件上传。手动工作流 `.github/workflows/beta-draft.yml` 只接受与源码版本一致、指向本次完整提交 SHA 的已有预发布草稿；上传前再次核对草稿状态，禁止向已发布版本上传。
 
-先完成版本同步和提交，使用 `gh release create v<版本> --draft --prerelease --target <完整提交SHA> --title <标题> --notes-file <说明文件>` 创建草稿，再执行 `gh workflow run beta-draft.yml --ref main -f release_tag=v<版本>`。若默认分支在其间变化，应重新核对草稿的目标提交，不能混用不同提交的安装包。
+先完成版本同步、提交和推送，确认 `v<版本>` 标签指向该完整提交；新标签可用 `git tag v<版本> <完整提交SHA>` 和 `git push origin v<版本>` 创建。使用 `gh release create v<版本> --draft --prerelease --target <完整提交SHA> --title <标题> --notes-file <说明文件>` 创建草稿，再执行 `gh workflow run beta-draft.yml --ref main -f release_tag=v<版本>`。若默认分支在其间变化，应重新核对草稿的目标提交，不能混用不同提交的安装包。已发布版本的标签和附件保持不变，后续修复使用新版本。
 
-工作流运行测试、构建和包内许可核对；Linux 在 Xvfb 中观察原生窗口，Windows 检查真实 NSIS 静默安装、原生窗口和卸载。通过后向草稿上传各平台安装包、许可正文、依赖清单、检查结果及 SHA-256 校验文件。不会自动发布草稿，也不会恢复公开 Actions 安装包附件。草稿仅对有权限的维护者可见，发布后才适合向测试用户分发。
+工作流运行测试、构建和包内许可核对；Linux 在 Xvfb 中观察原生窗口，Windows 检查真实 NSIS 静默安装、原生窗口、WebView2 主题交互与实际颜色、设置保留、系统响应和卸载。通过后向草稿上传各平台安装包、许可正文、依赖清单、检查结果及 SHA-256 校验文件。不会自动发布草稿，也不会恢复公开 Actions 安装包附件。草稿仅对有权限的维护者可见，发布后才适合向测试用户分发。
 
 自动窗口检查不覆盖照片导入、编辑、导出、升级和所有干净用户环境；测试版说明须列出这些未验收范围以及未签名状态。发布前下载草稿附件、核对校验和与检查结果，补充实际交互验收，再将草稿发布为 Pre-release。
