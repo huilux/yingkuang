@@ -10,7 +10,7 @@ let target;
 for (let attempt = 0; attempt < 100 && !target; attempt++) {
   try {
     const response = await fetch(`${endpoint}/json/list`, { signal: AbortSignal.timeout(1000) });
-    target = (await response.json()).find(page => page.type === 'page' && /(?:tauri\.localhost|localhost:1424)/.test(page.url));
+    target = (await response.json()).find(page => page.type === 'page' && /^https?:\/\/(?:tauri\.localhost|(?:localhost|127\.0\.0\.1):1424)(?:\/|$)/.test(page.url));
   } catch { /* WebView may still be starting. */ }
   if (!target) await delay(100);
 }
