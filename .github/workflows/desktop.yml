@@ -79,6 +79,11 @@ jobs:
       - name: Build Linux AppImage
         if: runner.os == 'Linux'
         run: npm run build:appimage
+      - name: Validate actual Debian package metadata
+        if: runner.os == 'Linux'
+        run: |
+          package=$(node scripts/beta-release.mjs package linux-x64)
+          node scripts/check-deb.mjs "$package"
       - name: Audit actual AppImage system payload
         if: runner.os == 'Linux'
         shell: bash

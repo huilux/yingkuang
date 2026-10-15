@@ -42,12 +42,12 @@ for ($attempt = 0; $attempt -lt 30 -and (Test-Path $app); $attempt++) { Start-Sl
 if (Test-Path $app) { throw 'Application executable remains after uninstall' }
 $report = Get-Content test-output/beta-smoke-windows-x64.json | ConvertFrom-Json
 $report.uninstall = 'passed'
-$report | ConvertTo-Json | Set-Content -Encoding utf8NoBOM test-output/beta-smoke-windows-x64.json
+$report | ConvertTo-Json -Depth 10 | Set-Content -Encoding utf8NoBOM test-output/beta-smoke-windows-x64.json
 # Update the staged report after uninstall and recalculate its checksums.
 $stagedReport = Get-ChildItem test-output/beta/windows-x64 -Filter '*_checks.json'
 $checks = Get-Content $stagedReport.FullName | ConvertFrom-Json
 $checks.uninstall = 'passed'
-$checks | ConvertTo-Json | Set-Content -Encoding utf8NoBOM $stagedReport.FullName
+$checks | ConvertTo-Json -Depth 10 | Set-Content -Encoding utf8NoBOM $stagedReport.FullName
 $hashes = Get-ChildItem test-output/beta/windows-x64 -File | Where-Object { $_.Name -notlike '*_SHA256SUMS.txt' } | Sort-Object Name | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" }
 $sum = Get-ChildItem test-output/beta/windows-x64 -Filter '*_SHA256SUMS.txt'
 $hashes | Set-Content -Encoding utf8NoBOM $sum.FullName

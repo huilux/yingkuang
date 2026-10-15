@@ -1,6 +1,10 @@
 # 构建与发布
 
+当前交付优先级为 Linux 与 Windows；macOS 保留已有未发布的验收草稿，暂不推进新发布。
+
 ## 当前状态
+
+2026-10-15 补充核对发现 beta.3 的 DEB 控制文件使用 `Package: 映框`，不符合 Debian 包名要求，dpkg/APT 安装会失败。旧的解包及启动检查没有覆盖该问题；beta.5 使用 Linux 专用英文包名并增加元数据和真实安装/卸载检查，桌面中文显示名保持不变。修复包尚未发布前，不推荐安装旧 DEB。
 
 2026-10-15，已发布 [0.5.8-beta.3 Pre-release](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.3)，固定源码提交 `9cbc595`，提供 Windows x64 EXE 和 Linux x64 deb。[受控测试包流程](https://github.com/huilux/yingkuang/actions/runs/38685099011)两个作业全部通过，含标题栏鼠标事件、主题/空画布和裁切延迟加载 WebKit 回归、包内许可及原生窗口检查。Windows 另通过静默安装、真实 WebView2 中的鼠标/键盘主题循环、实际颜色、重新加载后设置保留、系统主题变化与卸载检查。12 个附件和 9 项 SHA-256 校验引用已核对，两平台均验证 16 份包内许可文件。beta.1 已收到 Windows 11 用户未发现功能问题的反馈；beta.3 完整照片编辑、导出、升级及 Linux 系统安装、卸载仍待实机验收。macOS 双架构已构建成功，但分发依赖许可核对和 Mac 安装验收尚未完成，暂不提供 dmg；AppImage 也不在本版下载范围。
 
@@ -113,10 +117,23 @@ Linux CI 在 AppImage 构建完成后，会从实际产物提取文件，并在�
 
 ## 预发布草稿流程
 
-首批测试包范围为 Windows x64 NSIS 和 Linux x64 deb，当前版本 `0.5.8-beta.3`；AppImage 与 macOS 暂不进入此流程。日常桌面 CI 继续关闭安装包附件上传。手动工作流 `.github/workflows/beta-draft.yml` 只接受与源码版本一致、指向本次完整提交 SHA 的已有预发布草稿；上传前再次核对草稿状态，禁止向已发布版本上传。
+测试包范围为 Windows x64 NSIS 和 Linux x64 deb，下一轮版本为 `0.5.8-beta.5`；AppImage 与 macOS 暂不进入此流程。日常桌面 CI 继续关闭安装包附件上传。手动工作流 `.github/workflows/beta-draft.yml` 只接受与源码版本一致、指向本次完整提交 SHA 的已有预发布草稿；上传前再次核对草稿状态，禁止向已发布版本上传。
 
 先完成版本同步、提交和推送，确认 `v<版本>` 标签指向该完整提交；新标签可用 `git tag v<版本> <完整提交SHA>` 和 `git push origin v<版本>` 创建。使用 `gh release create v<版本> --draft --prerelease --target <完整提交SHA> --title <标题> --notes-file <说明文件>` 创建草稿，再执行 `gh workflow run beta-draft.yml --ref main -f release_tag=v<版本>`。若默认分支在其间变化，应重新核对草稿的目标提交，不能混用不同提交的安装包。已发布版本的标签和附件保持不变，后续修复使用新版本。
 
-工作流运行测试、构建和包内许可核对；Linux 在 Xvfb 中观察原生窗口，Windows 检查真实 NSIS 静默安装、原生窗口、WebView2 主题交互与实际颜色、设置保留、系统响应和卸载。通过后向草稿上传各平台安装包、许可正文、依赖清单、检查结果及 SHA-256 校验文件。不会自动发布草稿，也不会恢复公开 Actions 安装包附件。草稿仅对有权限的维护者可见，发布后才适合向测试用户分发。
+工作流运行测试、构建和包内许可核对；Linux 在 Ubuntu 22.04 CI 通过 APT 实际安装 DEB、核对包数据库及安装后的许可、在 Xvfb 中观察原生窗口并卸载；构建依赖仍在机上，不能视为干净用户系统验收。Windows 检查真实 NSIS 静默安装、原生窗口、WebView2 主题交互与实际颜色、设置保留、系统响应和卸载。
+
+两个平台全部通过后，汇总作业核对源码提交与文件摘要，并将公开附件收敛为四份：
+
+| 附件 | 用途 |
+| --- | --- |
+| `yingkuang_<版本>_windows-x64.exe` | Windows 安装包，普通用户下载此项 |
+| `yingkuang_<版本>_linux-x64.deb` | Debian/Ubuntu 安装包，普通用户下载此项 |
+| `SHA256SUMS.txt` | 两个安装包及技术材料 ZIP 的 SHA-256 |
+| `yingkuang_<版本>_release-materials.zip` | 两平台许可正文、依赖清单、自动检查、构建摘要及未修改的 MPL 依赖源码 |
+
+普通用户只需对应系统的安装包，许可证仍随安装包保留。GitHub 另外自动提供 `Source code (zip)` 和 `Source code (tar.gz)`，是开发者使用的项目源码归档，不是安装包。历史版本已发布的附件保持原样，新格式从 beta.5 开始使用。
+
+归档脚本为 `scripts/assemble-beta-release.py`，修改后运行 `python3 -m unittest discover -s scripts -p 'test_beta_release.py'`（Python 3.11+）。汇总后只向已有草稿上传四份附件，不会自动发布草稿，也不会恢复公开 Actions 安装包附件。草稿仅对有权限的维护者可见，发布后才适合向测试用户分发。
 
 自动窗口检查不覆盖照片导入、编辑、导出、升级和所有干净用户环境；测试版说明须列出这些未验收范围以及未签名状态。发布前下载草稿附件、核对校验和与检查结果，补充实际交互验收，再将草稿发布为 Pre-release。

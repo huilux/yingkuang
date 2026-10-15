@@ -27,6 +27,8 @@
 
 在 [Release 页面](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.3) 下载对应安装包，并核对同平台的 `SHA256SUMS.txt`；页面同时提供许可证、依赖清单、检查结果和 MPL 依赖源码。Windows 测试包未做可信代码签名。AppImage 与 macOS 待完成分发核对和验收后再提供。
 
+普通用户只需下载 Windows 的 `.exe` 或 Debian/Ubuntu 的 `.deb`。其他许可、检查和依赖源码附件无需逐个下载；GitHub 自动提供的 `Source code` 是项目源码，也不是安装包。
+
 已有 Arch Linux 桌面使用验证及 beta.1 的 Windows 11 用户测试反馈；beta.3 的完整照片编辑与导出复测、干净用户环境及升级验收仍待完成，最低系统版本尚未确认。日常 CI 保持安装包附件上传关闭，测试包通过受控流程进入 Release。[构建与发布说明](docs/release.md)包含命令与验证范围。
 
 ## 开发启动

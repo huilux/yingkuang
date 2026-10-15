@@ -45,6 +45,7 @@ async function find(directory, filename) {
 async function stage(platform, installedRoot, commit) {
   const config = platforms[platform];
   if (!config) throw new Error('Unsupported beta platform');
+  if (!/^[a-f0-9]{40}$/.test(commit)) throw new Error('Expected the exact source commit');
   const { version } = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
   const candidates = (await find(resolve(installedRoot), 'inventory.json')).filter(path => path.replaceAll('\\', '/').endsWith(`/licenses/dependencies/${config.target}/inventory.json`));
   if (candidates.length !== 1) throw new Error('Installed dependency inventory missing or ambiguous');
@@ -83,13 +84,42 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   if (command === 'validate') await validate(...args);
   else if (command === 'package') console.log(await packagePath(args[0], JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version));
   else if (command === 'stage') await stage(...args);
-  else if (command === 'upload') {
+  else if (command === 'upload-platform') {
     const [platform, tag, commit] = args;
-    await validate(tag, commit);
+    if (!platforms[platform]) throw new Error('Unsupported beta platform');
+    const version = await validate(tag, commit);
     const directory = join(root, 'test-output/beta', platform);
     const files = (await readdir(directory)).sort().map(name => join(directory, name));
-    if (files.length !== 5) throw new Error('Expected installer, inventory, licenses, checks and checksums');
-    run(['release', 'upload', tag, ...files, '--repo', repo]);
-    console.log(`Uploaded ${platform} assets to draft ${tag}; draft remains unpublished`);
-  } else throw new Error('Expected validate, package, stage or upload command');
+    const prefix = `yingkuang_${version}_${platform}`;
+    const expected = [platforms[platform].extension, '_dependency-inventory.json', '_LICENSES.txt', '_checks.json', '_SHA256SUMS.txt'].map(suffix => prefix + suffix).sort();
+    if (JSON.stringify(files.map(file => basename(file))) !== JSON.stringify(expected)) throw new Error('Unexpected private staging assets');
+    run(['release', 'upload', tag, ...files, '--repo', repo, '--clobber']);
+    console.log(`Staged ${platform} files privately; assembly will combine the supporting files`);
+  }
+  else if (command === 'upload') {
+    const [tag, commit] = args;
+    const version = await validate(tag, commit);
+    const directory = join(root, 'test-output/beta-release');
+    const files = (await readdir(directory)).sort().map(name => join(directory, name));
+    const expected = ['SHA256SUMS.txt', `yingkuang_${version}_linux-x64.deb`, `yingkuang_${version}_windows-x64.exe`, `yingkuang_${version}_release-materials.zip`].sort();
+    if (JSON.stringify(files.map(file => basename(file))) !== JSON.stringify(expected)) throw new Error('Expected two installers, one materials archive and one checksum file');
+    const sums = new Map((await readFile(join(directory, 'SHA256SUMS.txt'), 'utf8')).trim().split('\n').map(line => line.split('  ')));
+    if (sums.size !== 3) throw new Error('Expected three release checksums');
+    for (const file of files.filter(file => basename(file) !== 'SHA256SUMS.txt')) {
+      const checksum = createHash('sha256').update(await readFile(file)).digest('hex');
+      if (sums.get(checksum) !== basename(file)) throw new Error('Release checksum mismatch');
+    }
+    run(['release', 'upload', tag, ...files, '--repo', repo, '--clobber']);
+    // Only an exact-source unpublished draft can be cleaned up; installers stay
+    // byte-for-byte identical and all supporting records remain inside the ZIP.
+    await validate(tag, commit);
+    for (const platform of Object.keys(platforms)) {
+      for (const suffix of ['_dependency-inventory.json', '_LICENSES.txt', '_checks.json', '_SHA256SUMS.txt']) {
+        run(['release', 'delete-asset', tag, `yingkuang_${version}_${platform}${suffix}`, '--yes', '--repo', repo]);
+      }
+    }
+    const { assets } = JSON.parse(run(['release', 'view', tag, '--repo', repo, '--json', 'assets']));
+    if (JSON.stringify(assets.map(asset => asset.name).sort()) !== JSON.stringify(expected)) throw new Error('Unexpected remaining draft assets');
+    console.log(`Uploaded four Windows/Linux assets to draft ${tag}; draft remains unpublished`);
+  } else throw new Error('Expected validate, package, stage, upload-platform or upload command');
 }

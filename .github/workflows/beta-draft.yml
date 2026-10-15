@@ -79,21 +79,47 @@ jobs:
             sleep 1
           done
           WATERMARK_TEST_WIDTH=1100 WATERMARK_TEST_HEIGHT=720 xvfb-run -a /usr/bin/python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 interface-controls-regression.js crop-loading-regression.js theme-layout-regression.js
-      - name: Extract deb, observe native window and verify installed notices
+      - name: Install deb, observe native window, verify notices and uninstall
         if: runner.os == 'Linux'
         run: |
           package=$(node scripts/beta-release.mjs package linux-x64)
-          install_dir=$(mktemp -d)
-          dpkg-deb --extract "$package" "$install_dir"
-          xvfb-run -a /usr/bin/python3 scripts/smoke-beta-linux.py "$install_dir"
-          node scripts/beta-release.mjs stage linux-x64 "$install_dir" "$GITHUB_SHA"
+          node scripts/check-deb.mjs "$package"
+          xvfb-run -a /usr/bin/python3 scripts/smoke-beta-linux.py "$package"
       - name: Install Windows package, observe native window and uninstall
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/smoke-beta-windows.ps1
-      - name: Upload Linux assets only to the existing draft
+      - name: Stage Linux files only in the existing unpublished draft
         if: runner.os == 'Linux'
-        run: node scripts/beta-release.mjs upload linux-x64 "$RELEASE_TAG" "$GITHUB_SHA"
-      - name: Upload Windows assets only to the existing draft
+        run: node scripts/beta-release.mjs upload-platform linux-x64 "$RELEASE_TAG" "$GITHUB_SHA"
+      - name: Stage Windows files only in the existing unpublished draft
         if: runner.os == 'Windows'
-        run: node scripts/beta-release.mjs upload windows-x64 "$env:RELEASE_TAG" "$env:GITHUB_SHA"
+        run: node scripts/beta-release.mjs upload-platform windows-x64 "$env:RELEASE_TAG" "$env:GITHUB_SHA"
+
+  assemble:
+    needs: beta
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download verified files from the private draft
+        run: |
+          node scripts/beta-release.mjs validate "$RELEASE_TAG" "$GITHUB_SHA"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*_linux-x64*' --pattern '*_windows-x64*' --dir test-output/beta-staging
+      - name: Test release assembly guards
+        run: python -m unittest discover -s scripts -p 'test_beta_release.py'
+      - name: Assemble two installers, materials and checksums
+        run: python scripts/assemble-beta-release.py test-output/beta-staging test-output/beta-release "$GITHUB_SHA"
+      - name: Upload four assets only to the existing draft
+        run: node scripts/beta-release.mjs upload "$RELEASE_TAG" "$GITHUB_SHA"
