@@ -59,7 +59,7 @@ async function add(ecosystem, name, version, license, directory, extraFile, auth
   }
   const record = { ecosystem, name, version, license, authors, files: files.map(item => item.file), supplementalSources, reviewRequired: supplement?.reviewRequired ?? null };
   packages.push(record);
-  for (const item of files) texts.push(`===== ${ecosystem}: ${name}@${version} / ${item.file} =====\nDeclared license: ${license ?? 'UNKNOWN'}\n\n${item.text}`);
+  for (const item of files) texts.push(`===== ${ecosystem}: ${name}@${version} / ${item.file} =====\nDeclared license: ${license ?? 'UNKNOWN'}\n${authors.length ? `Upstream package authors: ${authors.join('; ')}\n` : ''}\n${item.text}`);
 }
 const absentOptional = [];
 for (const [path, entry] of Object.entries(lock.packages).sort(([a], [b]) => a.localeCompare(b, 'en'))) {

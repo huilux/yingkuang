@@ -1,0 +1,67 @@
+name: Prepare macOS acceptance draft
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing prerelease draft matching package.json and this exact commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-test-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: macos-arm64
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            platform: macos-x64
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate existing draft and exact source version
+        run: node scripts/beta-release.mjs validate "$RELEASE_TAG" "$GITHUB_SHA"
+      - run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          cache-on-failure: true
+      - run: npm ci
+      - run: npm test
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Build ad-hoc signed DMG with dependency notices
+        run: npm run tauri build -- --bundles dmg --ci
+        env:
+          APPLE_SIGNING_IDENTITY: '-'
+      - name: Inspect DMG and stage tester archive
+        run: python3 scripts/prepare-macos-test.py "${{ matrix.platform }}" "${{ matrix.target }}" "$GITHUB_SHA"
+      - name: Upload only to the existing unpublished draft
+        run: |
+          node scripts/beta-release.mjs validate "$RELEASE_TAG" "$GITHUB_SHA"
+          gh release upload "$RELEASE_TAG" test-output/macos-test/${{ matrix.platform }}/* --repo "$GITHUB_REPOSITORY"
