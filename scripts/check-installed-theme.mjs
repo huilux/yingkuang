@@ -46,13 +46,20 @@ async function waitFor(expression) {
   }
   throw new Error(`Condition not reached: ${expression}`);
 }
-const state = () => evaluate(`({preference: document.documentElement.dataset.themePreference, theme: document.documentElement.dataset.theme, background: getComputedStyle(document.body).backgroundColor})`);
+const state = () => evaluate(`({preference: document.documentElement.dataset.themePreference, theme: document.documentElement.dataset.theme, background: getComputedStyle(document.body).backgroundColor, rootBackground: getComputedStyle(document.documentElement).backgroundColor, appBackground: getComputedStyle(document.querySelector('.app-shell')).backgroundColor, backgroundToken: getComputedStyle(document.documentElement).getPropertyValue('--bg-app'), lightSelectorMatches: document.documentElement.matches(':root[data-theme="light"]')})`);
 async function check(preference) {
   await waitFor(`document.documentElement.dataset.themePreference === ${JSON.stringify(preference)}`);
-  const actual = await state();
   const expected = preference === 'system' ? await evaluate(`matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'`) : preference;
+  const background = expected === 'dark' ? 'rgb(23, 25, 24)' : 'rgb(231, 233, 230)';
+  try {
+    await waitFor(`document.documentElement.dataset.theme === ${JSON.stringify(expected)} && getComputedStyle(document.body).backgroundColor === ${JSON.stringify(background)}`);
+  } catch {
+    throw new Error(`Theme colors did not settle for ${preference}: ${JSON.stringify(await state())}`);
+  }
+  const actual = await state();
   assert.equal(actual.theme, expected);
-  assert.equal(actual.background, expected === 'dark' ? 'rgb(23, 25, 24)' : 'rgb(231, 233, 230)', 'Theme state changed without applying colors');
+  assert.equal(actual.background, background, 'Theme state changed without applying colors');
+  assert.equal(actual.appBackground, background, 'Visible application background did not update');
   return actual;
 }
 async function click() {
