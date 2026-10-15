@@ -2,6 +2,8 @@
 
 ## 当前状态
 
+2026-10-15，已发布 [0.5.8-beta.2 Pre-release](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.2)，固定源码提交 `78b016a`，提供 Windows x64 EXE 和 Linux x64 deb。[受控测试包流程](https://github.com/huilux/yingkuang/actions/runs/38678099922)两个作业全部通过，含新主题/空画布 WebKit 回归、包内许可和原生窗口检查；Windows 另通过安装与卸载检查。beta.1 已收到 Windows 11 用户未发现功能问题的反馈，beta.2 完整交互复测及 Linux 系统安装、卸载仍待完成。AppImage 与 macOS 不在本版下载范围。
+
 项目目标为 Linux、Windows、macOS。2026-10-14，运行代码提交 `6f767c4` 已通过[四平台 CI 的测试、Clippy 与安装包构建](https://github.com/huilux/yingkuang/actions/runs/38541170291)。Linux CI 同时通过生产 CSP 的 WebKit 检查。许可证随包构建提交 `ac08fd8` 也已通过[四平台 CI](https://github.com/huilux/yingkuang/actions/runs/38561583230)，其本地 deb 已解包逐字节核对 npm/Rust 清单与正文、项目 MIT、第三方声明及 12 份字体许可。已有 Arch Linux 历史桌面验收；新生成安装包的干净环境安装和完整实机验收仍待完成，不能把构建成功当作已全面支持该系统。
 
 | 平台 | CI 环境 | 产物 |

@@ -9,6 +9,7 @@
 - 独立文字水印、拍摄参数覆盖、多选对齐和撤销重做。
 - 裁切、90° 旋转与 ±45° 水平校正，每张照片独立保存。
 - 12 款离线字体，支持导入 TTF/OTF。
+- 跟随系统、浅色和深色界面主题，记住上次选择。
 - 模板更新、另存、JSON 备份，以及缺失原图重新定位。
 - JPEG/PNG 批量导出、尺寸与质量、重名处理、取消重试、EXIF/GPS 控制和 sRGB 色彩转换。
 
@@ -16,15 +17,17 @@
 
 ## 平台与安装
 
-Linux x64、Windows x64、macOS Apple Silicon 与 Intel 已通过[跨平台 CI 的测试和安装包构建](https://github.com/huilux/yingkuang/actions/runs/38541170291)。已有 Arch Linux 的桌面使用验证；各平台干净环境安装、升级与完整实机验收仍待完成。
+已发布 [0.5.8-beta.2 预发布测试版](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.2)，提供 Windows x64 和 Linux x64 deb。两平台通过[本版测试、安装包构建和自动启动检查](https://github.com/huilux/yingkuang/actions/runs/38678099922)，Windows 还通过静默安装与卸载检查。macOS 双架构曾通过[跨平台构建](https://github.com/huilux/yingkuang/actions/runs/38662434121)，当前暂不提供下载。
 
-| 平台 | CI 测试安装包 |
-| --- | --- |
-| Linux x64 | AppImage、deb |
-| Windows x64 | exe（NSIS） |
-| macOS Apple Silicon / Intel | dmg |
+| 平台 | 本版测试包 | CI 构建范围 |
+| --- | --- | --- |
+| Linux x64 | deb | deb、AppImage |
+| Windows x64 | EXE（NSIS） | EXE（NSIS） |
+| macOS Apple Silicon / Intel | 暂未提供 | dmg |
 
-当前先开放源码，暂不提供预编译安装包下载，也未创建正式 Release。CI 继续验证各平台构建，但暂停上传安装包；待依赖许可核对和实机验收完成后再开放下载。已有构建中 Windows 包未签名，macOS 包仅使用 ad-hoc 签名、未公证。可按下方步骤从源码运行。[构建与发布说明](docs/release.md)包含各平台命令与验证范围。
+在 [Release 页面](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.2) 下载对应安装包，并核对同平台的 `SHA256SUMS.txt`；页面同时提供许可证、依赖清单、检查结果和 MPL 依赖源码。Windows 测试包未做可信代码签名。AppImage 与 macOS 待完成分发核对和验收后再提供。
+
+已有 Arch Linux 桌面使用验证及 beta.1 的 Windows 11 用户测试反馈；beta.2 的完整交互复测、干净环境安装与升级验收仍待完成，最低系统版本尚未确认。日常 CI 保持安装包附件上传关闭，测试包通过受控流程进入 Release。[构建与发布说明](docs/release.md)包含命令与验证范围。
 
 ## 开发启动
 
