@@ -47,6 +47,7 @@
       "Archive exact Ubuntu source descriptors, original sources and distribution patches for all identified packages",
       "Embed original Ubuntu and runtime notices",
       "Check finished AppImage extraction, native window, WebKit process and real PNG/JPEG decoding, rotation and exports"
-    ]
+    ],
+    "hostGraphicsLibraryPolicy": "libwayland-client.so.0 and Mesa/EGL graphics drivers are supplied by the host to keep their ABI aligned; actual excluded files and digests are recorded in the release payload inventory."
   }
 }

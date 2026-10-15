@@ -9,6 +9,8 @@ import tempfile
 import time
 import zipfile
 
+from renderer import renderer_children
+
 root = Path(__file__).resolve().parents[2]
 version = json.loads((root / 'package.json').read_text())['version']
 commit = os.environ['GITHUB_SHA']
@@ -47,14 +49,15 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-appimage-check-') as director
                     raise RuntimeError('AppImage exited: ' + (work / 'startup.log').read_text())
                 result = subprocess.run(['xdotool', 'search', '--onlyvisible', '--name', '映框'], capture_output=True, text=True)
                 if result.returncode == 0 and result.stdout.strip():
+                    window = result.stdout.splitlines()[0]
+                    native_pid = int(subprocess.check_output(['xdotool', 'getwindowpid', window], text=True).strip())
                     break
                 time.sleep(.5)
             else:
                 raise RuntimeError('Native AppImage window not observed: ' + (work / 'startup.log').read_text())
             # Require an actual WebKit renderer, not just an empty native frame.
             for _ in range(30):
-                processes = subprocess.run(['pgrep', '-af', 'WebKitWebProcess'], capture_output=True, text=True).stdout
-                if 'appimage' in processes.lower() or '.mount_' in processes:
+                if renderer_children(native_pid):
                     break
                 time.sleep(.5)
             else:

@@ -17,6 +17,7 @@ def module(name, filename):
 finalize = module('appimage_finalize', 'finalize.py')
 sources = module('ubuntu_sources', 'ubuntu-sources.py')
 runtime = module('runtime_sources', 'runtime-sources.py')
+renderer = module('renderer_observer', 'renderer.py')
 
 
 class DeliveryTests(unittest.TestCase):
@@ -65,6 +66,29 @@ class DeliveryTests(unittest.TestCase):
             shutil.copy2(Path(__file__).parent / 'appimage/AppRun', launcher); launcher.chmod(0o755)
             result = subprocess.run([str(launcher)], cwd=directory, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_renderer_observation_uses_parent_identity_not_appimage_in_argv(self):
+        with tempfile.TemporaryDirectory() as directory:
+            proc = Path(directory)
+            for pid, name, parent in [(100, 'yingkuang', 1), (110, 'bwrap', 100), (120, 'WebKitWebProces', 110), (130, 'WebKitWebProces', 1)]:
+                entry = proc / str(pid); entry.mkdir()
+                (entry / 'status').write_text(f'Name:\t{name}\nPPid:\t{parent}\n')
+                (entry / 'cmdline').write_bytes(name.encode() + b'\0')
+            self.assertEqual(renderer.renderer_children(100, proc), [120])
+            (proc / '110/status').write_text('Name:\tbwrap\nPPid:\t120\n')
+            self.assertEqual(renderer.renderer_children(100, proc), [])
+
+    def test_graphics_policy_removes_only_the_driver_facing_wayland_client(self):
+        with tempfile.TemporaryDirectory() as directory:
+            appdir = Path(directory); library = appdir / 'usr/lib'; library.mkdir(parents=True)
+            for name in ['libwayland-client.so.0', 'libwayland-cursor.so.0', 'libwayland-egl.so.1', 'libwayland-client.so.notes']:
+                (library / name).write_bytes(b'library fixture')
+            removed = finalize.remove_host_graphics_libraries(appdir)
+            self.assertEqual([p['path'] for p in removed], ['usr/lib/libwayland-client.so.0'])
+            self.assertFalse((library / 'libwayland-client.so.0').exists())
+            self.assertTrue((library / 'libwayland-cursor.so.0').exists())
+            self.assertTrue((library / 'libwayland-egl.so.1').exists())
+            self.assertTrue((library / 'libwayland-client.so.notes').exists())
 
     def test_source_descriptor_identity_and_every_original_archive_checked(self):
         with tempfile.TemporaryDirectory() as directory:

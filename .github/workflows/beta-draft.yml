@@ -89,7 +89,7 @@ jobs:
         run: npm run tauri build -- --bundles ${{ matrix.bundles }} --ci
       - name: Check Linux CSP
         if: runner.os == 'Linux'
-        run: xvfb-run -a /usr/bin/python3 scripts/check-csp.py
+        run: xvfb-run -a -s "-screen 0 1920x1080x24" /usr/bin/python3 scripts/check-csp.py
       - name: Verify themes and empty canvas in WebKit
         if: runner.os == 'Linux'
         shell: bash
@@ -102,17 +102,20 @@ jobs:
             curl --fail --silent http://127.0.0.1:1422 > /dev/null && break
             sleep 1
           done
-          WATERMARK_TEST_WIDTH=1100 WATERMARK_TEST_HEIGHT=720 xvfb-run -a /usr/bin/python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 interface-controls-regression.js crop-loading-regression.js theme-layout-regression.js
+          WATERMARK_TEST_WIDTH=1100 WATERMARK_TEST_HEIGHT=720 xvfb-run -a -s "-screen 0 1920x1080x24" /usr/bin/python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 interface-controls-regression.js crop-loading-regression.js theme-layout-regression.js
       - name: Install deb, observe native window, verify notices and uninstall
         if: runner.os == 'Linux'
         run: |
           package=$(node scripts/beta-release.mjs package linux-x64)
           node scripts/check-deb.mjs "$package"
-          xvfb-run -a /usr/bin/python3 scripts/smoke-beta-linux.py "$package"
+          xvfb-run -a -s "-screen 0 1920x1080x24" /usr/bin/python3 scripts/smoke-beta-linux.py "$package"
       - name: Install Windows package, observe native window and uninstall
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/smoke-beta-windows.ps1
+      - name: Stage Linux files only in the existing unpublished draft
+        if: runner.os == 'Linux'
+        run: node scripts/beta-release.mjs upload-platform linux-x64 "$RELEASE_TAG" "$GITHUB_SHA"
       - name: Build AppImage payload and source-controlled static runtime
         if: runner.os == 'Linux'
         run: |
@@ -122,8 +125,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           python scripts/appimage/finalize.py src-tauri/target/release/bundle/appimage/yingkuang.AppDir test-output/yingkuang.AppImage test-output/appimage-materials test-output/appimage-runtime
-          xvfb-run -a python scripts/appimage/native-check.py test-output/yingkuang.AppImage test-output/appimage-materials/native-checks.json
-          xvfb-run -a python scripts/appimage/stage.py test-output/yingkuang.AppImage test-output/appimage-materials
+          xvfb-run -a -s "-screen 0 1920x1080x24" python scripts/appimage/native-check.py test-output/yingkuang.AppImage test-output/appimage-materials/native-checks.json
+          xvfb-run -a -s "-screen 0 1920x1080x24" python scripts/appimage/stage.py test-output/yingkuang.AppImage test-output/appimage-materials
       - name: Preserve finished debugging inputs only in the private draft
         if: failure() && runner.os == 'Linux'
         continue-on-error: true
@@ -149,9 +152,6 @@ jobs:
       - name: Stage AppImage only in the existing unpublished draft
         if: runner.os == 'Linux'
         run: node scripts/beta-release.mjs upload-appimage "$RELEASE_TAG" "$GITHUB_SHA"
-      - name: Stage Linux files only in the existing unpublished draft
-        if: runner.os == 'Linux'
-        run: node scripts/beta-release.mjs upload-platform linux-x64 "$RELEASE_TAG" "$GITHUB_SHA"
       - name: Stage Windows files only in the existing unpublished draft
         if: runner.os == 'Windows'
         run: node scripts/beta-release.mjs upload-platform windows-x64 "$env:RELEASE_TAG" "$env:GITHUB_SHA"

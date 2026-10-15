@@ -94,6 +94,22 @@ def prove_generated(appdir):
     return proofs
 
 
+def remove_host_graphics_libraries(appdir):
+    # Mesa/EGL comes from the host. Loading its newer driver with Ubuntu's old
+    # Wayland client caused EGL_BAD_PARAMETER on Arch even with the X11 backend.
+    # Keep the system's matching client; retain other bundled Wayland components.
+    removed = []
+    for path in sorted((appdir / 'usr/lib').glob('libwayland-client.so*')):
+        if not re.fullmatch(r'libwayland-client\.so(?:\.[0-9]+)*', path.name):
+            continue
+        record = {'path': path.relative_to(appdir).as_posix()}
+        if path.is_symlink(): record['symlink'] = path.readlink().as_posix()
+        else: record['sha256'] = audit.digest(path)
+        path.unlink()
+        removed.append(record)
+    return removed
+
+
 def finalize(appdir, output, materials, runtime):
     if materials.exists() or output.exists():
         raise ValueError('Use fresh output paths')
@@ -104,6 +120,7 @@ def finalize(appdir, output, materials, runtime):
         (appdir / local).unlink(missing_ok=True)
     shutil.copy2(ROOT / 'scripts/appimage/AppRun', appdir / 'AppRun')
     (appdir / 'AppRun').chmod(0o755)
+    excluded_graphics = remove_host_graphics_libraries(appdir)
     generated = prove_generated(appdir)
     audit.audit(appdir, materials / 'payload')
     inventory_file = materials / 'payload/inventory.json'
@@ -156,7 +173,7 @@ def finalize(appdir, output, materials, runtime):
             target = materials / 'build-recipes' / file.name
             target.parent.mkdir(exist_ok=True)
             shutil.copy2(file, target)
-    report.update({'unresolvedFiles': [], 'remainingReview': [], 'scope': 'Same-builder system file hashes or verified ELF section transformations; generated caches reproduced; project MIT launcher; original Ubuntu notices and all exact corresponding source archives; statically linked runtime source/recipes/notices supplied separately in runtime/.', 'runtimeSha256': audit.digest(runtime / 'runtime-x86_64'), 'sourcePackagesArchived': len(source_records), 'generatedProofs': generated})
+    report.update({'unresolvedFiles': [], 'remainingReview': [], 'scope': 'Same-builder system file hashes or verified ELF section transformations; generated caches reproduced; project MIT launcher; original Ubuntu notices and all exact corresponding source archives; statically linked runtime source/recipes/notices supplied separately in runtime/.', 'runtimeSha256': audit.digest(runtime / 'runtime-x86_64'), 'sourcePackagesArchived': len(source_records), 'generatedProofs': generated, 'hostGraphicsLibraryPolicy': {'systemProvided': ['libwayland-client.so.0', 'Mesa/EGL drivers'], 'excludedPayloadFiles': excluded_graphics, 'reason': 'Keep the Wayland client compatible with the host graphics driver; native processing failed with the older bundled client and passed with the system client on Arch Linux.'}})
     inventory_file.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
     with tempfile.TemporaryDirectory() as directory:
         filesystem = Path(directory) / 'payload.squashfs'

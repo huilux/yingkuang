@@ -118,9 +118,16 @@
     t.assert(!host.querySelector('.select-menu'),'Tab did not dismiss');
     combo('元数据').click();await t.frame();suffix.focus();await t.frame();
     t.assert(!host.querySelector('.select-menu'),'External focus did not dismiss');
+    const scrollBody=host.querySelector('.export-body');
+    // Guarantee a scrollable fixture; font metrics and native viewport sizes vary.
+    scrollBody.style.maxHeight='240px';
     combo('格式').scrollIntoView({block:'center'});await t.frame();combo('格式').click();await t.frame();
-    host.querySelector('.export-body').scrollTop+=10;await t.frame();
-    t.assert(!host.querySelector('.select-menu'),'Scrolling left a detached menu');
+    t.assert(host.querySelector('.select-menu'),'Scrolling fixture menu did not open');
+    const beforeScroll=scrollBody.scrollTop, maxScroll=scrollBody.scrollHeight-scrollBody.clientHeight;
+    t.assert(maxScroll>0,'Scrolling fixture does not overflow');
+    scrollBody.scrollTop=beforeScroll<maxScroll?Math.min(maxScroll,beforeScroll+10):Math.max(0,beforeScroll-10);
+    t.assert(scrollBody.scrollTop!==beforeScroll,'Scrolling fixture did not move');
+    await t.waitFor(()=>!host.querySelector('.select-menu'),'Scrolling left a detached menu');
     button('预检并开始导出').click();await t.waitFor(()=>resolvePreflight,'Preflight missing');
     t.assert(combo('格式').matches(':disabled'),'Busy fieldset left combobox enabled');
     combo('格式').click();await t.frame();t.assert(!host.querySelector('.select-menu'),'Disabled combobox opened');
