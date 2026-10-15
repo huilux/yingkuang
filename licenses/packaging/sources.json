@@ -1,0 +1,51 @@
+{
+  "verifiedOn": "2026-10-15",
+  "ciRun": "https://github.com/huilux/yingkuang/actions/runs/38662434121",
+  "scope": "Packaging-source evidence and original notices, not complete binary license clearance. These supplemental files are not yet embedded in installation packages.",
+  "licenses": [
+    {
+      "name": "linuxdeploy",
+      "revision": "659c9db374666be3f29432316a859221eac28e53",
+      "licenseFile": "licenses/packaging/linuxdeploy/659c9db374666be3f29432316a859221eac28e53/LICENSE.txt",
+      "sha256": "1edb41ae7601854ae15d113c3700beebd0ea3ed05b85e3786a94a72bb9916091",
+      "source": "https://github.com/linuxdeploy/linuxdeploy/blob/659c9db374666be3f29432316a859221eac28e53/LICENSE.txt"
+    },
+    {
+      "name": "linuxdeploy-plugin-gtk",
+      "revision": "dda522bce37387f1b853d9095713bfaa924c8423",
+      "licenseFile": "licenses/packaging/linuxdeploy-plugin-gtk/dda522bce37387f1b853d9095713bfaa924c8423/LICENSE.txt",
+      "sha256": "0718f6cadf38d2662f397591b777884c5389e65b9919aae6aca2bea87a52eac4",
+      "source": "https://github.com/tauri-apps/linuxdeploy-plugin-gtk/blob/dda522bce37387f1b853d9095713bfaa924c8423/LICENSE.txt"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "AppRun",
+      "sha256": "eb0b254ac0dae6543e6dd7cd02e1baf40a060de95b927313122d6b46323c00aa",
+      "source": "https://github.com/linuxdeploy/linuxdeploy/blob/659c9db374666be3f29432316a859221eac28e53/src/core/appdir_root_setup.cpp",
+      "status": "Generated shell wrapper matches the local wrapper byte-for-byte; upstream source contains its template."
+    },
+    {
+      "path": "AppRun.wrapped",
+      "sha256": "f30140a43a0a59e46db21bdefdf749b9e9f2c6946e92afabbacf98b8ae73fb4f",
+      "source": "https://github.com/tauri-apps/binary-releases/releases/tag/apprun-old",
+      "status": "Exact match to published AppRun-x86_64 asset digest. Upstream source revision and applicable full binary notices remain to be established."
+    },
+    {
+      "paths": [
+        "apprun-hooks/linuxdeploy-plugin-gtk.sh",
+        "usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache",
+        "usr/lib/gtk-3.0/3.0.0/immodules.cache",
+        "usr/share/glib-2.0/schemas/gschemas.compiled"
+      ],
+      "source": "https://github.com/tauri-apps/linuxdeploy-plugin-gtk/blob/dda522bce37387f1b853d9095713bfaa924c8423/linuxdeploy-plugin-gtk.sh",
+      "status": "Pinned packaging script contains generation steps. This is source inspection, not a byte-for-byte reproduction of generated output."
+    }
+  ],
+  "remaining": [
+    "Establish AppRun binary source revision and redistribution notices",
+    "Pin and review outer AppImage runtime and its corresponding source",
+    "Supply required system-library notices and corresponding source with binary distribution",
+    "Validate generated caches and hook against recorded inputs"
+  ]
+}

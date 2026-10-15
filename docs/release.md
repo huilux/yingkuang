@@ -70,7 +70,7 @@ Linux CI 在 AppImage 构建完成后，会从实际产物提取文件，并在�
 
 报告中的 `unresolvedFiles`、`missingCopyright` 和 `remainingReview` 必须在分发前核对。AppImage 外层运行时、生成脚本以及适用许可证要求的对应源码仍需另行处理。该 artifact 是审查材料，目前未自动嵌入 AppImage，也不代表分发许可检查已通过。只在同一 Debian/Ubuntu 构建机上运行 `python3 scripts/audit-appimage.py <已提取的 AppDir> <新的输出目录>`；不要用本地 Arch 包数据库替代 Ubuntu CI 的来源证据。
 
-2026-10-15 已核对[运行 38662434121 的 Linux 审查附件](https://github.com/huilux/yingkuang/actions/runs/38662434121)：326 个文件条目关联到 153 个系统包，版权文件缺失为 0，153 份版权文件的 SHA-256 均与清单一致。仍有 6 个来源待核对项：`AppRun`、`AppRun.wrapped`、`apprun-hooks/linuxdeploy-plugin-gtk.sh`，以及 `loaders.cache`、`immodules.cache`、`gschemas.compiled`。固定版本 GTK 打包脚本包含生成钩子与缓存的步骤，但这些文件仍须保留在审查清单中，不能仅凭用途推断就标为许可审查完成。外层 AppImage 运行时与对应源码交付也尚未结项。
+2026-10-15 已核对[运行 38662434121 的 Linux 审查附件](https://github.com/huilux/yingkuang/actions/runs/38662434121)：326 个文件条目关联到 153 个系统包，版权文件缺失为 0，153 份版权文件的 SHA-256 均与清单一致。仍有 6 个不能直接匹配 Debian 系统包的文件：`AppRun`、`AppRun.wrapped`、`apprun-hooks/linuxdeploy-plugin-gtk.sh`，以及 `loaders.cache`、`immodules.cache`、`gschemas.compiled`。固定版本 GTK 打包脚本包含生成钩子与缓存的步骤，但这些文件仍须保留在审查清单中，不能仅凭用途推断就标为许可审查完成。后续[来源核对记录](../licenses/packaging/sources.json)已确认启动包装脚本模板和 `AppRun.wrapped` 的镜像摘要，并补存两份打包组件许可；这不等于全部许可事项结项。外层 AppImage 运行时与对应源码交付也尚未结项。
 
 参考：[Tauri GitHub 流水线](https://v2.tauri.app/distribute/pipelines/github/)、[macOS 签名](https://v2.tauri.app/distribute/sign/macos/)、[Windows 安装包](https://v2.tauri.app/distribute/windows-installer/)。
 
@@ -90,3 +90,5 @@ Linux CI 在 AppImage 构建完成后，会从实际产物提取文件，并在�
 使用 `npm run version:set -- <版本>` 同步版本，然后完成开发检查和各平台安装包验收。维护 [CHANGELOG](../CHANGELOG.md)，明确新增、修复和已知限制，不把 CI 构建成功写作实机验收通过。
 
 通过验收后再创建正式 Release，提供对应架构的安装包、校验和、许可文件和变更说明。只推送计划公开的分支与版本标签，不上传完整本地工作目录或使用镜像推送。
+
+2026-10-15，提交 `d2d56b4` 的[四平台 CI](https://github.com/huilux/yingkuang/actions/runs/38662434121) 已全部通过，包括 Linux 实际 AppImage 审查及附件上传。实机验收范围不因此扩大。
