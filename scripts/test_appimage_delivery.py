@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -89,6 +90,18 @@ class DeliveryTests(unittest.TestCase):
             self.assertTrue((library / 'libwayland-cursor.so.0').exists())
             self.assertTrue((library / 'libwayland-egl.so.1').exists())
             self.assertTrue((library / 'libwayland-client.so.notes').exists())
+
+    def test_appimage_supervisor_cleanup_stops_its_test_owned_children(self):
+        script = 'import subprocess,sys,time; child=subprocess.Popen([sys.executable,"-c","import time; time.sleep(60)"]); print(child.pid,flush=True); time.sleep(60)'
+        process = subprocess.Popen([sys.executable, '-c', script], stdout=subprocess.PIPE, text=True, start_new_session=True)
+        try:
+            child = int(process.stdout.readline())
+            renderer.stop_process_group(process)
+            status = Path('/proc') / str(child) / 'stat'
+            if status.exists(): self.assertEqual(status.read_text().rsplit(')', 1)[1].split()[0], 'Z')
+        finally:
+            if process.poll() is None: renderer.stop_process_group(process)
+            process.stdout.close()
 
     def test_source_descriptor_identity_and_every_original_archive_checked(self):
         with tempfile.TemporaryDirectory() as directory:

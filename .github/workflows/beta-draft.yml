@@ -180,7 +180,13 @@ jobs:
       - name: Require unchanged application source when resuming assembly
         run: |
           node scripts/beta-release.mjs validate "$RELEASE_TAG" "$BUILD_COMMIT"
-          git diff --exit-code "$BUILD_COMMIT" HEAD -- . ':(exclude)scripts/assemble-beta-release.py' ':(exclude)scripts/test_beta_release.py' ':(exclude).github/workflows/beta-draft.yml'
+          git diff --exit-code "$BUILD_COMMIT" HEAD -- . ':(exclude)scripts/assemble-beta-release.py' ':(exclude)scripts/test_beta_release.py' ':(exclude).github/workflows/beta-draft.yml' ':(exclude)scripts/appimage/stage.py' ':(exclude)scripts/appimage/renderer.py' ':(exclude)scripts/appimage/recover.py' ':(exclude)scripts/test_appimage_delivery.py' ':(exclude)scripts/check-installed-theme.mjs'
+      - name: Recheck unchanged AppImage after verification-only fixes
+        if: inputs.assemble_only
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xdotool libwayland-client0 libgl1 libegl1 libegl-mesa0
+          python scripts/appimage/recover.py "$RELEASE_TAG" "$BUILD_COMMIT"
       - name: Download verified files from the private draft
         run: |
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*_linux-x64*' --pattern '*_windows-x64*' --pattern '*_linux-appimage-x64*' --dir test-output/beta-staging

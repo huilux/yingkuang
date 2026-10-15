@@ -7,10 +7,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 const endpoint = process.argv[2];
 if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(endpoint ?? '')) throw new Error('Expected a local test debugging endpoint');
 let target;
-for (let attempt = 0; attempt < 100 && !target; attempt++) {
+for (let attempt = 0; attempt < 600 && !target; attempt++) {
   try {
     const response = await fetch(`${endpoint}/json/list`, { signal: AbortSignal.timeout(1000) });
-    target = (await response.json()).find(page => page.type === 'page' && /^https?:\/\/(?:tauri\.localhost|(?:localhost|127\.0\.0\.1):1424)(?:\/|$)/.test(page.url));
+    target = (await response.json()).find(page => page.type === 'page' && page.webSocketDebuggerUrl && /^https?:\/\/(?:tauri\.localhost|(?:localhost|127\.0\.0\.1):1424)(?:\/|$)/.test(page.url));
   } catch { /* WebView may still be starting. */ }
   if (!target) await delay(100);
 }

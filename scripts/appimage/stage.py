@@ -9,11 +9,11 @@ import tempfile
 import time
 import zipfile
 
-from renderer import renderer_children
+from renderer import renderer_children, stop_process_group
 
 root = Path(__file__).resolve().parents[2]
 version = json.loads((root / 'package.json').read_text())['version']
-commit = os.environ['GITHUB_SHA']
+commit = os.environ.get('YINGKUANG_BINARY_COMMIT', os.environ['GITHUB_SHA'])
 package, materials = (Path(arg).resolve() for arg in sys.argv[1:])
 
 
@@ -25,7 +25,7 @@ def digest(path):
 inventory = json.loads((materials / 'payload/inventory.json').read_text())
 assert inventory['projectCommit'] == commit and inventory['appImageSha256'] == digest(package)
 assert not inventory['unresolvedFiles'] and not inventory['missingCopyright'] and not inventory['remainingReview']
-with tempfile.TemporaryDirectory(prefix='yingkuang-appimage-check-') as directory:
+with tempfile.TemporaryDirectory(prefix='yingkuang-appimage-check-', ignore_cleanup_errors=True) as directory:
     work = Path(directory)
     subprocess.run([str(package), '--appimage-extract'], cwd=work, stdout=subprocess.DEVNULL, check=True, timeout=120)
     extracted = work / 'squashfs-root'
@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-appimage-check-') as director
     for name in ['CONFIG', 'DATA', 'CACHE']:
         env[f'XDG_{name}_HOME'] = str(work / name.lower())
     with (work / 'startup.log').open('w') as log:
-        process = subprocess.Popen([str(package), '--appimage-extract-and-run'], stdout=log, stderr=log, env=env)
+        process = subprocess.Popen([str(package), '--appimage-extract-and-run'], stdout=log, stderr=log, env=env, start_new_session=True)
         try:
             for _ in range(90):
                 if process.poll() is not None:
@@ -63,14 +63,10 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-appimage-check-') as director
             else:
                 raise RuntimeError('Bundled WebKit renderer not observed')
         finally:
-            process.terminate()
-            try:
-                process.wait(timeout=20)
-            except subprocess.TimeoutExpired:
-                process.kill(); process.wait()
+            stop_process_group(process)
 native = json.loads((materials / 'native-checks.json').read_text())
 assert native['nativePhotoProcessing'] == 'passed'
-checks = {'nativePhotoProcessing': 'passed', 'version': version, 'commit': commit, 'platform': 'linux-appimage-x64', 'packageCheck': 'passed', 'startup': 'passed', 'extraction': 'passed', 'notices': 'passed', 'method': 'Finished AppImage extract, payload hashes/notices, extract-and-run native window and bundled WebKit process under Xvfb on Ubuntu 22.04. Host build dependencies remain installed; interactive editing, FUSE mount and other distributions are not covered.'}
+checks = {'verificationCommit': os.environ['GITHUB_SHA'], 'nativePhotoProcessing': 'passed', 'version': version, 'commit': commit, 'platform': 'linux-appimage-x64', 'packageCheck': 'passed', 'startup': 'passed', 'extraction': 'passed', 'notices': 'passed', 'method': 'Finished AppImage extract, payload hashes/notices, extract-and-run native window and bundled WebKit process under Xvfb on Ubuntu 22.04. Host build dependencies remain installed; interactive editing, FUSE mount and other distributions are not covered.'}
 (materials / 'checks.json').write_text(json.dumps(checks, indent=2) + '\n')
 files = {p.relative_to(materials).as_posix(): digest(p) for p in sorted(materials.rglob('*')) if p.is_file()}
 (materials / 'SHIPMENT.json').write_text(json.dumps({'version': version, 'commit': commit, 'appImageSha256': digest(package), 'sha256': files}, indent=2) + '\n')
