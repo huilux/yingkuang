@@ -340,7 +340,6 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .distribution-heading > span { color: var(--text-secondary); font-size: 10px; }
 .distribution-controls .field { margin-bottom: 14px; }
 .distribution-axis { min-width: 0; margin: 0; padding: 0; border: 0; }
-.distribution-axis + .distribution-axis { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
 .distribution-axis legend { display: flex; width: 100%; justify-content: space-between; gap: 8px; margin-bottom: 8px; color: var(--text-secondary); font-size: 11px; }
 .distribution-mode { color: var(--text-secondary); font-size: 10px; }
 .distribution-inputs { display: grid; grid-template-columns: minmax(0, 1fr) 86px; align-items: center; gap: 10px; }

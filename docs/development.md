@@ -14,7 +14,7 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D w
 
 Node 测试覆盖模板、会话、几何、导出流程、字体与演示图隐私；前端构建还检查版本、类型和启动体积。Rust 测试覆盖真实编码、EXIF/ICC、字体与文件写入。专项入口包括 `npm run test:crop`、`test:camera`、`test:selection`、`test:templates`。
 
-官方模板发布验证入口为 `npm run templates:check`。模板回归包括 `template-layout-regression.js`（旋转和换图等间距）、`template-layout-persistence-regression.js`（跨照片、两种操作顺序、旋转文字、仅居中、撤销和再次保存）、`distribution-range-regression.js`（比例输入、滑杆撤销、跨照片、两元素范围和整组拖动）及 `template-update-regression.js`（启动不联网、失败保留、个人冲突、重启、离线导入与回退）；桌面 CI 在最小窗口的 WebKit 中运行这四项。公开站点部署后可单独验证真实 HTTPS、签名和本机缓存：
+官方模板发布验证入口为 `npm run templates:check`。模板回归包括 `template-layout-regression.js`（旋转和换图等间距）、`template-layout-persistence-regression.js`（跨照片、两种操作顺序、旋转文字、仅居中、撤销和再次保存）、`distribution-range-regression.js`（比例输入、滑杆撤销、跨照片、两元素范围和整组拖动）、`distribution-direction-regression.js`（同行高度误报、方向切换和纵向范围）及 `template-update-regression.js`（启动不联网、失败保留、个人冲突、重启、离线导入与回退）；桌面 CI 在最小窗口的 WebKit 中运行这五项。公开站点部署后可单独验证真实 HTTPS、签名和本机缓存：
 
 ```sh
 cargo test --manifest-path src-tauri/Cargo.toml --lib --locked \

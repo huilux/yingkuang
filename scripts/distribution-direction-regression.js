@@ -1,0 +1,52 @@
+// A horizontal row must not be reported as an overflowing vertical stack.
+(async()=>{
+  const t=await import('/scripts/konva-test-utils.js');
+  const url=name=>performance.getEntriesByType('resource').find(e=>e.name.includes(`/deps/${name}.js?`)).name;
+  const {default:React}=await import(url('react'));
+  const {default:{createRoot}}=await import(url('react-dom_client'));
+  const {DistributionControls}=await import('/src/DistributionControls.tsx');
+  const {builtInTemplates,calculateGeometry}=await import('/src/editor-model.ts');
+  const {ensureFontsLoaded}=await import('/src/font-library.ts');
+  const {measureBrowserLayers,setBrowserDistributionRange}=await import('/src/browser-layout.ts');
+  const {distributionMetrics}=await import('/src/selection-model.ts');
+  const photo={id:'direction',path:'direction.jpg',fileName:'direction.jpg',width:600,height:400,metadata:{}};
+  const design=structuredClone(builtInTemplates().find(item=>item.id==='wide-float').layouts.landscape);
+  design.frame.paddingY=100/2.233/10;
+  design.regions.bottom={...design.regions.bottom,enabled:true,extra:0,safePadding:0};
+  const base=design.layers[0];
+  design.layers=Array.from({length:5},(_,i)=>({...base,id:`direction-${i}`,source:'custom',customValue:String(i),region:'bottom',fontFamily:'Space Mono',fontSize:20,rotation:0,x:.2+i*.15,y:.5,visible:true}));
+  delete design.distributions;delete design.alignments;
+  await ensureFontsLoaded(['Space Mono']);
+  const ids=design.layers.map(layer=>layer.id),geometry=calculateGeometry(photo,design);
+  const metrics=distributionMetrics('y','bottom',measureBrowserLayers(design,photo,ids),geometry,design.regions);
+  t.assert(metrics.ratio<1 && metrics.minimumRatio>2,'Fixture must fit as a row but exceed 200% as a vertical stack');
+  t.near(metrics.ratio,.4466,'Actual row height is wrong',1e-9);
+  t.near(metrics.minimumRatio,2.233,'Vertical stack height is wrong',1e-9);
+  const host=document.createElement('div');host.className='inspector-scroll';host.style.cssText='position:fixed;right:0;top:0;bottom:0;width:320px;z-index:2500;background:var(--bg-panel);padding:16px';document.body.append(host);
+  const root=createRoot(host);let current=structuredClone(design),changes=0;
+  const render=(key='row')=>root.render(React.createElement(DistributionControls,{key,document:current,photo,ids,onStart(){},onEnd(){},onReference(){},onRange(axis,reference,ratio){changes++;setBrowserDistributionRange(current,photo,ids,axis,ratio===null?null:{reference,ratio});current=structuredClone(current);render(key);}}));
+  const button=text=>[...host.querySelectorAll('button')].find(item=>item.textContent.trim()===text);
+  const chooseReference=async value=>{const select=host.querySelector('select[aria-label="范围参照"]');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,value);select.dispatchEvent(new Event('change',{bubbles:true}));await t.frame();};
+  try {
+    render();await t.waitFor(()=>host.querySelector('input[aria-label="占用宽度"]'),'Distribution controls missing');
+    t.assert(!host.querySelector('input[aria-label="占用高度"]')&&!host.textContent.includes('文字至少需要'),`Horizontal row incorrectly exposes vertical overflow: ${host.textContent}`);
+    t.assert(button('横向（宽度）')?.getAttribute('aria-pressed')==='true','Row did not default to horizontal distribution');
+    button('纵向（高度）').click();await t.frame();
+    t.assert(changes===0&&JSON.stringify(current)===JSON.stringify(design),'Changing the direction changed document coordinates');
+    t.assert(host.querySelector('input[aria-label="占用高度"]')?.disabled,'Vertical stack unexpectedly fits in the thin bottom region');
+    t.assert(host.textContent.includes('纵向排列至少需要 223.3%'),'Stack warning does not explain its direction');
+    await chooseReference('photo');
+    const input=host.querySelector('input[aria-label="占用高度百分比"]');
+    t.assert(!input.disabled,'Changing to a larger reference did not enable vertical distribution');
+    input.focus();t.change(input,60);await t.frame();input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));await t.frame();
+    t.near(current.distributions[0].range.ratio,.6,'Explicit vertical range was not saved',1e-9);
+    current.layers.forEach((layer,i)=>t.near(layer.x,design.layers[i].x,'Height adjustment changed horizontal coordinates',1e-9));
+    button('横向（宽度）').click();await t.frame();
+    t.assert(host.querySelector('input[aria-label="占用宽度"]')&&!host.querySelector('input[aria-label="占用高度"]'),'Cannot return to width controls');
+    current=structuredClone(design);current.layers.forEach((layer,i)=>{layer.region='canvas';layer.x=.5;layer.y=.1+i*.2;});
+    render('column');await t.frame();
+    t.assert(button('纵向（高度）')?.getAttribute('aria-pressed')==='true'&&host.querySelector('input[aria-label="占用高度"]'),'A column did not default to height controls');
+    t.assert(host.scrollWidth<=host.clientWidth+1,'Direction controls overflow the inspector');
+    return {rowHasNoFalseHeightWarning:true,explicitDirectionDoesNotMoveElements:true,stackWarningExplained:true,verticalRangeStillWorks:true,columnDefaultsToHeight:true};
+  } finally {root.unmount();host.remove();}
+})();
