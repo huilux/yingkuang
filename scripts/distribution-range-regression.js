@@ -33,7 +33,6 @@
     const range=path=>doc(path).distributions?.find(rule=>rule.axis===axis)?.range;
     const select=async(count=3)=>{host.querySelector('#tab-watermark').click();await t.frame();for(let i=0;i<count;i++)host.querySelector(`[aria-label="选择图层 范围${i}"]`).dispatchEvent(new MouseEvent('click',{bubbles:true,shiftKey:i>0}));await t.frame();};
     const setNumber=async(value,key='Enter')=>{input().focus();t.change(input(),value);await t.frame();input().dispatchEvent(new KeyboardEvent('keydown',{key,bubbles:true}));await t.frame();};
-    const chooseReference=async(value)=>{const select=host.querySelector('select[aria-label="范围参照"]');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,value);select.dispatchEvent(new Event('change',{bubbles:true}));await t.frame();};
     const checkSpan=async(ratio,count=3)=>{
       const ctx=await t.context(host),dimension=axis==='x'?'width':'height';
       const boxes=Array.from({length:count},(_,i)=>ctx.world.findOne(node=>node.id()===`range-${i}`).findOne('Text').getClientRect({relativeTo:ctx.world})).sort((a,b)=>a[axis]-b[axis]);
@@ -48,7 +47,7 @@
       const {default:App}=await import(`/src/App.tsx?distribution-range=${Date.now()}`);root.render(React.createElement(App));
       await t.waitFor(()=>host.querySelector('.konvajs-content')&&host.querySelector('.template-card-copy strong'),'Editor not ready');
       [...host.querySelectorAll('.template-card')].find(item=>item.textContent.includes(template.name)).click();await t.frame();await select();
-      await chooseReference('canvas');button(center).click();await t.frame();
+      button(center).click();await t.frame();
       await setNumber(60);await checkSpan(.6);t.near(range('range-a.jpg').ratio,.6,'Numeric input did not save target',1e-9);
       await setNumber(60.04);t.near(Number(input().value),60,'Percentage precision is inconsistent',1e-9);await checkSpan(.6);
       t.assert(doc('range-a.jpg').layers.every(layer=>layer.fontSize===original.fontSize && layer.rotation===(axis==='y'?90:0)),'Range changed typography');
@@ -68,12 +67,11 @@
       button(distribute).click();await t.frame();button(center).click();await t.frame();await checkSpan(.5);
       before.forEach((point,i)=>{const next=ctx.world.findOne(node=>node.id()===`range-${i}`).position();t.near(next.x,point.x,'Repeated arrange moved x',.01);t.near(next.y,point.y,'Repeated arrange moved y',.01);});
       t.near(range('range-b.jpg').ratio,.5,'Repeated distribution discarded fixed range',1e-9);
-      host.querySelector(`[aria-label="恢复${label}当前范围"]`).click();await t.frame();await checkSpan(.5);t.assert(!range('range-b.jpg'),'Reset left a fixed range');
+      host.querySelector('[aria-label="解除固定范围"]').click();await t.frame();await checkSpan(.5);t.assert(!range('range-b.jpg'),'Reset left a fixed range');
       await setNumber(60);await checkSpan(.6);
       await select(2);await setNumber(65);await checkSpan(.65,2);
       t.assert(doc('range-b.jpg').distributions.find(rule=>rule.axis===axis).layerIds.length===2,'Two-element range was not saved');
-      await chooseReference('photo');t.near(range('range-b.jpg').ratio,.65,'Changing reference changed the target',1e-9);
-      t.assert(range('range-b.jpg').reference==='photo','Reference was not persisted');
+      t.assert(range('range-b.jpg').reference==='canvas','New range must use a single canvas basis');
       await t.disableSnap(ctx);
       const node=ctx.world.findOne(item=>item.id()==='range-0'),start=t.screen(ctx,node),points=[0,1].map(i=>ctx.world.findOne(item=>item.id()===`range-${i}`).position()),scale=ctx.world.scaleX();
       t.mouse(ctx.content,'mousedown',start);t.mouse(window,'mousemove',{x:start.x+8,y:start.y+4});await t.frame();t.mouse(window,'mousemove',{x:start.x+20,y:start.y+10});await t.frame();t.mouse(window,'mouseup',{x:start.x+20,y:start.y+10},0);await t.frame();
@@ -86,7 +84,7 @@
       const output=exported.items[0].document;
       t.near(output.distributions.find(rule=>rule.axis===axis).range.ratio,.65,'Export lost fixed span',1e-9);
       expected.layers.forEach(layer=>{const actual=output.layers.find(item=>item.id===layer.id);t.near(actual.x,layer.x,'Export x differs from preview',1e-9);t.near(actual.y,layer.y,'Export y differs from preview',1e-9);});
-      reports.push({axis,percentageInput:true,sliderUndo:true,crossPhotoTemplate:true,repeatStable:true,twoElements:true,referenceAndReset:true,groupDrag:true,exportSnapshot:true});
+      reports.push({axis,percentageInput:true,sliderUndo:true,crossPhotoTemplate:true,repeatStable:true,twoElements:true,canvasBasisAndReset:true,groupDrag:true,exportSnapshot:true});
     } finally {root.unmount();host.remove();clearMocks();}
   }return {scenarios:reports};} finally {saved.forEach(([key,value])=>value===null?localStorage.removeItem(key):localStorage.setItem(key,value));}
 })();

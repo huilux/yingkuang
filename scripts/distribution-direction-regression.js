@@ -1,4 +1,4 @@
-// A horizontal row must not be reported as an overflowing vertical stack.
+// Only the existing line's spacing dimension can be edited.
 (async()=>{
   const t=await import('/scripts/konva-test-utils.js');
   const url=name=>performance.getEntriesByType('resource').find(e=>e.name.includes(`/deps/${name}.js?`)).name;
@@ -17,36 +17,45 @@
   design.layers=Array.from({length:5},(_,i)=>({...base,id:`direction-${i}`,source:'custom',customValue:String(i),region:'bottom',fontFamily:'Space Mono',fontSize:20,rotation:0,x:.2+i*.15,y:.5,visible:true}));
   delete design.distributions;delete design.alignments;
   await ensureFontsLoaded(['Space Mono']);
-  const ids=design.layers.map(layer=>layer.id),geometry=calculateGeometry(photo,design);
-  const metrics=distributionMetrics('y','bottom',measureBrowserLayers(design,photo,ids),geometry,design.regions);
-  t.assert(metrics.ratio<1 && metrics.minimumRatio>2,'Fixture must fit as a row but exceed 200% as a vertical stack');
-  t.near(metrics.ratio,.4466,'Actual row height is wrong',1e-9);
-  t.near(metrics.minimumRatio,2.233,'Vertical stack height is wrong',1e-9);
+  const ids=design.layers.map(layer=>layer.id);
+  const metric=(doc,axis,reference='canvas')=>distributionMetrics(axis,reference,measureBrowserLayers(doc,photo,ids),calculateGeometry(photo,doc),doc.regions);
+  t.near(metric(design,'y','bottom').ratio,.4466,'Actual row height is wrong',1e-9);
+  t.near(metric(design,'y','bottom').minimumRatio,2.233,'Vertical stack height is wrong',1e-9);
   const host=document.createElement('div');host.className='inspector-scroll';host.style.cssText='position:fixed;right:0;top:0;bottom:0;width:320px;z-index:2500;background:var(--bg-panel);padding:16px';document.body.append(host);
-  const root=createRoot(host);let current=structuredClone(design),changes=0;
-  const render=(key='row')=>root.render(React.createElement(DistributionControls,{key,document:current,photo,ids,onStart(){},onEnd(){},onReference(){},onRange(axis,reference,ratio){changes++;setBrowserDistributionRange(current,photo,ids,axis,ratio===null?null:{reference,ratio});current=structuredClone(current);render(key);}}));
-  const button=text=>[...host.querySelectorAll('button')].find(item=>item.textContent.trim()===text);
-  const chooseReference=async value=>{const select=host.querySelector('select[aria-label="范围参照"]');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,value);select.dispatchEvent(new Event('change',{bubbles:true}));await t.frame();};
+  const root=createRoot(host);let current=structuredClone(design),changes=0,key='row';
+  const render=()=>root.render(React.createElement(DistributionControls,{key,document:current,photo,ids,onStart(){},onEnd(){},onRange(axis,ratio){changes++;setBrowserDistributionRange(current,photo,ids,axis,{reference:'canvas',ratio});current=structuredClone(current);render();},onClear(){for(const axis of ['x','y'])setBrowserDistributionRange(current,photo,ids,axis,null);current=structuredClone(current);render();}}));
+  const setNumber=async(label,value)=>{const input=host.querySelector(`input[aria-label="${label}百分比"]`);input.focus();t.change(input,value);await t.frame();input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));await t.frame();};
+  const style=doc=>doc.layers.map(layer=>({fontSize:layer.fontSize,fontFamily:layer.fontFamily,rotation:layer.rotation}));
   try {
     render();await t.waitFor(()=>host.querySelector('input[aria-label="占用宽度"]'),'Distribution controls missing');
-    t.assert(!host.querySelector('input[aria-label="占用高度"]')&&!host.textContent.includes('文字至少需要'),`Horizontal row incorrectly exposes vertical overflow: ${host.textContent}`);
-    t.assert(button('横向（宽度）')?.getAttribute('aria-pressed')==='true','Row did not default to horizontal distribution');
-    button('纵向（高度）').click();await t.frame();
-    t.assert(changes===0&&JSON.stringify(current)===JSON.stringify(design),'Changing the direction changed document coordinates');
-    t.assert(host.querySelector('input[aria-label="占用高度"]')?.disabled,'Vertical stack unexpectedly fits in the thin bottom region');
-    t.assert(host.textContent.includes('纵向排列至少需要 223.3%'),'Stack warning does not explain its direction');
-    await chooseReference('photo');
-    const input=host.querySelector('input[aria-label="占用高度百分比"]');
-    t.assert(!input.disabled,'Changing to a larger reference did not enable vertical distribution');
-    input.focus();t.change(input,60);await t.frame();input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));await t.frame();
-    t.near(current.distributions[0].range.ratio,.6,'Explicit vertical range was not saved',1e-9);
-    current.layers.forEach((layer,i)=>t.near(layer.x,design.layers[i].x,'Height adjustment changed horizontal coordinates',1e-9));
-    button('横向（宽度）').click();await t.frame();
-    t.assert(host.querySelector('input[aria-label="占用宽度"]')&&!host.querySelector('input[aria-label="占用高度"]'),'Cannot return to width controls');
+    t.assert(!host.querySelector('input[aria-label="占用高度"]')&&!host.textContent.includes('223.3%'),'Row exposes vertical controls or a false height warning');
+    t.assert(!host.querySelector('select')&&!host.textContent.includes('分布方向'),'Direction/reference switches must not allow a row to become a column');
+    t.assert(changes===0&&JSON.stringify(current)===JSON.stringify(design),'Opening the controls changed the document');
+    await setNumber('占用宽度',60);
+    t.near(metric(current,'x').ratio,.6,'Width is not relative to canvas',1e-9);
+    current.layers.forEach((layer,i)=>t.near(layer.y,design.layers[i].y,'Width editing changed row height/position',1e-9));
+    t.assert(JSON.stringify(style(current))===JSON.stringify(style(design)),'Width editing changed typography');
+    const slider=host.querySelector('input[aria-label="占用宽度"]');t.change(slider,slider.min);await t.frame();
+    t.assert(host.querySelector('input[aria-label="占用宽度"]')&&!host.querySelector('input[aria-label="占用高度"]'),'Shrinking the row flipped its detected direction');
     current=structuredClone(design);current.layers.forEach((layer,i)=>{layer.region='canvas';layer.x=.5;layer.y=.1+i*.2;});
-    render('column');await t.frame();
-    t.assert(button('纵向（高度）')?.getAttribute('aria-pressed')==='true'&&host.querySelector('input[aria-label="占用高度"]'),'A column did not default to height controls');
-    t.assert(host.scrollWidth<=host.clientWidth+1,'Direction controls overflow the inspector');
-    return {rowHasNoFalseHeightWarning:true,explicitDirectionDoesNotMoveElements:true,stackWarningExplained:true,verticalRangeStillWorks:true,columnDefaultsToHeight:true};
+    const column=structuredClone(current);key='column';render();await t.frame();
+    t.assert(host.querySelector('input[aria-label="占用高度"]')&&!host.querySelector('input[aria-label="占用宽度"]'),'A column must only expose height');
+    await setNumber('占用高度',70);
+    t.near(metric(current,'y').ratio,.7,'Height is not relative to canvas',1e-9);
+    current.layers.forEach((layer,i)=>t.near(layer.x,column.layers[i].x,'Height editing changed column width/position',1e-9));
+    t.assert(JSON.stringify(style(current))===JSON.stringify(style(column)),'Height editing changed typography');
+    current.layers[2].x+=.2;key='mixed';render();await t.frame();
+    t.assert(!host.querySelector('input[type="range"]')&&host.textContent.includes('请先'),'Mixed selections must not expose a resizing slider');
+    const beforeClear=current.layers.map(layer=>({x:layer.x,y:layer.y}));
+    host.querySelector('[aria-label="解除固定范围"]').click();await t.frame();
+    t.assert(!current.distributions?.some(rule=>rule.range),'Cannot clear a legacy range from a mixed selection');
+    t.assert(JSON.stringify(current.layers.map(layer=>({x:layer.x,y:layer.y})))===JSON.stringify(beforeClear),'Clearing a range moved its members');
+    current=structuredClone(design);setBrowserDistributionRange(current,photo,ids,'x',{reference:'photo',ratio:.5});
+    const legacy=JSON.stringify(current);key='legacy';render();await t.frame();
+    const displayed=Number(host.querySelector('input[aria-label="占用宽度百分比"]').value);
+    t.near(displayed,Math.round(metric(current,'x').ratio*1000)/10,'Legacy range is not converted to canvas percent',1e-9);
+    t.assert(JSON.stringify(current)===legacy,'Opening the new controls rewrote a legacy template');
+    t.assert(host.scrollWidth<=host.clientWidth+1,'Controls overflow the inspector');
+    return {rowOnlyWidth:true,columnOnlyHeight:true,noLayoutConversion:true,mixedSelectionBlocked:true,perpendicularPositionsAndTypographyStable:true,legacyRangePreserved:true,clearKeepsPositions:true};
   } finally {root.unmount();host.remove();}
 })();

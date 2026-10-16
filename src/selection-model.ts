@@ -26,6 +26,21 @@ export function unionBounds(items: { bounds: Rect }[]): Rect | null {
     height: Math.max(...items.map(item => item.bounds.y + item.bounds.height)) - y };
 }
 
+/** A range edits spacing along an existing line; it never changes its direction. */
+export function selectionLineAxis(measured: MeasuredLayer[]): "x" | "y" | null {
+  if (measured.length < 2 || measured.some(item => !Number.isFinite(item.position.x) || !Number.isFinite(item.position.y) || item.bounds.width <= 0 || item.bounds.height <= 0)) return null;
+  const spread = (values: number[]) => Math.max(...values) - Math.min(...values);
+  const tolerance = (dimension: "width" | "height") => Math.min(2, Math.max(.5, Math.min(...measured.map(item => item.bounds[dimension])) * .1));
+  const aligned = (axis: "x" | "y", dimension: "width" | "height") => [
+    measured.map(item => item.position[axis]),
+    measured.map(item => item.bounds[axis]),
+    measured.map(item => item.bounds[axis] + item.bounds[dimension]),
+  ].some(values => spread(values) <= tolerance(dimension) + 1e-7);
+  const row = aligned("y", "height") && spread(measured.map(item => item.position.x)) > tolerance("width");
+  const column = aligned("x", "width") && spread(measured.map(item => item.position.y)) > tolerance("height");
+  return row === column ? null : row ? "x" : "y";
+}
+
 // Region coordinates are relative, not a clipping constraint. As in the
 // prototype, an element may cross its region while staying attached to it.
 // Clamping each element independently would deform a multi-selection.

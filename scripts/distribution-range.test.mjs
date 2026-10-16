@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { builtInTemplates, calculateGeometry, layerPosition } from '../src/editor-model.ts';
-import { arrangeSelection, distributionMetrics, moveSelection } from '../src/selection-model.ts';
+import { arrangeSelection, distributionMetrics, moveSelection, selectionLineAxis } from '../src/selection-model.ts';
 import { commitArrangement, measureDocumentLayers, releaseLayoutRules, resolveDocumentLayout, setDistributionRange } from '../src/document-layout.ts';
 import { builtInTemplateChanges, isValidEditorDocument } from '../src/builtin-template-catalog.ts';
 import { reorientTemplateDocument } from '../src/template-layout.ts';
@@ -128,4 +128,40 @@ test('invalid ranges are rejected without changing legacy rule validation',()=>{
     const invalid=structuredClone(doc);invalid.distributions[0].range=range;assert.equal(isValidEditorDocument(invalid),false);
   }
   const two=fixture('x',2);two.distributions=[{axis:'x',layerIds:ids(two)}];assert.equal(isValidEditorDocument(two),false);
+});
+
+for (const axis of ['x','y']) test(`${axis} line rejects resizing the perpendicular dimension`,()=>{
+  const doc=fixture(axis),before=structuredClone(doc);
+  setDistributionRange(doc,a,ids(doc),axis==='x'?'y':'x',{reference:'canvas',ratio:.6},size);
+  assert.deepEqual(doc,before,'Range editing must not turn a row into a column or a column into a row');
+});
+test('mixed selections reject range editing without moving any element',()=>{
+  const doc=fixture();doc.layers.forEach((layer,i)=>{layer.y=.2+i*.2;});
+  const before=structuredClone(doc);
+  for (const axis of ['x','y']) {
+    setDistributionRange(doc,a,ids(doc),axis,{reference:'canvas',ratio:.6},size);
+    assert.deepEqual(doc,before,'A mixed selection must be aligned before resizing its range');
+  }
+});
+test('line detection tolerates small placement errors and recognizes unequal font sizes aligned at the edge',()=>{
+  const doc=fixture();doc.layers[1].y+=.0005;
+  assert.equal(selectionLineAxis(measured(doc,a)),'x');
+  const row=measured(fixture(),a);
+  row[1].bounds.height*=2;row[1].bounds.y-=row[1].bounds.height/2;row[1].position.y-=row[1].bounds.height/4;
+  assert.equal(selectionLineAxis(row),'x','Aligned bottoms with different heights still form one row');
+});
+test('grids, diagonal pairs and completely overlapping elements have no adjustable line axis',()=>{
+  const doc=fixture('x',4);doc.layers.forEach((layer,i)=>{layer.x=.2+(i%2)*.2;layer.y=.2+Math.floor(i/2)*.2;});
+  assert.equal(selectionLineAxis(measured(doc,a)),null);
+  doc.layers=doc.layers.slice(0,2);doc.layers[1].y+=.2;
+  assert.equal(selectionLineAxis(measured(doc,a)),null);
+  doc.layers[1].x=doc.layers[0].x;doc.layers[1].y=doc.layers[0].y;
+  assert.equal(selectionLineAxis(measured(doc,a)),null);
+});
+test('resizing a column preserves its width, x coordinates and font properties',()=>{
+  const doc=fixture('y'),before=structuredClone(doc),width=metrics(doc,a,'x').bounds.width;
+  setDistributionRange(doc,a,ids(doc),'y',{reference:'canvas',ratio:.7},size);
+  near(metrics(doc,a,'x').bounds.width,width);
+  doc.layers.forEach((layer,i)=>{near(layer.x,before.layers[i].x);assert.equal(layer.fontSize,before.layers[i].fontSize);assert.equal(layer.rotation,before.layers[i].rotation);});
+  assert.equal(selectionLineAxis(measured(doc,a)),'y');
 });

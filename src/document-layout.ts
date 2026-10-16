@@ -1,6 +1,6 @@
 import { calculateGeometry, layerPosition, resolveLayerText } from "./editor-model.ts";
 import { isVisible } from "./canvas-camera.ts";
-import { arrangementAxis, arrangeSelection, distributionMetrics, distributionReference, type AlignReference, type ArrangeAction, type LayerPatch } from "./selection-model.ts";
+import { arrangementAxis, arrangeSelection, distributionMetrics, distributionReference, selectionLineAxis, type AlignReference, type ArrangeAction, type LayerPatch } from "./selection-model.ts";
 import type { CanvasGeometry, DistributionRange, DistributionRule, EditorDocument, PhotoAsset, WatermarkLayer } from "./types";
 
 export type TextSize = (layer: WatermarkLayer, text: string) => { width: number; height: number };
@@ -116,7 +116,7 @@ export function setDistributionRange(document: EditorDocument, photo: PhotoAsset
   if (!Number.isFinite(setting.ratio) || setting.ratio <= 0 || setting.ratio > 1) return;
   const geometry = calculateGeometry(photo, document);
   const measured = measureDocumentLayers(document, photo, measure, layerIds, geometry);
-  if (measured.length < 2 || measured.length !== ids.size) return;
+  if (measured.length !== ids.size || selectionLineAxis(measured) !== axis) return;
   const metrics = distributionMetrics(axis, setting.reference, measured, geometry, document.regions);
   if (!metrics) return;
   const dimension = axis === "x" ? "width" : "height";

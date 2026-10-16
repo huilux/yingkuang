@@ -9,7 +9,7 @@ import { NumericInput } from "./NumericInput";
 import { ParameterPicker } from "./ParameterPicker";
 import { DistributionControls } from "./DistributionControls";
 import { positionPatch, type AlignReference, type ArrangeAction, type LayerPatch } from "./selection-model";
-import type { DistributionRange, EditorDocument, LayerSource, PhotoAsset, RegionId, WatermarkLayer } from "./types";
+import type { EditorDocument, LayerSource, PhotoAsset, RegionId, WatermarkLayer } from "./types";
 
 // Coordinate percentages become f32 normalized positions in the native renderer.
 const isValidCoordinate = (percent: number) => Number.isFinite(Math.fround(percent / 100));
@@ -27,11 +27,11 @@ type Props = {
   onEnd: () => void;
   onOverride: (source: LayerSource, value?: string) => void;
   onArrange: (action: ArrangeAction, reference: AlignReference) => void;
-  onRange: (axis: "x" | "y", reference: DistributionRange["reference"], ratio: number | null, record?: boolean) => void;
-  onRangeReference: (reference: DistributionRange["reference"]) => void;
+  onRange: (axis: "x" | "y", ratio: number, record?: boolean) => void;
+  onClearRange: () => void;
 };
 
-export function LayerInspector({ document: design, photo, selectedIds, onSelect, onSelectionChange, onPatch, onAdd, onDelete, onStart, onEnd, onOverride, onArrange, onRange, onRangeReference }: Props) {
+export function LayerInspector({ document: design, photo, selectedIds, onSelect, onSelectionChange, onPatch, onAdd, onDelete, onStart, onEnd, onOverride, onArrange, onRange, onClearRange }: Props) {
   const [reference, setReference] = useState<AlignReference | "region">("region");
   const layers = design.layers.filter(layer => selectedIds.includes(layer.id));
   const first = layers[0];
@@ -90,7 +90,7 @@ export function LayerInspector({ document: design, photo, selectedIds, onSelect,
         <button type="button" disabled={!canArrange || layers.length < 3} title="至少选择三个元素，保持两端位置并均分文字边界间的空隙" onClick={() => arrange("distribute-x")}>横向等间距</button><button type="button" disabled={!canArrange || layers.length < 3} title="至少选择三个元素，保持两端位置并均分文字边界间的空隙" onClick={() => arrange("distribute-y")}>纵向等间距</button>
       </div>
       <p className="selection-note">{reference === "selection" ? "逐项对齐到所选元素的共同边界。" : "整体对齐到参照，保持元素间相对位置。"}{!canArrange ? "隐藏元素或关闭的区域不参与画布排版。" : ""}</p>
-      {!single && <DistributionControls key={`${photo.id}:${[...selectedIds].sort().join(",")}`} document={design} photo={photo} ids={selectedIds} onRange={onRange} onReference={onRangeReference} onStart={onStart} onEnd={onEnd} />}
+      {!single && <DistributionControls key={`${photo.id}:${[...selectedIds].sort().join(",")}`} document={design} photo={photo} ids={selectedIds} onRange={onRange} onClear={onClearRange} onStart={onStart} onEnd={onEnd} />}
       <FontPicker value={mixed("fontFamily") ? "" : first.fontFamily} onChange={fontFamily => patch({ fontFamily })} />
       {mixed("fontSize") && <p className="selection-note">字号不同；调整后统一。</p>}
       <SliderRow label="字号" value={first.fontSize} min={8} max={120} onStart={onStart} onEnd={onEnd} onChange={value => patch({ fontSize: value }, false)} />
