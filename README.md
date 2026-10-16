@@ -21,6 +21,8 @@
 
 本版修复 AppImage 模板预览缺失与高分屏画面发虚问题，包含五个基础模板、在线模板更新，以及横竖布局和等间距修复。官方模板可在「模板库」中手动检查更新，也可从[模板站点](https://huilux.github.io/yingkuang/)下载离线模板包。
 
+线上模板 `2026.10.2` 使用新的对齐与分布范围规则，需要 `0.5.9-beta.3` 或更新版本。目前 beta.3 尚未发布安装包，beta.2 会保留原模板并提示需要升级。维护者发布模板的步骤见[模板发布文档](docs/release.md#发布内置模板)。
+
 | 系统 | 下载 |
 | --- | --- |
 | Windows x64 | [EXE 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.9-beta.2/yingkuang_0.5.9-beta.2_windows-x64.exe) |

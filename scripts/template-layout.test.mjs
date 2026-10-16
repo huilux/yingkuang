@@ -27,7 +27,7 @@ test('orientation switches template layout, retaining local styles, added/delete
   const untouched=structuredClone(current);
   const result=reorientTemplateDocument(template,before,after,current);
   assert.equal(result.frame.color,'#123456');
-  assert.equal(result.layers[0].fontSize,current.layers[0].fontSize);
+  assert.equal(result.layers.find(layer=>layer.id===current.layers[0].id).fontSize,current.layers[0].fontSize);
   assert.ok(!result.layers.some(l=>l.id===deleted));
   assert.ok(result.layers.some(l=>l.id==='added'));
   assert.deepEqual(current,untouched);
@@ -36,6 +36,7 @@ test('orientation switches template layout, retaining local styles, added/delete
 for(const axis of ['x','y']) test(`saved ${axis} distribution recomputes actual edge gaps and is idempotent on other photos`,()=>{
   const doc=structuredClone(template.layouts.landscape);
   doc.layers=doc.layers.slice(0,3).map((l,i)=>({...l,id:String(i),visible:true,region:'canvas',source:'custom',customValue:'x'.repeat(i+1),x:.2+i*.3,y:.2+i*.3}));
+  delete doc.alignments;
   doc.distributions=[{axis,layerIds:['0','1','2']}];
   const measure=(l,text)=>({width:text.length*20,height:l.fontSize});
   const resolved=resolveDocumentLayout(doc,{...before,width:1600,height:900},measure);

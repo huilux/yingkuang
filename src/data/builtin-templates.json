@@ -1,8 +1,8 @@
 {
   "format": "yingkuang-builtin-templates",
   "version": 1,
-  "contentVersion": "2026.10.1",
-  "revision": 1,
+  "contentVersion": "2026.10.2",
+  "revision": 2,
   "defaultTemplateId": "wide-float",
   "templates": [
     {
@@ -20,10 +20,10 @@
             "color": "#f4f4f1",
             "blur": 32,
             "brightness": 75,
-            "paddingX": 4,
-            "paddingY": 4,
+            "paddingX": 6,
+            "paddingY": 6,
             "radius": 10,
-            "shadow": 60
+            "shadow": 80
           },
           "regions": {
             "top": {
@@ -74,10 +74,10 @@
               "source": "focalLength",
               "customValue": "",
               "region": "canvas",
-              "x": 0.33997404917470875,
-              "y": 0.9279862009486849,
+              "x": 0.3468983326920021,
+              "y": 0.8903039883301076,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
-              "fontSize": 22,
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
@@ -90,10 +90,10 @@
               "source": "aperture",
               "customValue": "",
               "region": "canvas",
-              "x": 0.4072457855808125,
-              "y": 0.9279862009486849,
+              "x": 0.41012918765362044,
+              "y": 0.8903039883301076,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
-              "fontSize": 22,
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
@@ -106,10 +106,10 @@
               "source": "shutter",
               "customValue": "",
               "region": "canvas",
-              "x": 0.4750815775594697,
-              "y": 0.9279862009486849,
+              "x": 0.47402677441884894,
+              "y": 0.8903039883301076,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
-              "fontSize": 22,
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
@@ -122,10 +122,10 @@
               "source": "iso",
               "customValue": "",
               "region": "canvas",
-              "x": 0.5505269212211252,
-              "y": 0.9279862009486849,
+              "x": 0.5454287559646693,
+              "y": 0.8903039883301076,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
-              "fontSize": 22,
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
@@ -154,10 +154,10 @@
               "source": "capturedDate",
               "customValue": "",
               "region": "canvas",
-              "x": 0.6427170800677592,
-              "y": 0.9279862009486849,
+              "x": 0.6346328365074387,
+              "y": 0.8903039883301076,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
-              "fontSize": 22,
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
@@ -171,7 +171,7 @@
               "customValue": "",
               "region": "canvas",
               "x": 0.5,
-              "y": 0.8854525418044176,
+              "y": 0.8270851971845029,
               "fontFamily": "Allura, Long Cang, sans-serif",
               "fontSize": 40,
               "fontWeight": 500,
@@ -190,6 +190,31 @@
                 "shutter",
                 "iso",
                 "layer-1791943429728-6"
+              ],
+              "range": {
+                "reference": "canvas",
+                "ratio": 0.35,
+                "anchor": 0.5
+              }
+            }
+          ],
+          "alignments": [
+            {
+              "action": "center-x",
+              "reference": "canvas",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791943429728-6"
+              ]
+            },
+            {
+              "action": "center-x",
+              "reference": "canvas",
+              "layerIds": [
+                "layer-1791943653925-7"
               ]
             }
           ]
@@ -201,10 +226,10 @@
             "color": "#f4f4f1",
             "blur": 32,
             "brightness": 75,
-            "paddingX": 4,
-            "paddingY": 4,
+            "paddingX": 6,
+            "paddingY": 6,
             "radius": 10,
-            "shadow": 60
+            "shadow": 80
           },
           "regions": {
             "top": {
@@ -255,8 +280,8 @@
               "source": "focalLength",
               "customValue": "",
               "region": "canvas",
-              "x": 0.2697715600966865,
-              "y": 0.9279862009486849,
+              "x": 0.2790322440011161,
+              "y": 0.9256774329244613,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 22,
               "fontWeight": 500,
@@ -271,8 +296,8 @@
               "source": "aperture",
               "customValue": "",
               "region": "canvas",
-              "x": 0.3649222753983686,
-              "y": 0.9279862009486849,
+              "x": 0.3718568427222116,
+              "y": 0.9256774329244613,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 22,
               "fontWeight": 500,
@@ -287,8 +312,8 @@
               "source": "shutter",
               "customValue": "",
               "region": "canvas",
-              "x": 0.4643208327116789,
-              "y": 0.9279862009486849,
+              "x": 0.4655653749193464,
+              "y": 0.9256774329244613,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 22,
               "fontWeight": 500,
@@ -303,8 +328,8 @@
               "source": "iso",
               "customValue": "",
               "region": "canvas",
-              "x": 0.5744955919089412,
-              "y": 0.9279862009486849,
+              "x": 0.5692230531147549,
+              "y": 0.9256774329244613,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 22,
               "fontWeight": 500,
@@ -335,8 +360,8 @@
               "source": "capturedDate",
               "customValue": "",
               "region": "canvas",
-              "x": 0.7053254744989443,
-              "y": 0.9279862009486849,
+              "x": 0.6964822769165039,
+              "y": 0.9256774329244613,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 22,
               "fontWeight": 500,
@@ -352,7 +377,7 @@
               "customValue": "",
               "region": "canvas",
               "x": 0.5,
-              "y": 0.8854525418044176,
+              "y": 0.8807904316368327,
               "fontFamily": "Allura, Long Cang, sans-serif",
               "fontSize": 40,
               "fontWeight": 500,
@@ -365,6 +390,31 @@
           "distributions": [
             {
               "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791943429728-6"
+              ],
+              "range": {
+                "reference": "canvas",
+                "ratio": 0.5,
+                "anchor": 0.5
+              }
+            }
+          ],
+          "alignments": [
+            {
+              "action": "center-x",
+              "reference": "canvas",
+              "layerIds": [
+                "layer-1791943653925-7"
+              ]
+            },
+            {
+              "action": "center-x",
+              "reference": "canvas",
               "layerIds": [
                 "focal",
                 "aperture",
@@ -395,7 +445,7 @@
             "paddingX": 8,
             "paddingY": 5,
             "radius": 12,
-            "shadow": 64
+            "shadow": 70
           },
           "regions": {
             "top": {
@@ -425,29 +475,13 @@
           },
           "layers": [
             {
-              "id": "camera",
-              "name": "相机型号",
-              "source": "camera",
-              "customValue": "",
-              "region": "bottom",
-              "x": 0.5,
-              "y": 0.3333333333333333,
-              "fontFamily": "Long Cang, serif",
-              "fontSize": 24,
-              "fontWeight": 400,
-              "color": "#ffffff",
-              "opacity": 1,
-              "rotation": 0,
-              "visible": false
-            },
-            {
               "id": "focal",
               "name": "焦距",
               "source": "focalLength",
               "customValue": "",
               "region": "bottom",
-              "x": 0.3156933771511473,
-              "y": 0.6666666666666666,
+              "x": 0.3463706125840283,
+              "y": 0.66,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 24,
               "fontWeight": 500,
@@ -462,8 +496,8 @@
               "source": "aperture",
               "customValue": "",
               "region": "bottom",
-              "x": 0.393677714859665,
-              "y": 0.6666666666666666,
+              "x": 0.4101863210146399,
+              "y": 0.66,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 24,
               "fontWeight": 500,
@@ -478,8 +512,8 @@
               "source": "shutter",
               "customValue": "",
               "region": "bottom",
-              "x": 0.47467693190976795,
-              "y": 0.6666666666666666,
+              "x": 0.474652693916963,
+              "y": 0.66,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 24,
               "fontWeight": 500,
@@ -494,8 +528,8 @@
               "source": "iso",
               "customValue": "",
               "region": "bottom",
-              "x": 0.5633244882888665,
-              "y": 0.6666666666666666,
+              "x": 0.5464426158670274,
+              "y": 0.66,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 24,
               "fontWeight": 500,
@@ -527,7 +561,7 @@
               "customValue": "",
               "region": "bottom",
               "x": 0.5,
-              "y": 0.3333333333333333,
+              "y": 0.34,
               "fontFamily": "Allura, Long Cang, sans-serif",
               "fontSize": 40,
               "fontWeight": 500,
@@ -542,8 +576,8 @@
               "source": "capturedDate",
               "customValue": "",
               "region": "bottom",
-              "x": 0.6666318940876164,
-              "y": 0.6666666666666666,
+              "x": 0.6356056303806761,
+              "y": 0.66,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 24,
               "fontWeight": 500,
@@ -556,6 +590,49 @@
           "distributions": [
             {
               "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791943846920-7"
+              ],
+              "range": {
+                "reference": "canvas",
+                "ratio": 0.35,
+                "anchor": 0.5
+              }
+            }
+          ],
+          "alignments": [
+            {
+              "action": "center-x",
+              "reference": "bottom",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791943846920-7"
+              ]
+            },
+            {
+              "action": "center-x",
+              "reference": "bottom",
+              "layerIds": [
+                "layer-1791943822339-6"
+              ]
+            },
+            {
+              "action": "third-1",
+              "reference": "bottom",
+              "layerIds": [
+                "layer-1791943822339-6"
+              ]
+            },
+            {
+              "action": "third-2",
+              "reference": "bottom",
               "layerIds": [
                 "focal",
                 "aperture",
@@ -573,10 +650,10 @@
             "color": "#f4f4f1",
             "blur": 30,
             "brightness": 55,
-            "paddingX": 8,
-            "paddingY": 5,
+            "paddingX": 7,
+            "paddingY": 6,
             "radius": 12,
-            "shadow": 64
+            "shadow": 70
           },
           "regions": {
             "top": {
@@ -627,8 +704,8 @@
               "source": "focalLength",
               "customValue": "",
               "region": "bottom",
-              "x": 0.29369793433564967,
-              "y": 0.6633333333333333,
+              "x": 0.28111569588644464,
+              "y": 0.6566666666666692,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 24,
               "fontWeight": 500,
@@ -643,8 +720,8 @@
               "source": "aperture",
               "customValue": "",
               "region": "bottom",
-              "x": 0.3765726771950591,
-              "y": 0.6633333333333333,
+              "x": 0.3716312743069833,
+              "y": 0.6566666666666692,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 24,
               "fontWeight": 500,
@@ -659,8 +736,8 @@
               "source": "shutter",
               "customValue": "",
               "region": "bottom",
-              "x": 0.4637618163536335,
-              "y": 0.67,
+              "x": 0.46309422275476286,
+              "y": 0.6633333333333326,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 24,
               "fontWeight": 500,
@@ -675,8 +752,8 @@
               "source": "iso",
               "customValue": "",
               "region": "bottom",
-              "x": 0.5618959928278394,
-              "y": 0.67,
+              "x": 0.5652202873899226,
+              "y": 0.6633333333333326,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 24,
               "fontWeight": 500,
@@ -708,7 +785,7 @@
               "customValue": "",
               "region": "bottom",
               "x": 0.5,
-              "y": 0.3333333333333333,
+              "y": 0.3400000000000006,
               "fontFamily": "Allura, Long Cang, sans-serif",
               "fontSize": 40,
               "fontWeight": 500,
@@ -723,8 +800,8 @@
               "source": "capturedDate",
               "customValue": "",
               "region": "bottom",
-              "x": 0.6810089193336155,
-              "y": 0.67,
+              "x": 0.6926416430556983,
+              "y": 0.6600000000000023,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 24,
               "fontWeight": 500,
@@ -743,6 +820,49 @@
                 "shutter",
                 "iso",
                 "layer-1791943846920-7"
+              ],
+              "range": {
+                "reference": "canvas",
+                "ratio": 0.5,
+                "anchor": 0.5
+              }
+            }
+          ],
+          "alignments": [
+            {
+              "action": "center-x",
+              "reference": "bottom",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791943846920-7"
+              ]
+            },
+            {
+              "action": "third-2",
+              "reference": "bottom",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791943846920-7"
+              ]
+            },
+            {
+              "action": "center-x",
+              "reference": "bottom",
+              "layerIds": [
+                "layer-1791943822339-6"
+              ]
+            },
+            {
+              "action": "third-1",
+              "reference": "bottom",
+              "layerIds": [
+                "layer-1791943822339-6"
               ]
             }
           ]
@@ -764,8 +884,8 @@
             "color": "#f7f7f4",
             "blur": 32,
             "brightness": 75,
-            "paddingX": 4,
-            "paddingY": 4,
+            "paddingX": 2,
+            "paddingY": 2,
             "radius": 0,
             "shadow": 0
           },
@@ -834,10 +954,10 @@
               "source": "focalLength",
               "customValue": "",
               "region": "bottom",
-              "x": 0.23925227147789704,
-              "y": 0.49875000000000114,
-              "fontFamily": "Space Mono",
-              "fontSize": 30,
+              "x": 0.2206649582107346,
+              "y": 0.498750000000003,
+              "fontFamily": "Space Mono, Long Cang",
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -850,10 +970,10 @@
               "source": "aperture",
               "customValue": "",
               "region": "bottom",
-              "x": 0.34057552600546354,
-              "y": 0.49875000000000114,
-              "fontFamily": "Space Mono",
-              "fontSize": 30,
+              "x": 0.3370844011182909,
+              "y": 0.498750000000003,
+              "fontFamily": "Space Mono, Long Cang",
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -866,10 +986,10 @@
               "source": "shutter",
               "customValue": "",
               "region": "bottom",
-              "x": 0.45932914637312106,
-              "y": 0.49875000000000114,
-              "fontFamily": "Space Mono",
-              "fontSize": 30,
+              "x": 0.4638363231312145,
+              "y": 0.498750000000003,
+              "fontFamily": "Space Mono, Long Cang",
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -882,10 +1002,10 @@
               "source": "iso",
               "customValue": "",
               "region": "bottom",
-              "x": 0.5838928886874755,
-              "y": 0.49875000000000114,
-              "fontFamily": "Space Mono",
-              "fontSize": 30,
+              "x": 0.5957544846968217,
+              "y": 0.498750000000003,
+              "fontFamily": "Space Mono, Long Cang",
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -914,10 +1034,10 @@
               "source": "capturedDate",
               "customValue": "",
               "region": "bottom",
-              "x": 0.725886996841921,
-              "y": 0.5012499999999989,
+              "x": 0.7483376044731636,
+              "y": 0.501249999999997,
               "fontFamily": "Space Mono, Long Cang",
-              "fontSize": 30,
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#000000",
               "opacity": 1,
@@ -928,6 +1048,24 @@
           "distributions": [
             {
               "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1792035071572-7"
+              ],
+              "range": {
+                "reference": "canvas",
+                "ratio": 0.6,
+                "anchor": 0.5
+              }
+            }
+          ],
+          "alignments": [
+            {
+              "action": "center-x",
+              "reference": "bottom",
               "layerIds": [
                 "focal",
                 "aperture",
@@ -945,8 +1083,8 @@
             "color": "#f7f7f4",
             "blur": 32,
             "brightness": 75,
-            "paddingX": 4,
-            "paddingY": 4,
+            "paddingX": 2,
+            "paddingY": 2,
             "radius": 0,
             "shadow": 0
           },
@@ -1015,10 +1153,10 @@
               "source": "focalLength",
               "customValue": "",
               "region": "bottom",
-              "x": 0.2063004896598133,
-              "y": 0.49937500000000057,
-              "fontFamily": "Space Mono",
-              "fontSize": 26,
+              "x": 0.22824607262244592,
+              "y": 0.49937499999999774,
+              "fontFamily": "Space Mono, Long Cang",
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -1031,10 +1169,10 @@
               "source": "aperture",
               "customValue": "",
               "region": "bottom",
-              "x": 0.31631687024132876,
-              "y": 0.49937500000000057,
-              "fontFamily": "Space Mono",
-              "fontSize": 26,
+              "x": 0.3323462046109713,
+              "y": 0.49937499999999774,
+              "fontFamily": "Space Mono, Long Cang",
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -1047,10 +1185,10 @@
               "source": "shutter",
               "customValue": "",
               "region": "bottom",
-              "x": 0.448433275575991,
-              "y": 0.49937500000000057,
-              "fontFamily": "Space Mono",
-              "fontSize": 26,
+              "x": 0.45056937291071963,
+              "y": 0.49937499999999774,
+              "fontFamily": "Space Mono, Long Cang",
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -1063,10 +1201,10 @@
               "source": "iso",
               "customValue": "",
               "region": "bottom",
-              "x": 0.5879163558283688,
-              "y": 0.49937500000000057,
-              "fontFamily": "Space Mono",
-              "fontSize": 26,
+              "x": 0.5758540593660795,
+              "y": 0.49937499999999774,
+              "fontFamily": "Space Mono, Long Cang",
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -1095,10 +1233,10 @@
               "source": "capturedDate",
               "customValue": "",
               "region": "bottom",
-              "x": 0.7494994608338933,
-              "y": 0.5006249999999994,
+              "x": 0.7293848184438853,
+              "y": 0.5006250000000023,
               "fontFamily": "Space Mono, Long Cang",
-              "fontSize": 26,
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#000000",
               "opacity": 1,
@@ -1109,6 +1247,35 @@
           "distributions": [
             {
               "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1792035071572-7"
+              ],
+              "range": {
+                "reference": "canvas",
+                "ratio": 0.6,
+                "anchor": 0.5
+              }
+            }
+          ],
+          "alignments": [
+            {
+              "action": "center-y",
+              "reference": "bottom",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1792035071572-7"
+              ]
+            },
+            {
+              "action": "center-x",
+              "reference": "bottom",
               "layerIds": [
                 "focal",
                 "aperture",
@@ -1136,10 +1303,10 @@
             "color": "#f4f4f1",
             "blur": 25,
             "brightness": 55,
-            "paddingX": 5,
-            "paddingY": 5,
-            "radius": 12,
-            "shadow": 100
+            "paddingX": 7,
+            "paddingY": 6,
+            "radius": 10,
+            "shadow": 85
           },
           "regions": {
             "top": {
@@ -1206,7 +1373,7 @@
               "source": "focalLength",
               "customValue": "",
               "region": "bottom",
-              "x": 0.31068720973332054,
+              "x": 0.2975569925626414,
               "y": 0.496875,
               "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
               "fontSize": 30,
@@ -1222,7 +1389,7 @@
               "source": "aperture",
               "customValue": "",
               "region": "bottom",
-              "x": 0.39080768901506724,
+              "x": 0.38604102837013066,
               "y": 0.503125,
               "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
               "fontSize": 30,
@@ -1238,7 +1405,7 @@
               "source": "shutter",
               "customValue": "",
               "region": "bottom",
-              "x": 0.472925043106079,
+              "x": 0.4740036712236658,
               "y": 0.503125,
               "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
               "fontSize": 30,
@@ -1254,7 +1421,7 @@
               "source": "iso",
               "customValue": "",
               "region": "bottom",
-              "x": 0.5663298813660972,
+              "x": 0.5717629623319023,
               "y": 0.503125,
               "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
               "fontSize": 30,
@@ -1286,7 +1453,7 @@
               "source": "capturedDate",
               "customValue": "",
               "region": "bottom",
-              "x": 0.6735253175417648,
+              "x": 0.6862433269157258,
               "y": 0.5,
               "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
               "fontSize": 30,
@@ -1306,6 +1473,35 @@
                 "shutter",
                 "iso",
                 "layer-1791551950179-7"
+              ],
+              "range": {
+                "reference": "canvas",
+                "ratio": 0.45,
+                "anchor": 0.5
+              }
+            }
+          ],
+          "alignments": [
+            {
+              "action": "center-y",
+              "reference": "bottom",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791551950179-7"
+              ]
+            },
+            {
+              "action": "center-x",
+              "reference": "bottom",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791551950179-7"
               ]
             }
           ]
@@ -1317,10 +1513,10 @@
             "color": "#f4f4f1",
             "blur": 25,
             "brightness": 55,
-            "paddingX": 5,
-            "paddingY": 5,
+            "paddingX": 7,
+            "paddingY": 6,
             "radius": 12,
-            "shadow": 100
+            "shadow": 80
           },
           "regions": {
             "top": {
@@ -1331,7 +1527,7 @@
             },
             "bottom": {
               "enabled": true,
-              "extra": 3,
+              "extra": 4,
               "safePadding": 2,
               "direction": 0
             },
@@ -1387,7 +1583,7 @@
               "source": "focalLength",
               "customValue": "",
               "region": "bottom",
-              "x": 0.2823959469716156,
+              "x": 0.2574473330849095,
               "y": 0.496875,
               "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
               "fontSize": 30,
@@ -1403,7 +1599,7 @@
               "source": "aperture",
               "customValue": "",
               "region": "bottom",
-              "x": 0.37005482315621796,
+              "x": 0.36040132756818805,
               "y": 0.503125,
               "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
               "fontSize": 30,
@@ -1419,7 +1615,7 @@
               "source": "shutter",
               "customValue": "",
               "region": "bottom",
-              "x": 0.46061824451793326,
+              "x": 0.462605319106788,
               "y": 0.503125,
               "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
               "fontSize": 30,
@@ -1435,7 +1631,7 @@
               "source": "iso",
               "customValue": "",
               "region": "bottom",
-              "x": 0.5675998246709304,
+              "x": 0.5789013979727762,
               "y": 0.503125,
               "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
               "fontSize": 30,
@@ -1467,7 +1663,7 @@
               "source": "capturedDate",
               "customValue": "",
               "region": "bottom",
-              "x": 0.6946404563375996,
+              "x": 0.7192500733492667,
               "y": 0.5,
               "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
               "fontSize": 30,
@@ -1481,6 +1677,35 @@
           "distributions": [
             {
               "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791551950179-7"
+              ],
+              "range": {
+                "reference": "canvas",
+                "ratio": 0.55,
+                "anchor": 0.5
+              }
+            }
+          ],
+          "alignments": [
+            {
+              "action": "center-y",
+              "reference": "bottom",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791551950179-7"
+              ]
+            },
+            {
+              "action": "center-x",
+              "reference": "bottom",
               "layerIds": [
                 "focal",
                 "aperture",
@@ -1522,7 +1747,7 @@
             },
             "bottom": {
               "enabled": true,
-              "extra": 7,
+              "extra": 6,
               "safePadding": 2,
               "direction": 0
             },
@@ -1578,10 +1803,10 @@
               "source": "focalLength",
               "customValue": "",
               "region": "bottom",
-              "x": 0.24000820140502643,
-              "y": 0.49875000000000197,
+              "x": 0.22121602376302082,
+              "y": 0.498750000000003,
               "fontFamily": "Space Mono",
-              "fontSize": 30,
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -1594,10 +1819,10 @@
               "source": "aperture",
               "customValue": "",
               "region": "bottom",
-              "x": 0.3394041251165757,
-              "y": 0.49875000000000197,
+              "x": 0.336739985148112,
+              "y": 0.498750000000003,
               "fontFamily": "Space Mono",
-              "fontSize": 30,
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -1610,10 +1835,10 @@
               "source": "shutter",
               "customValue": "",
               "region": "bottom",
-              "x": 0.4571600341796875,
-              "y": 0.49875000000000197,
+              "x": 0.46287195841471357,
+              "y": 0.498750000000003,
               "fontFamily": "Space Mono",
-              "fontSize": 30,
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -1626,10 +1851,10 @@
               "source": "iso",
               "customValue": "",
               "region": "bottom",
-              "x": 0.5810359383599868,
-              "y": 0.49875000000000197,
+              "x": 0.5943079376220703,
+              "y": 0.498750000000003,
               "fontFamily": "Space Mono",
-              "fontSize": 30,
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -1658,10 +1883,10 @@
               "source": "capturedDate",
               "customValue": "",
               "region": "bottom",
-              "x": 0.7232718278918485,
-              "y": 0.5012499999999981,
+              "x": 0.746959940592448,
+              "y": 0.501249999999997,
               "fontFamily": "Space Mono",
-              "fontSize": 30,
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -1672,6 +1897,35 @@
           "distributions": [
             {
               "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791818240880-7"
+              ],
+              "range": {
+                "reference": "canvas",
+                "ratio": 0.6,
+                "anchor": 0.5
+              }
+            }
+          ],
+          "alignments": [
+            {
+              "action": "center-x",
+              "reference": "bottom",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791818240880-7"
+              ]
+            },
+            {
+              "action": "center-y",
+              "reference": "bottom",
               "layerIds": [
                 "focal",
                 "aperture",
@@ -1703,7 +1957,7 @@
             },
             "bottom": {
               "enabled": true,
-              "extra": 7,
+              "extra": 6,
               "safePadding": 2,
               "direction": 0
             },
@@ -1759,8 +2013,8 @@
               "source": "focalLength",
               "customValue": "",
               "region": "bottom",
-              "x": 0.20489820471592796,
-              "y": 0.4993750000000026,
+              "x": 0.23182403564453125,
+              "y": 0.4993750000000015,
               "fontFamily": "Space Mono",
               "fontSize": 26,
               "fontWeight": 500,
@@ -1775,8 +2029,8 @@
               "source": "aperture",
               "customValue": "",
               "region": "bottom",
-              "x": 0.3126690578022999,
-              "y": 0.4993750000000026,
+              "x": 0.330109977722168,
+              "y": 0.4993750000000015,
               "fontFamily": "Space Mono",
               "fontSize": 26,
               "fontWeight": 500,
@@ -1792,7 +2046,7 @@
               "customValue": "",
               "region": "bottom",
               "x": 0.4443079376220703,
-              "y": 0.4993750000000026,
+              "y": 0.4993750000000015,
               "fontFamily": "Space Mono",
               "fontSize": 26,
               "fontWeight": 500,
@@ -1807,8 +2061,8 @@
               "source": "iso",
               "customValue": "",
               "region": "bottom",
-              "x": 0.5839028263529735,
-              "y": 0.4993750000000026,
+              "x": 0.5664619064331055,
+              "y": 0.4993750000000015,
               "fontFamily": "Space Mono",
               "fontSize": 26,
               "fontWeight": 500,
@@ -1839,8 +2093,8 @@
               "source": "capturedDate",
               "customValue": "",
               "region": "bottom",
-              "x": 0.7473657418172752,
-              "y": 0.5006249999999974,
+              "x": 0.7204399108886719,
+              "y": 0.5006249999999984,
               "fontFamily": "Space Mono",
               "fontSize": 26,
               "fontWeight": 500,
@@ -1853,6 +2107,35 @@
           "distributions": [
             {
               "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791818240880-7"
+              ],
+              "range": {
+                "reference": "canvas",
+                "ratio": 0.6,
+                "anchor": 0.5
+              }
+            }
+          ],
+          "alignments": [
+            {
+              "action": "center-x",
+              "reference": "bottom",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791818240880-7"
+              ]
+            },
+            {
+              "action": "center-y",
+              "reference": "bottom",
               "layerIds": [
                 "focal",
                 "aperture",

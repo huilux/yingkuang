@@ -13,25 +13,25 @@
   localStorage.setItem(keys[1],serializeUserTemplates([modified,...original.templates.slice(1),personal],original));
   localStorage.setItem(keys[3],personal.id);
   localStorage.setItem(keys[0],JSON.stringify({paths:['update-photo.jpg'],activePath:'update-photo.jpg',documentsByPath:{'update-photo.jpg':modified.layouts.landscape},templateIdsByPath:{'update-photo.jpg':modified.id}}));
-  const next=structuredClone(original);next.revision=2;next.contentVersion='2099.1.2';next.templates[0].name='官方第一模板新版';next.templates[1].name='官方第二模板新版';
+  const next=structuredClone(original);next.revision=original.revision+1;next.contentVersion='2099.1.2';next.templates[0].name='官方第一模板新版';next.templates[1].name='官方第二模板新版';
   next.templates.push({...structuredClone(original.templates[0]),id:'new-official',name:'官方新增模板'});
   const catalog=JSON.stringify(next), bytes=new TextEncoder().encode(catalog);
   const sha256=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
-  const index=JSON.stringify({format:'yingkuang-template-feed',schemaVersion:1,revision:2,version:next.contentVersion,minAppVersion:'0.5.9-beta.1',path:`releases/${next.contentVersion}/templates.json`,sha256,bytes:bytes.length,templateCount:next.templates.length,notes:'测试官方更新',fonts:['Space Mono']});
+  const index=JSON.stringify({format:'yingkuang-template-feed',schemaVersion:1,revision:next.revision,version:next.contentVersion,minAppVersion:'0.5.9-beta.1',path:`releases/${next.contentVersion}/templates.json`,sha256,bytes:bytes.length,templateCount:next.templates.length,notes:'测试官方更新',fonts:['Space Mono']});
   // IPC responses model packages already verified by the native boundary.
   const pack={format:'yingkuang-official-template-package',version:1,index,signature:'bmF0aXZlLXZlcmlmaWVk',catalog};
-  const originalPack=await fetch('/template-feed/releases/2026.10.1/official-templates.json').then(r=>r.json());
+  const originalPack=await fetch('/src/data/bundled-template-package.json').then(r=>r.json());
   let current=null,failInstall=true,offline=false,networkChecks=0,imports=0;
   mockIPC(command=>{
     if(command==='inspect_images_resilient')return {items:[{id:'update-photo',path:'update-photo.jpg',fileName:'update-photo.jpg',width:600,height:400,megapixels:.24,thumbnailDataUrl:'/demo.jpg',metadata:{}}],failures:[]};
     if(command==='read_official_templates')return {current,previousVersion:null,issue:null};
     // Slow IPC makes premature clicks on disabled controls fail deterministically.
     if(command==='check_template_update'){networkChecks++;if(offline)throw new Error('网络不可用');return new Promise(resolve=>setTimeout(()=>resolve({index,signature:pack.signature,compatible:true}),120));}
-    if(command==='install_template_update'){if(failInstall)throw new Error('模板下载中断');current=pack;return {current,previousVersion:'2026.10.1',issue:null};}
+    if(command==='install_template_update'){if(failInstall)throw new Error('模板下载中断');current=pack;return {current,previousVersion:original.contentVersion,issue:null};}
     if(command==='rollback_official_templates'){current=originalPack;return {current,previousVersion:null,issue:null};}
     if(command==='plugin:dialog|open')return 'official-package.json';
     if(command==='read_template_backup')return JSON.stringify(pack);
-    if(command==='import_official_templates'){imports++;current=pack;return {current,previousVersion:'2026.10.1',issue:null};}
+    if(command==='import_official_templates'){imports++;current=pack;return {current,previousVersion:original.contentVersion,issue:null};}
   },{shouldMockEvents:true});
   const host=document.createElement('div');host.style.cssText='position:fixed;inset:0;z-index:2500';document.body.append(host);
   let root=createRoot(host);
@@ -52,7 +52,7 @@
     button('检查更新').click();await t.waitFor(()=>button('更新官方模板'),'Update not offered');
     const before=localStorage.getItem(keys[1]);button('更新官方模板').click();await t.waitFor(()=>host.querySelector('.template-update-error'),'Download failure not shown');
     t.assert(localStorage.getItem(keys[1])===before,'Failed download changed the template library');
-    failInstall=false;button('更新官方模板').click();await t.waitFor(()=>stored().catalog.revision===2,'Update not installed');assertProtected(photo);
+    failInstall=false;button('更新官方模板').click();await t.waitFor(()=>stored().catalog.revision===next.revision,'Update not installed');assertProtected(photo);
     t.assert(stored().catalog.templates.some(x=>x.name==='官方第二模板新版'),'Untouched official template did not update');
     const personalDefault=stored().defaultTemplateId;
     const chooseDefault=async id=>{const field=host.querySelector('select[aria-label="新照片使用模板"]');field.value=id;field.dispatchEvent(new Event('change',{bubbles:true}));await t.frame();};
@@ -67,8 +67,8 @@
     await t.waitFor(()=>host.textContent.includes('官方模板已是最新版本')&&!button('导入官方模板包').disabled,'Check did not finish before offline import');
     // Use the offline file import path without any network request.
     offline=true;const checks=networkChecks;button('导入官方模板包').click();await t.waitFor(()=>imports===1,'Offline import did not finish');
-    await t.waitFor(()=>button('恢复上一版 · 2026.10.1'),'Rollback missing');t.assert(networkChecks===checks,'Offline import contacted network');
-    button('恢复上一版 · 2026.10.1').click();await t.frame();button('确认恢复').click();await t.waitFor(()=>stored().catalog.revision===1,'Rollback not applied');assertProtected(photo);
+    await t.waitFor(()=>button(`恢复上一版 · ${original.contentVersion}`),'Rollback missing');t.assert(networkChecks===checks,'Offline import contacted network');
+    button(`恢复上一版 · ${original.contentVersion}`).click();await t.frame();button('确认恢复').click();await t.waitFor(()=>stored().catalog.revision===original.revision,'Rollback not applied');assertProtected(photo);
     return {noStartupNetwork:true,failedDownloadRetained:true,localEditsPreserved:true,personalCollisionAndDefaultPreserved:true,explicitOfficialChoicePreserved:true,editedPhotoUnchanged:true,restartOffline:true,offlineImport:true,rollback:true};
   }finally{root.unmount();host.remove();clearMocks();saved.forEach(([key,value])=>value===null?localStorage.removeItem(key):localStorage.setItem(key,value));}
 })();

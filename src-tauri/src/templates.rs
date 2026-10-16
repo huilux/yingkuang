@@ -698,7 +698,7 @@ mod tests {
         changed.catalog.push(' ');
         assert!(install(temp.path(), changed).is_err());
         let mut changed = pack;
-        changed.index = changed.index.replace("2026.10.1", "2026.10.2");
+        changed.index.push(' ');
         assert!(install(temp.path(), changed).is_err());
         assert_eq!(
             fs::read(temp.path().join("current.json")).unwrap(),
