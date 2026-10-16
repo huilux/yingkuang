@@ -3,7 +3,7 @@ import { calculateGeometry } from "./editor-model";
 import { measureBrowserLayers } from "./browser-layout";
 import { ensureFontsLoaded, fontsChangedEvent } from "./font-library";
 import { isVisible } from "./canvas-camera";
-import { distributionMetrics, selectionLineAxis } from "./selection-model";
+import { canPositionAlongAxis, distributionMetrics, selectionLineAxis } from "./selection-model";
 import { NumericInput } from "./NumericInput";
 import type { EditorDocument, PhotoAsset } from "./types";
 
@@ -44,9 +44,10 @@ export function DistributionControls({document: design, photo, ids, onRange, onC
   const value = percent(metrics?.ratio ?? 0);
   const label = axis === "x" ? "占用宽度" : "占用高度";
   const dimension = axis === "x" ? "宽度" : "高度";
-  const disabled = !metrics || minimum > 100;
+  const positionable = axis !== null && canPositionAlongAxis(axis, layers, geometry);
+  const disabled = !metrics || minimum > 100 || !positionable;
   const overflow = range?.reference === "canvas" && metrics && range.ratio + 1e-9 < metrics.minimumRatio;
-  const notice = !allVisible ? "请选择至少两个可见元素。" : !axis ? "选中的元素不是同一行或同一列。请先以所选元素为参照对齐，再调整范围。" : minimum > 100 ? `文字总${dimension}已超过画布，请先减小字号或减少元素。` : feedback || (overflow ? `模板目标 ${percent(range.ratio)}%，当前文字至少需要 ${minimum}%，已按最小范围排布。` : "");
+  const notice = !allVisible ? "请选择至少两个可见元素。" : !axis ? "选中的元素不是同一行或同一列。请先以所选元素为参照对齐，再调整范围。" : !positionable ? `所选元素的所属区域${dimension}不足，请增加${axis === "x" ? "左右" : "上下"}留白或对应区域的额外空间。` : minimum > 100 ? `文字总${dimension}已超过画布，请先减小字号或减少元素。` : feedback || (overflow ? `模板目标 ${percent(range.ratio)}%，当前文字至少需要 ${minimum}%，已按最小范围排布。` : "");
 
   return <section className="distribution-controls" aria-label="分布范围">
     <div className="distribution-heading"><strong>分布范围</strong><span>{axis === "x" ? "一行 · 调整宽度" : axis === "y" ? "一列 · 调整高度" : "混排不可调整"}</span></div>

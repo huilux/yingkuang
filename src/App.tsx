@@ -606,8 +606,9 @@ function App() {
   }
 
   function changeDistributionRange(axis: "x" | "y", ratio: number, record = true) {
-    if (!activePhoto) return;
-    updateDocument(draft => setBrowserDistributionRange(draft, activePhoto, selectedLayerIds, axis, {reference:"canvas",ratio}), record);
+    if (!activePhoto || !currentDocument.current) return;
+    const next = cloneDocument(currentDocument.current);
+    if (setBrowserDistributionRange(next, activePhoto, selectedLayerIds, axis, {reference:"canvas",ratio})) replaceActiveDocument(next, record);
   }
 
   function clearDistributionRange() {

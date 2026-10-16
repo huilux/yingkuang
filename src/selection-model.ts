@@ -41,6 +41,15 @@ export function selectionLineAxis(measured: MeasuredLayer[]): "x" | "y" | null {
   return row === column ? null : row ? "x" : "y";
 }
 
+export function canPositionAlongAxis(axis: "x" | "y", layers: WatermarkLayer[], geometry: CanvasGeometry): boolean {
+  const dimension = axis === "x" ? "width" : "height";
+  // positionPatch uses a minimum denominator of one world unit.
+  return layers.length > 0 && layers.every(layer => {
+    const length = geometry.regions[layer.region][dimension];
+    return Number.isFinite(length) && length >= 1;
+  });
+}
+
 // Region coordinates are relative, not a clipping constraint. As in the
 // prototype, an element may cross its region while staying attached to it.
 // Clamping each element independently would deform a multi-selection.
@@ -73,11 +82,16 @@ export function arrangeSelection(action: ArrangeAction, reference: AlignReferenc
   const group = unionBounds(measured);
   if (!group) return [];
   const selected = new Map(layers.map(layer => [layer.id, layer]));
-  const patch = (item: MeasuredLayer, dx: number, dy: number) => positionPatch(selected.get(item.id)!, { x: item.position.x + dx, y: item.position.y + dy }, geometry);
+  const axis = arrangementAxis(action, reference);
+  if (!canPositionAlongAxis(axis, measured.map(item => selected.get(item.id)!), geometry)) return [];
+  const patch = (item: MeasuredLayer, delta: number): LayerPatch => {
+    const point = {...item.position, [axis]:item.position[axis]+delta};
+    const next = positionPatch(selected.get(item.id)!, point, geometry);
+    return {id:item.id,patch:{[axis]:next.patch[axis]!}};
+  };
   if (action === "distribute-x" || action === "distribute-y") {
     const range = distribution?.range;
     if (measured.length < (range ? 2 : 3)) return [];
-    const axis = action === "distribute-x" ? "x" : "y";
     const dimension = axis === "x" ? "width" : "height";
     const sorted = [...measured].sort((a, b) => range ? distribution!.layerIds.indexOf(a.id) - distribution!.layerIds.indexOf(b.id) : a.bounds[axis] - b.bounds[axis]);
     let start = sorted[0].bounds[axis];
@@ -95,14 +109,13 @@ export function arrangeSelection(action: ArrangeAction, reference: AlignReferenc
     return sorted.map(item => {
       const delta = cursor - item.bounds[axis];
       cursor += item.bounds[dimension] + gap;
-      return patch(item, axis === "x" ? delta : 0, axis === "y" ? delta : 0);
+      return patch(item, delta);
     });
   }
   const rawRect = reference === "selection" ? group : reference === "photo" ? geometry.photo : geometry.regions[reference];
   const rect = regions && reference !== "selection" && reference !== "photo" && reference !== "canvas"
     ? safeRect(rawRect, regions[reference].safePadding) : rawRect;
   const thirds = action === "third-1" || action === "third-2";
-  const axis = arrangementAxis(action, reference);
   const dimension = axis === "x" ? "width" : "height";
   const fraction = action === "third-1" ? 1 / 3 : action === "third-2" ? 2 / 3 : action === "left" || action === "top" ? 0 : action === "right" || action === "bottom" ? 1 : 0.5;
   const anchor = thirds ? 0.5 : fraction;
@@ -110,6 +123,6 @@ export function arrangeSelection(action: ArrangeAction, reference: AlignReferenc
   return measured.map(item => {
     const origin = reference === "selection" ? item.bounds : group;
     const delta = target - origin[axis] - origin[dimension] * anchor;
-    return patch(item, axis === "x" ? delta : 0, axis === "y" ? delta : 0);
+    return patch(item, delta);
   });
 }

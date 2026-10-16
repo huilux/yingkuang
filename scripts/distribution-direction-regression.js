@@ -55,7 +55,27 @@
     const displayed=Number(host.querySelector('input[aria-label="占用宽度百分比"]').value);
     t.near(displayed,Math.round(metric(current,'x').ratio*1000)/10,'Legacy range is not converted to canvas percent',1e-9);
     t.assert(JSON.stringify(current)===legacy,'Opening the new controls rewrote a legacy template');
+    for(const axis of ['x','y']) {
+      const label=axis==='x'?'占用宽度':'占用高度',other=axis==='x'?'y':'x',region=axis==='x'?'bottom':'left';
+      current=structuredClone(design);current.frame[axis==='x'?'paddingY':'paddingX']=0;
+      current.regions[region]={...current.regions[region],enabled:true,extra:0};
+      current.layers.forEach((layer,i)=>{layer.region=region;layer[other]=.37;layer[axis]=.1+i*.2;});
+      key=`zero-perpendicular-${axis}`;render();await t.frame();
+      t.assert(!host.querySelector(`input[aria-label="${label}"]`).disabled,'A collapsed perpendicular dimension blocked valid spacing edits');
+      await setNumber(label,60);
+      current.layers.forEach(layer=>t.near(layer[other],.37,'Range edit overwrote a collapsed perpendicular coordinate',1e-9));
+      const regions=axis==='x'?['left','right']:['top','bottom'];
+      current=structuredClone(design);current.frame[axis==='x'?'paddingX':'paddingY']=0;
+      regions.forEach(id=>{current.regions[id]={...current.regions[id],enabled:true,extra:0};});
+      current.layers.forEach((layer,i)=>{layer.region=regions[i%2];layer.x=.5;layer.y=.5;});
+      key=`zero-active-${axis}`;render();await t.frame();
+      t.assert(host.querySelector(`input[aria-label="${label}"]`).disabled&&host.querySelector(`input[aria-label="${label}百分比"]`).disabled,'An unpositionable active dimension still enables range inputs');
+      t.assert(host.textContent.includes('所属区域')&&host.textContent.includes('额外空间'),'Disabled range does not explain how to restore region space');
+      current.frame[axis==='x'?'paddingX':'paddingY']=5;render();await t.frame();
+      t.assert(!host.querySelector(`input[aria-label="${label}"]`).disabled,'Restoring region space did not re-enable the range');
+      await setNumber(label,60);t.near(metric(current,axis).ratio,.6,'Restored region cannot realize the requested range',1e-9);
+    }
     t.assert(host.scrollWidth<=host.clientWidth+1,'Controls overflow the inspector');
-    return {rowOnlyWidth:true,columnOnlyHeight:true,noLayoutConversion:true,mixedSelectionBlocked:true,perpendicularPositionsAndTypographyStable:true,legacyRangePreserved:true,clearKeepsPositions:true};
+    return {rowOnlyWidth:true,columnOnlyHeight:true,noLayoutConversion:true,mixedSelectionBlocked:true,perpendicularPositionsAndTypographyStable:true,legacyRangePreserved:true,clearKeepsPositions:true,collapsedPerpendicularCoordinatePreserved:true,collapsedActiveAxisDisabled:true,restoringRegionEnablesRange:true};
   } finally {root.unmount();host.remove();}
 })();

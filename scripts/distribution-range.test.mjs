@@ -165,3 +165,43 @@ test('resizing a column preserves its width, x coordinates and font properties',
   doc.layers.forEach((layer,i)=>{near(layer.x,before.layers[i].x);assert.equal(layer.fontSize,before.layers[i].fontSize);assert.equal(layer.rotation,before.layers[i].rotation);});
   assert.equal(selectionLineAxis(measured(doc,a)),'y');
 });
+
+for (const axis of ['x','y']) test(`${axis} range preserves the perpendicular coordinate in a collapsed region`,()=>{
+  const doc=fixture(axis),region=axis==='x'?'bottom':'left',other=axis==='x'?'y':'x';
+  doc.frame[axis==='x'?'paddingY':'paddingX']=0;
+  doc.regions[region]={enabled:true,extra:0,safePadding:0,direction:0};
+  doc.layers.forEach(layer=>{layer.region=region;layer[other]=.37;});
+  setDistributionRange(doc,a,ids(doc),axis,{reference:'canvas',ratio:.6},size);
+  assert.ok(doc.distributions?.[0].range);
+  for(let i=0;i<3;i++) {
+    const next=resolveDocumentLayout(doc,a,size);next.layers.forEach(layer=>near(layer[other],.37));
+    Object.assign(doc,next);
+  }
+  doc.frame[axis==='x'?'paddingY':'paddingX']=5;
+  const next=resolveDocumentLayout(doc,a,size),geometry=calculateGeometry(a,next),rect=geometry.regions[region];
+  next.layers.forEach(layer=>near(layerPosition(layer,geometry)[other],rect[other]+.37*rect[other==='x'?'width':'height']));
+  near(metrics(next,a,axis).ratio,.6);
+});
+
+for (const axis of ['x','y']) for(const padding of [0,.05]) test(`${axis} range rejects an unpositionable axis at padding ${padding}`,()=>{
+  const doc=fixture(axis,2),regions=axis==='x'?['left','right']:['top','bottom'];
+  doc.frame[axis==='x'?'paddingX':'paddingY']=padding;
+  regions.forEach(region=>{doc.regions[region]={enabled:true,extra:0,safePadding:0,direction:0};});
+  doc.layers.forEach((layer,i)=>{layer.region=regions[i];layer.x=.5;layer.y=.5;});
+  const before=structuredClone(doc);
+  setDistributionRange(doc,a,ids(doc),axis,{reference:'canvas',ratio:.6},size);
+  assert.deepEqual(doc,before,'Rejected range must not persist a rule or invalid normalized coordinates');
+});
+
+for(const axis of ['x','y']) test(`${axis} saved range and alignment survive collapsing and restoring the active region`,()=>{
+  const doc=fixture(axis,2),regions=axis==='x'?['left','right']:['top','bottom'],padding=axis==='x'?'paddingX':'paddingY';
+  doc.frame[padding]=5;regions.forEach(region=>{doc.regions[region]={enabled:true,extra:0,safePadding:0,direction:0};});
+  doc.layers.forEach((layer,i)=>{layer.region=regions[i];layer.x=.5;layer.y=.5;});
+  setDistributionRange(doc,a,ids(doc),axis,{reference:'canvas',ratio:.6},size);
+  arrange(doc,a,axis==='x'?'left':'top');arrange(doc,a,axis==='x'?'center-y':'center-x');
+  const before=resolveDocumentLayout(doc,a,size),collapsed=structuredClone(before);collapsed.frame[padding]=0;
+  const next=resolveDocumentLayout(collapsed,a,size);
+  assert.deepEqual(next.layers,collapsed.layers,'Resolving a collapsed axis must preserve stored coordinates');
+  assert.deepEqual(next.distributions,collapsed.distributions,'Collapsed geometry must not rewrite the saved anchor');
+  next.frame[padding]=5;unchanged(before,resolveDocumentLayout(next,a,size),a);
+});

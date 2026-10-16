@@ -1,6 +1,6 @@
 import { calculateGeometry, layerPosition, resolveLayerText } from "./editor-model.ts";
 import { isVisible } from "./canvas-camera.ts";
-import { arrangementAxis, arrangeSelection, distributionMetrics, distributionReference, selectionLineAxis, type AlignReference, type ArrangeAction, type LayerPatch } from "./selection-model.ts";
+import { arrangementAxis, arrangeSelection, canPositionAlongAxis, distributionMetrics, distributionReference, selectionLineAxis, type AlignReference, type ArrangeAction, type LayerPatch } from "./selection-model.ts";
 import type { CanvasGeometry, DistributionRange, DistributionRule, EditorDocument, PhotoAsset, WatermarkLayer } from "./types";
 
 export type TextSize = (layer: WatermarkLayer, text: string) => { width: number; height: number };
@@ -23,18 +23,21 @@ export function resolveDocumentLayout(source: EditorDocument, photo: PhotoAsset,
   const apply = (layerIds: string[], action: ArrangeAction, reference: AlignReference, distribution?: DistributionRule) => {
     const layers = result.layers.filter(layer => layerIds.includes(layer.id) && isVisible(layer, result.regions));
     const measured = measureDocumentLayers(result, photo, measure, layerIds, geometry);
-    for (const {id,patch} of arrangeSelection(action, reference, measured, layers, geometry, result.regions, distribution)) {
+    const patches = arrangeSelection(action, reference, measured, layers, geometry, result.regions, distribution);
+    for (const {id,patch} of patches) {
       Object.assign(result.layers.find(layer => layer.id === id)!, patch);
     }
+    return patches.length > 0;
   };
   for (const rule of result.distributions ?? []) apply(rule.layerIds, rule.axis === "x" ? "distribute-x" : "distribute-y", "canvas", rule);
   // Distribute first, then position the complete group using its current text.
   for (const rule of result.alignments ?? []) {
-    apply(rule.layerIds, rule.action, rule.reference);
+    if (!apply(rule.layerIds, rule.action, rule.reference)) continue;
+    const axis = arrangementAxis(rule.action, rule.reference);
     // Persist the resulting center when an outer alignment translates a ranged
     // group. Resolving an already-resolved document must remain idempotent.
     for (const distribution of result.distributions ?? []) {
-      if (!distribution.range || !distribution.layerIds.every(id => rule.layerIds.includes(id))) continue;
+      if (!distribution.range || distribution.axis !== axis || !distribution.layerIds.every(id => rule.layerIds.includes(id))) continue;
       const metrics = distributionMetrics(distribution.axis, distribution.range.reference, measureDocumentLayers(result, photo, measure, distribution.layerIds, geometry), geometry, result.regions);
       const dimension = distribution.axis === "x" ? "width" : "height";
       if (metrics) distribution.range.anchor = (metrics.bounds[distribution.axis] + metrics.bounds[dimension] / 2 - metrics.rect[distribution.axis]) / metrics.rect[dimension];
@@ -104,21 +107,23 @@ export function commitArrangement(document: EditorDocument, patches: LayerPatch[
   pruneLayoutRules(document);
 }
 
-export function setDistributionRange(document: EditorDocument, photo: PhotoAsset, layerIds: string[], axis: "x" | "y", setting: Pick<DistributionRange,"reference" | "ratio"> | null, measure: TextSize) {
+export function setDistributionRange(document: EditorDocument, photo: PhotoAsset, layerIds: string[], axis: "x" | "y", setting: Pick<DistributionRange,"reference" | "ratio"> | null, measure: TextSize): boolean {
   const ids = new Set(layerIds);
   const matches = (rule: DistributionRule) => rule.axis === axis && rule.layerIds.length === ids.size && rule.layerIds.every(id => ids.has(id));
   if (!setting) {
+    if (!document.distributions?.some(rule => matches(rule) && rule.range)) return false;
     document.distributions = document.distributions?.filter(rule => !matches(rule) || rule.layerIds.length >= 3);
     for (const rule of document.distributions ?? []) if (matches(rule)) delete rule.range;
     pruneLayoutRules(document);
-    return;
+    return true;
   }
-  if (!Number.isFinite(setting.ratio) || setting.ratio <= 0 || setting.ratio > 1) return;
+  if (!Number.isFinite(setting.ratio) || setting.ratio <= 0 || setting.ratio > 1) return false;
   const geometry = calculateGeometry(photo, document);
   const measured = measureDocumentLayers(document, photo, measure, layerIds, geometry);
-  if (measured.length !== ids.size || selectionLineAxis(measured) !== axis) return;
+  const layers = document.layers.filter(layer => ids.has(layer.id));
+  if (measured.length !== ids.size || selectionLineAxis(measured) !== axis || !canPositionAlongAxis(axis, layers, geometry)) return false;
   const metrics = distributionMetrics(axis, setting.reference, measured, geometry, document.regions);
-  if (!metrics) return;
+  if (!metrics) return false;
   const dimension = axis === "x" ? "width" : "height";
   const previous = document.distributions?.find(matches);
   const order = previous?.range ? previous.layerIds : [...measured].sort((a,b)=>a.bounds[axis]-b.bounds[axis]).map(item=>item.id);
@@ -127,4 +132,5 @@ export function setDistributionRange(document: EditorDocument, photo: PhotoAsset
   document.alignments = document.alignments?.filter(rule => arrangementAxis(rule.action, rule.reference) !== axis || !rule.layerIds.some(id=>ids.has(id)) || (rule.reference !== "selection" && rule.layerIds.length === ids.size && rule.layerIds.every(id=>ids.has(id))));
   pruneLayoutRules(document);
   Object.assign(document, resolveDocumentLayout(document, photo, measure));
+  return true;
 }
