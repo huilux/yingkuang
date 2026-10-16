@@ -62,6 +62,8 @@ function compareDocument(changes: TemplateChange[], orientation: string, builtIn
   if (JSON.stringify(builtIn.distributions ?? []) !== JSON.stringify(local.distributions ?? [])) {
     changes.push({group:`${orientation} · 排版`,field:"等间距规则",builtInValue:`${builtIn.distributions?.length ?? 0} 组`,localValue:`${local.distributions?.length ?? 0} 组（已修改）`});
   }
+  const ranges = (document: EditorDocument) => (document.distributions ?? []).filter(rule => rule.range).map(rule => `${rule.axis === "x" ? "宽度" : "高度"} ${Math.round(rule.range!.ratio * 1000) / 10}%（${rule.range!.reference === "photo" ? "照片" : rule.range!.reference === "canvas" ? "画布" : regionNames[rule.range!.reference]}）`).join("；") || "保持当前范围";
+  if (ranges(builtIn) !== ranges(local)) changes.push({group:`${orientation} · 排版`,field:"分布范围",builtInValue:ranges(builtIn),localValue:ranges(local)});
   if (JSON.stringify(builtIn.alignments ?? []) !== JSON.stringify(local.alignments ?? [])) {
     changes.push({group:`${orientation} · 排版`,field:"对齐规则",builtInValue:`${builtIn.alignments?.length ?? 0} 组`,localValue:`${local.alignments?.length ?? 0} 组（已修改）`});
   }

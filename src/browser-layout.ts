@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureFontsLoaded, fontsChangedEvent, previewFontFamily } from "./font-library";
-import { hasLayoutRules, resolveDocumentLayout } from "./document-layout";
+import { hasLayoutRules, measureDocumentLayers, resolveDocumentLayout, setDistributionRange } from "./document-layout";
 import { isVisible } from "./canvas-camera";
-import type { EditorDocument, PhotoAsset, WatermarkLayer } from "./types";
+import type { DistributionRange, EditorDocument, PhotoAsset, WatermarkLayer } from "./types";
 
 let context: CanvasRenderingContext2D | null;
 function textSize(layer: WatermarkLayer, text: string) {
@@ -14,6 +14,8 @@ function textSize(layer: WatermarkLayer, text: string) {
 }
 
 export const resolveBrowserLayout = (document: EditorDocument, photo: PhotoAsset) => resolveDocumentLayout(document, photo, textSize);
+export const measureBrowserLayers = (document: EditorDocument, photo: PhotoAsset, ids: string[]) => measureDocumentLayers(document, photo, textSize, ids);
+export const setBrowserDistributionRange = (document: EditorDocument, photo: PhotoAsset, ids: string[], axis: "x" | "y", setting: Pick<DistributionRange,"reference" | "ratio"> | null) => setDistributionRange(document, photo, ids, axis, setting, textSize);
 
 export function useDocumentLayouts(raw: Record<string, EditorDocument>, photos: PhotoAsset[]) {
   const [revision, setRevision] = useState(0);

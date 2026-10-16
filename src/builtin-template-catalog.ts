@@ -43,10 +43,12 @@ export function isValidEditorDocument(value: unknown): value is EditorDocument {
   if (value.layers.length > 100) return false;
   if (new Set(value.layers.map(layer => record(layer) ? layer.id : undefined)).size !== value.layers.length) return false;
   if (value.distributions !== undefined) {
-    if (!Array.isArray(value.distributions) || value.distributions.length > 64) return false;
+    if (!Array.isArray(value.distributions) || value.distributions.length > 100) return false;
     const used = new Set<string>();
     for (const rule of value.distributions) {
-      if (!record(rule) || !["x", "y"].includes(rule.axis as string) || !Array.isArray(rule.layerIds) || rule.layerIds.length < 3 || rule.layerIds.length > 100 || new Set(rule.layerIds).size !== rule.layerIds.length) return false;
+      if (!record(rule) || !["x", "y"].includes(rule.axis as string) || !Array.isArray(rule.layerIds) || rule.layerIds.length < (rule.range === undefined ? 3 : 2) || rule.layerIds.length > 100 || new Set(rule.layerIds).size !== rule.layerIds.length) return false;
+      if (rule.range !== undefined && (!record(rule.range) || !["canvas", "photo", "top", "bottom", "left", "right"].includes(rule.range.reference as string) ||
+          !bounded(rule.range.ratio, 1) || rule.range.ratio <= 0 || !finite(rule.range.anchor) || !Number.isFinite(Math.fround(rule.range.anchor)))) return false;
       for (const id of rule.layerIds) {
         const key = `${rule.axis}:${id}`;
         if (typeof id !== "string" || !value.layers.some(layer => record(layer) && layer.id === id) || used.has(key)) return false;

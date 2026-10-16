@@ -1,4 +1,4 @@
-import type { AlignmentRule, CanvasGeometry, EditorDocument, Rect, WatermarkLayer } from "./types";
+import type { AlignmentRule, CanvasGeometry, DistributionRange, DistributionRule, EditorDocument, Rect, WatermarkLayer } from "./types";
 import { safeRect } from "./canvas-camera.ts";
 
 export type LayerPatch = { id: string; patch: Partial<WatermarkLayer> };
@@ -41,19 +41,41 @@ export function moveSelection(layers: WatermarkLayer[], geometry: CanvasGeometry
   });
 }
 
-export function arrangeSelection(action: ArrangeAction, reference: AlignReference, measured: MeasuredLayer[], layers: WatermarkLayer[], geometry: CanvasGeometry, regions?: EditorDocument["regions"]): LayerPatch[] {
+export function distributionReference(reference: DistributionRange["reference"], geometry: CanvasGeometry, regions: EditorDocument["regions"]): Rect {
+  if (reference === "photo") return geometry.photo;
+  if (reference === "canvas") return geometry.regions.canvas;
+  return safeRect(geometry.regions[reference], regions[reference].safePadding);
+}
+
+export function distributionMetrics(axis: "x" | "y", reference: DistributionRange["reference"], measured: MeasuredLayer[], geometry: CanvasGeometry, regions: EditorDocument["regions"]) {
+  const bounds = unionBounds(measured), rect = distributionReference(reference, geometry, regions);
+  const dimension = axis === "x" ? "width" : "height";
+  if (!bounds || rect[dimension] <= 0 || (reference !== "canvas" && reference !== "photo" && !regions[reference].enabled)) return null;
+  return { bounds, rect, ratio: bounds[dimension] / rect[dimension], minimumRatio: measured.reduce((sum, item) => sum + item.bounds[dimension], 0) / rect[dimension] };
+}
+
+export function arrangeSelection(action: ArrangeAction, reference: AlignReference, measured: MeasuredLayer[], layers: WatermarkLayer[], geometry: CanvasGeometry, regions?: EditorDocument["regions"], distribution?: DistributionRule): LayerPatch[] {
   const group = unionBounds(measured);
   if (!group) return [];
   const selected = new Map(layers.map(layer => [layer.id, layer]));
   const patch = (item: MeasuredLayer, dx: number, dy: number) => positionPatch(selected.get(item.id)!, { x: item.position.x + dx, y: item.position.y + dy }, geometry);
   if (action === "distribute-x" || action === "distribute-y") {
-    if (measured.length < 3) return [];
+    const range = distribution?.range;
+    if (measured.length < (range ? 2 : 3)) return [];
     const axis = action === "distribute-x" ? "x" : "y";
     const dimension = axis === "x" ? "width" : "height";
-    const sorted = [...measured].sort((a, b) => a.bounds[axis] - b.bounds[axis]);
-    const start = sorted[0].bounds[axis];
+    const sorted = [...measured].sort((a, b) => range ? distribution!.layerIds.indexOf(a.id) - distribution!.layerIds.indexOf(b.id) : a.bounds[axis] - b.bounds[axis]);
+    let start = sorted[0].bounds[axis];
     const last = sorted[sorted.length - 1].bounds;
-    const gap = (last[axis] + last[dimension] - start - sorted.reduce((sum, item) => sum + item.bounds[dimension], 0)) / (sorted.length - 1);
+    const total = sorted.reduce((sum, item) => sum + item.bounds[dimension], 0);
+    let span = last[axis] + last[dimension] - start;
+    if (range && regions) {
+      const metrics = distributionMetrics(axis, range.reference, measured, geometry, regions);
+      if (!metrics) return [];
+      span = Math.max(metrics.rect[dimension] * range.ratio, total);
+      start = metrics.rect[axis] + metrics.rect[dimension] * range.anchor - span / 2;
+    }
+    const gap = (span - total) / (sorted.length - 1);
     let cursor = start;
     return sorted.map(item => {
       const delta = cursor - item.bounds[axis];

@@ -334,6 +334,23 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .select-option[aria-disabled="true"] { color: var(--text-tertiary); cursor: default; opacity: .6; }
 .select-option > svg { flex-shrink: 0; width: 14px; height: 14px; }
 .slider-field input[type="range"] { width: 100%; height: 18px; margin: 0; accent-color: var(--accent); }
+.distribution-controls { margin: 16px 0; padding: 14px 12px; border: 1px solid var(--line); border-radius: var(--control-radius); background: var(--bg-input); }
+.distribution-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
+.distribution-heading strong { font-size: 12px; }
+.distribution-heading > span { color: var(--text-secondary); font-size: 10px; }
+.distribution-controls .field { margin-bottom: 14px; }
+.distribution-axis { min-width: 0; margin: 0; padding: 0; border: 0; }
+.distribution-axis + .distribution-axis { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.distribution-axis legend { display: flex; width: 100%; justify-content: space-between; gap: 8px; margin-bottom: 8px; color: var(--text-secondary); font-size: 11px; }
+.distribution-mode { color: var(--text-secondary); font-size: 10px; }
+.distribution-inputs { display: grid; grid-template-columns: minmax(0, 1fr) 86px; align-items: center; gap: 10px; }
+.distribution-inputs > input[type="range"] { width: 100%; height: 28px; margin: 0; accent-color: var(--accent); }
+.distribution-percent { display: flex; align-items: center; gap: 5px; color: var(--text-secondary); }
+.distribution-percent input { min-width: 0; padding: 6px; text-align: right; }
+.distribution-footer { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 7px; }
+.distribution-footer small { color: var(--text-secondary); font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
+.distribution-footer .distribution-notice { color: var(--accent); }
+.distribution-footer button { flex-shrink: 0; font-size: 10px; }
 .segmented-field { padding: 0; border: 0; }
 .segmented-field legend { margin-bottom: 7px; }
 .segmented { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); padding: 3px; border: 1px solid var(--line); border-radius: var(--control-radius); background: var(--bg-input); }

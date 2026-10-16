@@ -15,7 +15,7 @@ export function prepareOfficialCatalog(templates:TemplateRecord[],defaultTemplat
     regions:Object.fromEntries((["top","bottom","left","right"] as const).map(region=>[region,pick(source.regions[region],["enabled","extra","safePadding","direction"])])) as EditorDocument["regions"],
     layers:source.layers.map(layer=>({...pick(layer,["id","name","source","customValue","region","x","y","fontFamily","fontSize","fontWeight","color","opacity","rotation","visible"]),
       fontFamily:[...new Set(layer.fontFamily.split(",").map(name=>(retired as Record<string,string>)[name.trim()]??name.trim()))].join(", ")})),
-    ...(source.distributions?{distributions:source.distributions.map(rule=>({axis:rule.axis,layerIds:[...rule.layerIds]}))}:{}),
+    ...(source.distributions?{distributions:source.distributions.map(rule=>({axis:rule.axis,layerIds:[...rule.layerIds],...(rule.range?{range:pick(rule.range,["reference","ratio","anchor"])}:{})}))}:{}),
     ...(source.alignments?{alignments:source.alignments.map(rule=>({action:rule.action,reference:rule.reference,layerIds:[...rule.layerIds]}))}:{}),
   });
   const catalog={format:"yingkuang-builtin-templates",version:1,contentVersion,revision,defaultTemplateId,templates:templates.map(template=>({

@@ -44,7 +44,8 @@ import { SliderRow, Segmented } from "./EditorControls";
 import { selectLayer, moveSelection, type AlignReference, type ArrangeAction, type LayerPatch } from "./selection-model";
 import { reorientTemplateDocument } from "./template-layout";
 import { commitArrangement, hasLayoutRules, pruneLayoutRules, releaseLayoutRules } from "./document-layout";
-import { resolveBrowserLayout, useDocumentLayouts } from "./browser-layout";
+import { resolveBrowserLayout, setBrowserDistributionRange, useDocumentLayouts } from "./browser-layout";
+import type { DistributionRange } from "./types";
 import { ensureFontsLoaded } from "./font-library";
 import { isVisible } from "./canvas-camera";
 import { retainBrowserPhoto, releaseBrowserPhoto, releaseBrowserPhotos } from "./use-editor-photo";
@@ -602,6 +603,21 @@ function App() {
     if (!activePhoto) return;
     updateDocument(draft => {
       commitArrangement(draft, patches, action, reference, calculateGeometry(activePhoto, draft));
+    });
+  }
+
+  function changeDistributionRange(axis: "x" | "y", reference: DistributionRange["reference"], ratio: number | null, record = true) {
+    if (!activePhoto) return;
+    updateDocument(draft => setBrowserDistributionRange(draft, activePhoto, selectedLayerIds, axis, ratio === null ? null : {reference,ratio}), record);
+  }
+
+  function changeDistributionReference(reference: DistributionRange["reference"]) {
+    if (!activePhoto || !currentDocument.current?.distributions?.some(rule => rule.range && rule.layerIds.length === selectedLayerIds.length && rule.layerIds.every(id => selectedLayerIds.includes(id)))) return;
+    updateDocument(draft => {
+      for (const axis of ["x", "y"] as const) {
+        const range = draft.distributions?.find(rule => rule.axis === axis && rule.layerIds.length === selectedLayerIds.length && rule.layerIds.every(id => selectedLayerIds.includes(id)))?.range;
+        if (range) setBrowserDistributionRange(draft, activePhoto, selectedLayerIds, axis, {reference,ratio:range.ratio});
+      }
     });
   }
 
@@ -1204,6 +1220,7 @@ function App() {
               onSelect={(id, extend) => setSelectedLayerIds(current => selectLayer(current, id, extend))}
               onSelectionChange={setSelectedLayerIds} onPatch={updateLayers} onAdd={addLayer} onDelete={deleteSelectedLayers}
               onStart={beginTransaction} onEnd={commitTransaction} onOverride={updatePhotoOverride}
+              onRange={changeDistributionRange} onRangeReference={changeDistributionReference}
               onArrange={(action, reference) => editorRef.current?.arrange(action, reference)} />
           ) : <div className="inspector-empty" id={`panel-${inspectorTab}`} role="tabpanel" aria-labelledby={`tab-${inspectorTab}`}>导入照片后开始设置</div>}
         </aside>

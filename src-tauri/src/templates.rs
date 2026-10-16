@@ -266,18 +266,38 @@ fn validate_catalog(source: &str, expected_count: usize) -> Result<(), String> {
             }
             if let Some(rules) = document.get("distributions") {
                 let rules = rules.as_array().ok_or("模板等间距规则无效")?;
-                if rules.len() > 64 {
+                if rules.len() > 100 {
                     return Err("模板等间距规则过多".into());
                 }
                 let mut used = HashSet::new();
                 for rule in rules {
+                    if let Some(range) = rule.get("range") {
+                        let reference = range["reference"].as_str().unwrap_or("");
+                        let ratio = range["ratio"].as_f64().unwrap_or(f64::NAN);
+                        let anchor = range["anchor"].as_f64().unwrap_or(f64::NAN);
+                        if !range.is_object()
+                            || !matches!(
+                                reference,
+                                "canvas" | "photo" | "top" | "bottom" | "left" | "right"
+                            )
+                            || !ratio.is_finite()
+                            || ratio <= 0.0
+                            || ratio > 1.0
+                            || !(anchor as f32).is_finite()
+                        {
+                            return Err("模板分布范围无效".into());
+                        }
+                    }
                     let axis = rule["axis"]
                         .as_str()
                         .filter(|v| matches!(*v, "x" | "y"))
                         .ok_or("模板等间距方向无效")?;
                     let ids = rule["layerIds"]
                         .as_array()
-                        .filter(|v| (3..=100).contains(&v.len()))
+                        .filter(|v| {
+                            ((if rule.get("range").is_some() { 2 } else { 3 })..=100)
+                                .contains(&v.len())
+                        })
                         .ok_or("模板等间距图层无效")?;
                     for id in ids {
                         let id = id.as_str().ok_or("模板等间距图层无效")?;
@@ -702,6 +722,41 @@ mod tests {
             fs::read(temp.path().join("current.json")).unwrap(),
             b"broken"
         );
+    }
+    #[test]
+    fn distribution_ranges_validate_ratios_references_and_two_members() {
+        let pack = published();
+        let mut catalog: Value = serde_json::from_str(&pack.catalog).unwrap();
+        let document = &mut catalog["templates"][0]["layouts"]["landscape"];
+        let members: Vec<Value> = document["layers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .take(2)
+            .map(|layer| layer["id"].clone())
+            .collect();
+        let range = serde_json::json!({"reference":"canvas","ratio":0.6,"anchor":0.5});
+        document["distributions"] =
+            serde_json::json!([{"axis":"x","layerIds":members,"range":range}]);
+        assert!(validate_catalog(&catalog.to_string(), 5).is_ok());
+        for invalid_range in [
+            Value::Null,
+            serde_json::json!({}),
+            serde_json::json!({"reference":"selection","ratio":0.6,"anchor":0.5}),
+            serde_json::json!({"reference":"canvas","ratio":0.0,"anchor":0.5}),
+            serde_json::json!({"reference":"canvas","ratio":1.1,"anchor":0.5}),
+            serde_json::json!({"reference":"canvas","ratio":0.6,"anchor":1e40}),
+        ] {
+            let mut invalid = catalog.clone();
+            invalid["templates"][0]["layouts"]["landscape"]["distributions"][0]["range"] =
+                invalid_range;
+            assert!(validate_catalog(&invalid.to_string(), 5).is_err());
+        }
+        catalog["templates"][0]["layouts"]["landscape"]["distributions"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("range");
+        assert!(validate_catalog(&catalog.to_string(), 5).is_err());
     }
     #[test]
     fn alignment_rules_validate_references_axes_and_members() {

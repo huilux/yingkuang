@@ -20,7 +20,7 @@ checks = ["konva-canvas-regression.js", "multi-selection-regression.js", "precis
 if len(sys.argv) > 2:
     checks = sys.argv[2:]
 else:
-    checks.extend(["template-layout-regression.js", "template-layout-persistence-regression.js", "template-update-regression.js", "crop-loading-regression.js", "photo-crop-regression.js", "photo-rotation-regression.js", "photo-rotation-interaction-regression.js", "theme-layout-regression.js"])
+    checks.extend(["template-layout-regression.js", "template-layout-persistence-regression.js", "distribution-range-regression.js", "template-update-regression.js", "crop-loading-regression.js", "photo-crop-regression.js", "photo-rotation-regression.js", "photo-rotation-interaction-regression.js", "theme-layout-regression.js"])
 
 result = 1
 current_check = "page load"
