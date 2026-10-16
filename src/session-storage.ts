@@ -1,6 +1,7 @@
 import { isValidEditorDocument } from "./builtin-template-catalog.ts";
 import { isValidPhotoCrop } from "./photo-crop.ts";
 import type { EditorDocument, ExportSettings, PhotoAsset, PhotoCrop } from "./types";
+import {remapTemplateReference,templateReferenceEpoch,type TemplateReferenceMigration} from "./template-references.ts";
 
 export type SessionSnapshot = {
   paths: string[];
@@ -13,6 +14,7 @@ export type SessionSnapshot = {
   templateIdsByPath?: Record<string, string>;
   dimensionsByPath?: Record<string, { width: number; height: number }>;
   cropsByPath?: Record<string, PhotoCrop>;
+  templateReferenceEpoch?:number;
 };
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -25,6 +27,7 @@ export function parseSession(source: string | null): SessionSnapshot {
       (value.checkedPaths !== undefined && !strings(value.checkedPaths)) ||
       (value.activePath !== undefined && !string(value.activePath)) ||
       (value.activeTemplate !== undefined && !string(value.activeTemplate))) throw new Error("工作记录格式不正确");
+  if(value.templateReferenceEpoch!==undefined && (!Number.isSafeInteger(value.templateReferenceEpoch) || Number(value.templateReferenceEpoch)<0))throw new Error("模板引用版本无效");
   for (const key of ["documentsByPath", "overridesByPath", "templateIdsByPath", "dimensionsByPath", "cropsByPath"] as const) {
     const entries = value[key];
     if (entries === undefined) continue;
@@ -53,6 +56,16 @@ export function parseSession(source: string | null): SessionSnapshot {
     for (const key of ["includeGps", "noUpscale"]) if (settings[key] !== undefined && typeof settings[key] !== "boolean") throw new Error("导出开关设置无效");
   }
   return { ...value, paths: value.paths ?? [] } as SessionSnapshot;
+}
+
+export function migrateSessionTemplateReferences(session:SessionSnapshot,migrations:TemplateReferenceMigration[]):SessionSnapshot {
+  const previous=session.templateReferenceEpoch??0;
+  const epoch=templateReferenceEpoch(migrations);
+  if(previous>=epoch)return session;
+  return {...session,templateReferenceEpoch:epoch,
+    ...(session.activeTemplate?{activeTemplate:remapTemplateReference(session.activeTemplate,migrations,previous)}:{}),
+    ...(session.templateIdsByPath?{templateIdsByPath:Object.fromEntries(Object.entries(session.templateIdsByPath).map(([path,id])=>[path,remapTemplateReference(id,migrations,previous)]))}:{}),
+  };
 }
 
 export function relocateSessionPath(session: SessionSnapshot, oldPath: string, newPath: string): SessionSnapshot {

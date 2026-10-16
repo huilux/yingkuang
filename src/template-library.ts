@@ -1,6 +1,7 @@
 import { builtInTemplates, cloneDocument, photoOrientation } from "./editor-model.ts";
 import { bundledCatalog, parseBuiltInCatalog, builtInDefaultTemplateId, isBuiltInModified, isValidTemplate, type BuiltInTemplateCatalog } from "./builtin-template-catalog.ts";
 import type { EditorDocument, PhotoAsset, TemplateRecord } from "./types";
+import {appendTemplateReferenceMigration,validTemplateReferenceMigrations,type TemplateReferenceMigration} from "./template-references.ts";
 
 export const templatesKey = "yingkuang-templates-v3";
 const previousTemplatesKey = "yingkuang-templates-v2";
@@ -59,17 +60,19 @@ function mergeTemplates(builtIns: TemplateRecord[], overrides: unknown[], custom
 }
 
 export type OverrideBases = Record<string, TemplateRecord>;
-export type TemplateLibrary = { templates: TemplateRecord[]; canPersist: boolean; issue: string; catalog: BuiltInTemplateCatalog; overrideBases: OverrideBases; referenceMap:Record<string,string> };
+export type TemplateLibrary = { templates: TemplateRecord[]; canPersist: boolean; issue: string; catalog: BuiltInTemplateCatalog; overrideBases: OverrideBases; referenceMap:Record<string,string>;referenceMigrations:TemplateReferenceMigration[] };
 
 export function readTemplateLibrary(): TemplateLibrary {
   let catalog = bundledCatalog();
   let overrideBases: OverrideBases = {};
   let referenceMap:Record<string,string> = {};
+  let referenceMigrations:TemplateReferenceMigration[] = [];
   const legacyTemplates=(overrides:TemplateRecord[],custom:TemplateRecord[])=>{
     const personalIds=new Set(custom.map(template=>template.id));
     const previous={...catalog,templates:catalog.templates.filter(template=>!personalIds.has(template.id))};
     const migrated=rebaseTemplateLibrary(mergeTemplates(previous.templates,overrides,custom),previous,catalog,overrideBases);
     overrideBases=migrated.overrideBases;referenceMap=migrated.idMap;
+    referenceMigrations=appendTemplateReferenceMigration(referenceMigrations,migrated.idMap);
     return migrated.templates;
   };
   const result = (templates: TemplateRecord[], valid: boolean) => {
@@ -77,8 +80,9 @@ export function readTemplateLibrary(): TemplateLibrary {
     if(valid && (catalog.revision ?? 0) < (bundled.revision ?? 0)) {
       const updated=rebaseTemplateLibrary(templates,catalog,bundled,overrideBases);
       templates=updated.templates;overrideBases=updated.overrideBases;catalog=bundled;referenceMap={...referenceMap,...updated.idMap};
+      referenceMigrations=appendTemplateReferenceMigration(referenceMigrations,updated.idMap);
     }
-    return { templates, canPersist: valid, catalog, overrideBases,referenceMap,
+    return { templates, canPersist: valid, catalog, overrideBases,referenceMap,referenceMigrations,
       issue: valid ? "" : "模板库包含无法读取的内容，原始记录已保留；本次模板修改请导出备份保存。" };
   };
   try {
@@ -90,11 +94,9 @@ export function readTemplateLibrary(): TemplateLibrary {
         catalog = parseBuiltInCatalog(saved.catalog);
         if (!record(saved.overrideBases) || !Object.entries(saved.overrideBases).every(([id,base]) => isValidTemplate(base) && base.id === id && base.builtIn)) return result(catalog.templates, false);
         overrideBases = saved.overrideBases as OverrideBases;
-        if(saved.referenceMap!==undefined) {
-          const validId=(value:unknown)=>typeof value==="string" && /^[a-zA-Z0-9_-]{1,100}$/.test(value) && !["__proto__","constructor","prototype"].includes(value);
-          if(!record(saved.referenceMap) || Object.keys(saved.referenceMap).length>1000 || !Object.entries(saved.referenceMap).every(([id,target])=>validId(id)&&validId(target)&&id!==target))return result(catalog.templates,false);
-          referenceMap=saved.referenceMap as Record<string,string>;
-        }
+        const migrations=saved.referenceMigrations ?? (saved.referenceMap!==undefined?[{epoch:1,ids:saved.referenceMap}]:[]);
+        if(!validTemplateReferenceMigrations(migrations))return result(catalog.templates,false);
+        referenceMigrations=migrations;
       }
       const builtIns = builtInTemplates(catalog);
       const entries = [...saved.overrides, ...saved.custom];
@@ -125,7 +127,8 @@ export function readTemplates(): TemplateRecord[] {
   return readTemplateLibrary().templates;
 }
 
-export function serializeUserTemplates(templates: TemplateRecord[], catalog = bundledCatalog(), bases: OverrideBases = {}, defaultTemplateId?:string,referenceMap:Record<string,string>={}): string {
+export function serializeUserTemplates(templates: TemplateRecord[], catalog = bundledCatalog(), bases: OverrideBases = {}, defaultTemplateId?:string,referenceMigrations:TemplateReferenceMigration[]=[]): string {
+  if(!validTemplateReferenceMigrations(referenceMigrations))throw new Error("模板引用迁移记录无效，未覆盖已保存的模板库");
   if (!templates.every(isValidTemplate)) throw new Error("模板字段不完整或超出支持范围，未覆盖已保存的模板库");
   if (new Set(templates.map(template => template.id)).size !== templates.length) throw new Error("模板 ID 重复，未覆盖已保存的模板库");
   if(defaultTemplateId!==undefined && !templates.some(template=>template.id===defaultTemplateId))throw new Error("默认模板不存在，未覆盖已保存的模板库");
@@ -137,7 +140,7 @@ export function serializeUserTemplates(templates: TemplateRecord[], catalog = bu
     version: 3,
     catalog,
     defaultTemplateId,
-    referenceMap,
+    referenceMigrations,
     overrideBases: Object.fromEntries(overrides.map(template => [template.id, bases[template.id] ?? builtIns.find(base => base.id === template.id)!])),
     overrides,
     custom: templates.filter((template) => !template.builtIn && !builtInIds.has(template.id)),

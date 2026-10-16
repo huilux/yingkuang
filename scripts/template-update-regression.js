@@ -53,7 +53,12 @@
     t.assert(localStorage.getItem(keys[1])===before,'Failed download changed the template library');
     failInstall=false;button('更新官方模板').click();await t.waitFor(()=>stored().catalog.revision===2,'Update not installed');assertProtected(photo);
     t.assert(stored().catalog.templates.some(x=>x.name==='官方第二模板新版'),'Untouched official template did not update');
-    root.unmount();root=createRoot(host);root.render(React.createElement(App));await t.context(host);await openManager();assertProtected(photo);
+    const personalDefault=stored().defaultTemplateId;
+    const chooseDefault=async id=>{const field=host.querySelector('select[aria-label="新照片使用模板"]');field.value=id;field.dispatchEvent(new Event('change',{bubbles:true}));await t.frame();};
+    await chooseDefault('new-official');
+    root.unmount();root=createRoot(host);root.render(React.createElement(App));await t.context(host);await openManager();
+    t.assert(stored().defaultTemplateId==='new-official','Restart remapped an explicit choice of the official ID');
+    await chooseDefault(personalDefault);assertProtected(photo);
     offline=true;button('检查更新').click();await t.waitFor(()=>host.querySelector('.template-update-error'),'Offline failure missing');assertProtected(photo);
     // A fresh mount obtains previous-version availability from native cache.
     current=null;root.unmount();root=createRoot(host);root.render(React.createElement(App));await t.context(host);await openManager();
@@ -62,6 +67,6 @@
     offline=true;const checks=networkChecks;button('导入官方模板包').click();await t.waitFor(()=>imports===1,'Offline import did not finish');
     await t.waitFor(()=>button('恢复上一版 · 2026.10.1'),'Rollback missing');t.assert(networkChecks===checks,'Offline import contacted network');
     button('恢复上一版 · 2026.10.1').click();await t.frame();button('确认恢复').click();await t.waitFor(()=>stored().catalog.revision===1,'Rollback not applied');assertProtected(photo);
-    return {noStartupNetwork:true,failedDownloadRetained:true,localEditsPreserved:true,personalCollisionAndDefaultPreserved:true,editedPhotoUnchanged:true,restartOffline:true,offlineImport:true,rollback:true};
+    return {noStartupNetwork:true,failedDownloadRetained:true,localEditsPreserved:true,personalCollisionAndDefaultPreserved:true,explicitOfficialChoicePreserved:true,editedPhotoUnchanged:true,restartOffline:true,offlineImport:true,rollback:true};
   }finally{root.unmount();host.remove();clearMocks();saved.forEach(([key,value])=>value===null?localStorage.removeItem(key):localStorage.setItem(key,value));}
 })();

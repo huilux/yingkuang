@@ -88,6 +88,6 @@ if(positionals[0]==='prepare') {
   writeFileSync(resolve(output,'index.sig'),signature+'\n');
   writeFileSync(resolve(output,'releases',manifest.version,'official-templates.json'),envelope(index,signature,source));
   writeFileSync(resolve(output,'.nojekyll'),'');
-  writeFileSync(resolve(output,'index.html'),'<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>映框官方模板</title><h1>映框官方模板</h1><p>请在映框的模板库中检查更新，或下载官方模板包后离线导入。</p><p><a href="'+manifest.path.replace('templates.json','official-templates.json')+'">下载官方模板包 '+manifest.version+'</a></p><p><a href="https://github.com/huilux/yingkuang">项目仓库</a></p></html>');
+  writeFileSync(resolve(output,'index.html'),'<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>映框官方模板</title><h1>映框官方模板</h1><p>需要映框 '+manifest.minAppVersion+' 或更新版本。</p><p>请在映框的模板库中检查更新，或下载官方模板包后离线导入。</p><p><a href="'+manifest.path.replace('templates.json','official-templates.json')+'">下载官方模板包 '+manifest.version+'</a></p><p><a href="https://github.com/huilux/yingkuang">项目仓库</a></p></html>');
   validate(output);console.log(`Built template site ${manifest.version}`);
 } else throw new Error('Usage: template-feed.mjs prepare|check|sync-bundled|build [options]');

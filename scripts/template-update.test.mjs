@@ -1,9 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {bundledCatalog} from '../src/builtin-template-catalog.ts';
-import {readDefaultTemplateId,readTemplateLibrary,rebaseTemplateLibrary,resolveTemplateReference,serializeUserTemplates,templatesKey} from '../src/template-library.ts';
+import {readDefaultTemplateId,readTemplateLibrary,rebaseTemplateLibrary,serializeUserTemplates,templatesKey} from '../src/template-library.ts';
+import {remapTemplateReference} from '../src/template-references.ts';
+import {migrateSessionTemplateReferences} from '../src/session-storage.ts';
 
 const original=bundledCatalog();
+test('an explicit choice of the new official ID survives restarting after an older personal ID collision',()=>{
+  const personal={...structuredClone(original.templates[0]),id:'official-new',name:'私人旧模板',builtIn:false};
+  const next=structuredClone(original);next.templates.push({...structuredClone(original.templates[0]),id:personal.id,name:'官方新模板'});
+  const result=rebaseTemplateLibrary([...original.templates,personal],original,next);
+  const source=serializeUserTemplates(result.templates,next,result.overrideBases,personal.id,[{epoch:1,ids:result.idMap}]);
+  const previous=globalThis.localStorage;
+  try {
+    globalThis.localStorage={getItem:key=>key===templatesKey?source:null};
+    const library=readTemplateLibrary();
+    assert.equal(library.canPersist,true);
+    assert.equal(readDefaultTemplateId(library.templates,library.catalog,library.referenceMap),personal.id);
+  }finally{if(previous===undefined)delete globalThis.localStorage;else globalThis.localStorage=previous;}
+});
 for(const version of [1,2])test(`legacy v${version} personal IDs that collide with new built-ins retain their style and default`,()=>{
   const personal={...structuredClone(original.templates[0]),builtIn:false,name:'我的旧模板'};
   const key=version===1?'yingkuang-templates-v1':'yingkuang-templates-v2';
@@ -46,7 +61,7 @@ test('official update preserves modifications, personal collisions, retired/defa
   assert.equal(changed.templates.find(t=>t.id===original.templates[1].id).builtIn,false);
   assert.ok(changed.idMap[personal.id]);
   assert.deepEqual(changed.templates.find(t=>t.id===changed.idMap[personal.id]).layouts,personal.layouts);
-  const serialized=serializeUserTemplates(changed.templates,next,changed.overrideBases,changed.idMap[personal.id],changed.idMap);
+  const serialized=serializeUserTemplates(changed.templates,next,changed.overrideBases,changed.idMap[personal.id],[{epoch:1,ids:changed.idMap}]);
   const previous=globalThis.localStorage;
   try {
     globalThis.localStorage={getItem:key=>key===templatesKey?serialized:null};
@@ -54,12 +69,24 @@ test('official update preserves modifications, personal collisions, retired/defa
     assert.deepEqual(restored.templates,changed.templates);
     assert.deepEqual(restored.catalog,next);
     assert.deepEqual(restored.overrideBases,changed.overrideBases);
-    assert.equal(resolveTemplateReference(personal.id,restored.referenceMap),changed.idMap[personal.id],'An old session reference must still resolve if shutdown interrupted session saving');
+    assert.equal(remapTemplateReference(personal.id,restored.referenceMigrations),changed.idMap[personal.id],'An old session reference must still resolve if shutdown interrupted session saving');
     const newest=structuredClone(next);newest.templates[0].name='官方第三版';
     const third=rebaseTemplateLibrary(restored.templates,next,newest,restored.overrideBases);
     assert.equal(third.overrideBases[modified.id].name,original.templates[0].name);
     assert.equal(third.templates.find(t=>t.id===modified.id).name,'我的修改');
   } finally {if(previous===undefined)delete globalThis.localStorage;else globalThis.localStorage=previous;}
+});
+test('session migration remaps old references once while preserving later official choices, missing photos and documents',()=>{
+  const migrations=[{epoch:1,ids:{shared:'local-shared'}},{epoch:2,ids:{'local-shared':'local-again'}}];
+  const old={paths:['missing.jpg'],activeTemplate:'shared',templateIdsByPath:{'missing.jpg':'shared'},documentsByPath:{'missing.jpg':original.templates[0].layouts.landscape}};
+  const migrated=migrateSessionTemplateReferences(old,migrations);
+  assert.equal(migrated.templateIdsByPath['missing.jpg'],'local-again');
+  assert.equal(migrated.activeTemplate,'local-again');assert.equal(migrated.templateReferenceEpoch,2);
+  assert.deepEqual(migrated.documentsByPath,old.documentsByPath);
+  assert.equal(old.templateIdsByPath['missing.jpg'],'shared');
+  const chosen={...old,templateReferenceEpoch:1};
+  assert.equal(migrateSessionTemplateReferences(chosen,migrations).templateIdsByPath['missing.jpg'],'shared');
+  assert.equal(migrateSessionTemplateReferences(migrated,migrations),migrated);
 });
 test('legacy v2 overrides migrate without changing source records, even when equal to the current official version',()=>{
   const source=JSON.stringify({version:2,overrides:[original.templates[0]],custom:[]});
