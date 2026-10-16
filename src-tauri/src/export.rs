@@ -1100,12 +1100,14 @@ fn load_font(
     Ok(font)
 }
 
+type FontRuns = (Vec<FontArc>, Vec<(String, usize)>);
+
 fn font_runs(
     text: &str,
     primary: FontArc,
     weight: u16,
     cache: &mut HashMap<String, FontArc>,
-) -> Result<(Vec<FontArc>, Vec<(String, usize)>), String> {
+) -> Result<FontRuns, String> {
     let mut faces = vec![primary];
     // Match the preview's offline fallback order. Load fallback faces only
     // when required, retaining the cached native font parsing across a batch.
