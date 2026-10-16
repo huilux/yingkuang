@@ -21,14 +21,25 @@ from renderer import stop_process_group
 root = Path(__file__).resolve().parents[2]
 package = Path(sys.argv[1]).resolve()
 report = Path(sys.argv[2])
+wayland = '--wayland' in sys.argv[3:]
 with tempfile.TemporaryDirectory(prefix='yingkuang-native-') as directory:
     work = Path(directory)
     def chunk(kind, data):
         return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
     photo = work / '原生 测试.png'
     photo.write_bytes(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 96, 64, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress((b'\0' + bytes([90, 150, 210]) * 96) * 64)) + chunk(b'IEND', b''))
+    display_photo = work / '24MP 显示测试.png'
+    row = b'\0' + bytes([240, 16, 32]) * 3000 + bytes([16, 208, 224]) * 3000
+    display_photo.write_bytes(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 6000, 4000, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(row * 4000)) + chunk(b'IEND', b''))
     output = work / '导出 结果'; output.mkdir()
     env = dict(os.environ, TAURI_WEBVIEW_AUTOMATION='true')
+    if wayland:
+        runtime = work / 'runtime'; runtime.mkdir(mode=0o700)
+        env.update(XDG_RUNTIME_DIR=str(runtime), WAYLAND_DISPLAY='yingkuang-native-test', XDG_SESSION_TYPE='wayland')
+        env.pop('DISPLAY', None)
+        env.pop('GDK_BACKEND', None)  # Exercise the launcher's automatic selection.
+    else:
+        env['GDK_BACKEND'] = 'x11'
     for name in ['CONFIG', 'DATA', 'CACHE']:
         env[f'XDG_{name}_HOME'] = str(work / name.lower())
     with socket.socket() as listener:
@@ -46,9 +57,20 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-native-') as directory:
             raise RuntimeError(value)
         return value
     with (work / 'driver.log').open('w') as log:
-        driver = subprocess.Popen(['WebKitWebDriver', f'--port={port}'], stdout=log, stderr=log, env=env, start_new_session=True)
+        driver = None
+        compositor = None
         session = None
         try:
+            if wayland:
+                help_text = subprocess.check_output(['weston', '--help'], text=True)
+                backend = ['--backend=headless', '--renderer=pixman'] if '--renderer=NAME' in help_text else ['--backend=headless-backend.so', '--use-pixman']
+                compositor = subprocess.Popen(['weston', *backend, '--no-config', '--socket=yingkuang-native-test', '--width=3840', '--height=2160', '--scale=2', '--idle-time=0'], stdout=log, stderr=log, env=env, start_new_session=True)
+                for _ in range(100):
+                    if compositor.poll() is not None: raise RuntimeError('Wayland test compositor exited')
+                    if (runtime / 'yingkuang-native-test').exists(): break
+                    time.sleep(.1)
+                else: raise RuntimeError('Wayland test display did not become ready')
+            driver = subprocess.Popen(['WebKitWebDriver', f'--port={port}'], stdout=log, stderr=log, env=env, start_new_session=True)
             for _ in range(60):
                 if driver.poll() is not None: raise RuntimeError('WebKitWebDriver exited: ' + (work / 'driver.log').read_text())
                 try:
@@ -61,6 +83,44 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-native-') as directory:
             request('POST', f'/session/{session}/timeouts', {'script': 120000})
             def execute(script, args):
                 return request('POST', f'/session/{session}/execute/async', {'script': script, 'args': args})
+            display_checks = execute('''const [path, highDpi, templateCount, done] = arguments;
+                (async () => {
+                  const invoke = window.__TAURI_INTERNALS__.invoke;
+                  const waitFor = async (check, label) => {
+                    const start = performance.now();
+                    while (!check()) {
+                      if (performance.now() - start > 30000) throw Error(label);
+                      await new Promise(resolve => setTimeout(resolve, 25));
+                    }
+                  };
+                  await waitFor(() => localStorage.getItem('yingkuang-session-v2') && [...document.querySelectorAll('button')].some(b => b.textContent.includes('添加照片') && !b.disabled), 'Editor not ready');
+                  await invoke('plugin:event|emit', {event:'tauri://drag-drop',payload:{paths:[path],position:{x:20,y:30}}});
+                  const stage = () => window.Konva?.stages.find(s => s.findOne('.preview-photo'));
+                  await waitFor(() => (stage()?.findOne('.preview-photo').image().naturalWidth ?? 0) >= 4096 && document.querySelectorAll('.template-card .template-preview img').length === templateCount && !document.querySelector('.canvas-photo-status'), '24 MP photo and five template previews not ready');
+                  const samples = [];
+                  for (const card of document.querySelectorAll('.template-card')) {
+                    const image = card.querySelector('.template-preview img'); await image.decode();
+                    const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+                    const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0);
+                    const pixel = [...ctx.getImageData(Math.round(canvas.width*.3), Math.round(canvas.height*.4), 1, 1).data];
+                    if (!(pixel[0] > 180 && pixel[1] < 90 && pixel[2] < 90)) throw Error('Photo missing from template '+card.querySelector('strong').textContent+': '+pixel);
+                    samples.push({name:card.querySelector('strong').textContent,pixel});
+                  }
+                  const cssWidth = stage().width(), backingWidth = stage().content.querySelector('canvas').width;
+                  if (Math.abs(backingWidth-cssWidth*devicePixelRatio) > 1) throw Error('Canvas did not match display pixel ratio');
+                  if (highDpi && devicePixelRatio !== 2) throw Error('Native Wayland 2x scaling not applied: '+devicePixelRatio);
+                  if (highDpi) {
+                    document.querySelector('[aria-label="最大化窗口"]').click();
+                    await waitFor(() => document.querySelector('[aria-label="还原窗口"]'), 'Native maximize did not complete');
+                    document.querySelector('[aria-label="还原窗口"]').click();
+                    await waitFor(() => document.querySelector('[aria-label="最大化窗口"]'), 'Native restore did not complete');
+                  }
+                  return {passed:true,templatePhotoPreviews:'passed',editorBitmapWidth:stage().findOne('.preview-photo').image().naturalWidth,devicePixelRatio,cssWidth,backingWidth,samples};
+                })().then(done,error=>done({passed:false,reason:String(error)}));''', [str(display_photo), wayland, len(json.loads((root / 'src/data/builtin-templates.json').read_text())['templates'])])
+            if not display_checks.get('passed'): raise RuntimeError(display_checks)
+            resized = request('POST', f'/session/{session}/window/rect', {'width':1200,'height':800})
+            if (resized['width'], resized['height']) != (1200, 800): raise RuntimeError('Native window size did not change')
+            display_checks['windowSizing'] = 'passed'
             templates = json.loads((root / 'src/data/builtin-templates.json').read_text())
             document = next(t for t in templates['templates'] if t['id'] == templates['defaultTemplateId'])['layouts']['landscape']
             settings = {'directory': str(output), 'format': 'jpeg', 'quality': 92, 'size': 'original', 'longEdge': 6000, 'noUpscale': False, 'metadata': 'basic', 'includeGps': False, 'suffix': '-native', 'collision': 'number', 'pngCompression': 'standard'}
@@ -126,6 +186,7 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-native-') as directory:
             if session:
                 try: request('DELETE', f'/session/{session}')
                 except (RuntimeError, urllib.error.URLError): pass
-            stop_process_group(driver)
-report.write_text(json.dumps({'nativePhotoProcessing': 'passed', 'offlineFontFamilies': [font['family'] for font in catalog], 'legacyFontMigration': 'passed', 'missingGlyphPreflight': 'passed', 'checks': ['PNG import and preview', '90 degree rotation and native JPEG export', 'JPEG reimport and native PNG export', 'Chinese and space paths', 'shipped default template and font resources', 'all selected offline fonts with Chinese and symbol fallback', 'retired family names and missing-glyph preflight'], 'method': 'Unmodified release AppImage launched by WebKitWebDriver with Tauri automation enabled only via the test process environment. Real Rust IPC; no dialogs or file processing mocked.'}, indent=2) + '\n')
+            if driver: stop_process_group(driver)
+            if compositor: stop_process_group(compositor)
+report.write_text(json.dumps({'nativePhotoProcessing': 'passed', 'displayBackend': 'wayland' if wayland else 'x11', 'displayChecks': display_checks, 'offlineFontFamilies': [font['family'] for font in catalog], 'legacyFontMigration': 'passed', 'missingGlyphPreflight': 'passed', 'checks': ['24 MP import and 4096px editor bitmap', 'all five template photo pixels', 'canvas display pixel ratio and native window sizing', 'PNG import and preview', '90 degree rotation and native JPEG export', 'JPEG reimport and native PNG export', 'Chinese and space paths', 'shipped default template and font resources', 'all selected offline fonts with Chinese and symbol fallback', 'retired family names and missing-glyph preflight'], 'method': 'Unmodified release AppImage launched by WebKitWebDriver with Tauri automation enabled only via the test process environment. Real Rust IPC; no dialogs or file processing mocked.'}, indent=2) + '\n')
 print('AppImage real PNG/JPEG decoding, rotation, default template/font rendering and native exports passed')
