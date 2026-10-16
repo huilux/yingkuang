@@ -68,6 +68,21 @@ class DeliveryTests(unittest.TestCase):
             result = subprocess.run([str(launcher)], cwd=directory, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_launcher_selects_native_backend_and_preserves_user_override(self):
+        import os
+        with tempfile.TemporaryDirectory() as directory:
+            appdir = Path(directory) / 'application'; (appdir / 'usr/bin').mkdir(parents=True)
+            app = appdir / 'usr/bin/yingkuang'
+            app.write_text('#!/bin/sh\nprintf "%s" "$GDK_BACKEND"\n'); app.chmod(0o755)
+            launcher = appdir / 'AppRun'
+            shutil.copy2(Path(__file__).parent / 'appimage/AppRun', launcher); launcher.chmod(0o755)
+            for extra, expected in [({'XDG_SESSION_TYPE':'x11'}, 'x11'), ({'XDG_SESSION_TYPE':'wayland','WAYLAND_DISPLAY':'test'}, 'wayland,x11'), ({'XDG_SESSION_TYPE':'wayland'}, 'wayland,x11'), ({'XDG_SESSION_TYPE':'wayland','GDK_BACKEND':'x11'}, 'x11')]:
+                env = {k:v for k,v in os.environ.items() if k not in ['GDK_BACKEND','WAYLAND_DISPLAY','XDG_SESSION_TYPE']}
+                env.update(extra, GTK_THEME='Adwaita')
+                result = subprocess.run([str(launcher)], cwd=directory, capture_output=True, text=True, env=env)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, expected)
+
     def test_renderer_observation_uses_parent_identity_not_appimage_in_argv(self):
         with tempfile.TemporaryDirectory() as directory:
             proc = Path(directory)

@@ -56,6 +56,8 @@ env = dict(os.environ, YINGKUANG_BINARY_COMMIT=commit)
 package = inputs / names[0]; package.chmod(0o755)
 run('xvfb-run', '-a', '-s', '-screen 0 1920x1080x24', sys.executable, str(root / 'scripts/appimage/native-check.py'), str(package), str(materials / 'native-checks.json'), env=env)
 assert json.loads((materials / 'native-checks.json').read_text())['nativePhotoProcessing'] == 'passed'
+run(sys.executable, str(root / 'scripts/appimage/native-check.py'), str(package), str(materials / 'native-wayland-checks.json'), '--wayland', env=env)
+assert json.loads((materials / 'native-wayland-checks.json').read_text())['displayChecks']['devicePixelRatio'] == 2
 run('xvfb-run', '-a', '-s', '-screen 0 1920x1080x24', sys.executable, str(root / 'scripts/appimage/stage.py'), str(package), str(materials), env=env)
 run('node', 'scripts/beta-release.mjs', 'upload-appimage', tag, commit, cwd=root)
 run('node', 'scripts/beta-release.mjs', 'validate', tag, commit, cwd=root)

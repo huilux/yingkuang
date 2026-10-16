@@ -15,8 +15,15 @@ export GDK_PIXBUF_MODULE_FILE="$APPDIR/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cac
 export GI_TYPELIB_PATH="$APPDIR/usr/lib/girepository-1.0"
 export GSETTINGS_SCHEMA_DIR="$APPDIR/usr/share/glib-2.0/schemas"
 export GIO_EXTRA_MODULES="$APPDIR/usr/lib/gio/modules"
-# The pinned Tauri GTK bundler supports X11/XWayland.
-export GDK_BACKEND=x11
+# Prefer the native desktop backend so HiDPI buffers and resize requests reach
+# the Wayland compositor. Keep explicit user overrides and an X11 fallback.
+if [ -z "${GDK_BACKEND:-}" ]; then
+    if [ -n "${WAYLAND_DISPLAY:-}" ] || [ "${XDG_SESSION_TYPE:-}" = wayland ]; then
+        export GDK_BACKEND=wayland,x11
+    else
+        export GDK_BACKEND=x11
+    fi
+fi
 if [ -z "${GTK_THEME:-}" ]; then
     scheme="$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || true)"
     case "$scheme" in *prefer-dark*) export GTK_THEME=Adwaita:dark;; *) export GTK_THEME=Adwaita:light;; esac
