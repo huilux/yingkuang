@@ -93,7 +93,14 @@ export interface EditorDocument {
   layers: WatermarkLayer[];
   /** Equal edge gaps are recomputed for each photo's geometry and text. */
   distributions?: { axis: "x" | "y"; layerIds: string[] }[];
+  alignments?: AlignmentRule[];
 }
+
+export type AlignmentRule = {
+  action: "left" | "center-x" | "right" | "top" | "center-y" | "bottom" | "third-1" | "third-2";
+  reference: RegionId | "photo" | "selection";
+  layerIds: string[];
+};
 
 export interface TemplateRecord {
   id: string;

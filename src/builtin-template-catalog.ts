@@ -1,6 +1,7 @@
 import catalogSource from "./data/builtin-templates.json" with { type: "json" };
 import { diffTemplates, type TemplateChange } from "./template-diff.ts";
-import type { EditorDocument, TemplateRecord } from "./types";
+import { arrangementAxis } from "./selection-model.ts";
+import type { AlignmentRule, EditorDocument, TemplateRecord } from "./types";
 
 const catalogFormat = "yingkuang-builtin-templates";
 const catalogVersion = 1;
@@ -48,6 +49,21 @@ export function isValidEditorDocument(value: unknown): value is EditorDocument {
       if (!record(rule) || !["x", "y"].includes(rule.axis as string) || !Array.isArray(rule.layerIds) || rule.layerIds.length < 3 || rule.layerIds.length > 100 || new Set(rule.layerIds).size !== rule.layerIds.length) return false;
       for (const id of rule.layerIds) {
         const key = `${rule.axis}:${id}`;
+        if (typeof id !== "string" || !value.layers.some(layer => record(layer) && layer.id === id) || used.has(key)) return false;
+        used.add(key);
+      }
+    }
+  }
+  if (value.alignments !== undefined) {
+    if (!Array.isArray(value.alignments) || value.alignments.length > 200) return false;
+    const used = new Set<string>();
+    for (const rule of value.alignments) {
+      if (!record(rule) || !["left", "center-x", "right", "top", "center-y", "bottom", "third-1", "third-2"].includes(rule.action as string) ||
+          !["canvas", "photo", "selection", "top", "bottom", "left", "right"].includes(rule.reference as string) ||
+          !Array.isArray(rule.layerIds) || !rule.layerIds.length || rule.layerIds.length > 100) return false;
+      const axis = arrangementAxis(rule.action as AlignmentRule["action"], rule.reference as AlignmentRule["reference"]);
+      for (const id of rule.layerIds) {
+        const key = `${axis}:${id}`;
         if (typeof id !== "string" || !value.layers.some(layer => record(layer) && layer.id === id) || used.has(key)) return false;
         used.add(key);
       }

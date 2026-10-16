@@ -62,6 +62,9 @@ function compareDocument(changes: TemplateChange[], orientation: string, builtIn
   if (JSON.stringify(builtIn.distributions ?? []) !== JSON.stringify(local.distributions ?? [])) {
     changes.push({group:`${orientation} · 排版`,field:"等间距规则",builtInValue:`${builtIn.distributions?.length ?? 0} 组`,localValue:`${local.distributions?.length ?? 0} 组（已修改）`});
   }
+  if (JSON.stringify(builtIn.alignments ?? []) !== JSON.stringify(local.alignments ?? [])) {
+    changes.push({group:`${orientation} · 排版`,field:"对齐规则",builtInValue:`${builtIn.alignments?.length ?? 0} 组`,localValue:`${local.alignments?.length ?? 0} 组（已修改）`});
+  }
   for (const [key, label] of frameFields) compareField(changes, `${orientation} · 相框`, key, label, builtIn.frame[key], local.frame[key]);
   for (const region of ["top", "bottom", "left", "right"] as const) {
     for (const [key, label] of regionFields) {

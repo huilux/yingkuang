@@ -1,4 +1,5 @@
 import { cloneDocument, photoOrientation } from "./editor-model.ts";
+import { pruneLayoutRules } from "./document-layout.ts";
 import type { EditorDocument, PhotoAsset, TemplateRecord } from "./types";
 
 // Carry photo-specific edits across orientation changes instead of replacing
@@ -27,7 +28,8 @@ export function reorientTemplateDocument(template: TemplateRecord | undefined, b
     } else edits(original, local, destination);
   }
   if (JSON.stringify(base.distributions) !== JSON.stringify(current.distributions)) result.distributions = structuredClone(current.distributions);
+  if (JSON.stringify(base.alignments) !== JSON.stringify(current.alignments)) result.alignments = structuredClone(current.alignments);
   // An orientation may omit a layer that was added to the other layout.
-  if (result.distributions) result.distributions = result.distributions.filter(rule => rule.layerIds.every(id => result.layers.some(layer => layer.id === id)));
+  pruneLayoutRules(result);
   return result;
 }

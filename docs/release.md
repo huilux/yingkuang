@@ -71,10 +71,12 @@ node scripts/template-feed.mjs prepare \
   --source /path/to/template-backup.json \
   --version 2026.10.2 --revision 2 \
   --notes "说明新增或修改的模板" \
-  --min-app-version 0.5.9-beta.1 \
+  --min-app-version 0.5.9-beta.3 \
   --key /private/path/to/official-ed25519.pem
 npm run templates:check
 ```
+
+含 `alignments` 对齐规则的模板需要包含此修复的软件版本，最低版本应设置为 `0.5.9-beta.3` 或后续版本；`beta.1`、`beta.2` 不支持该规则。先用开发版跨照片验收并重新保存、导出模板，再准备远程版本与软件测试包。
 
 提交新增的版本目录、`index.json` 和 `index.sig`，合入 main 后自动部署。工作流验证全部版本的签名和内容，禁止修改或删除已有版本目录；构建站点时使用仓库 Secret `TEMPLATE_SIGNING_PRIVATE_KEY` 签名。私钥不进入仓库、安装包或公开站点，公钥保存在 `src/data/template-update.json`。维护者需自行安全备份私钥；更换公钥需要发布支持新公钥的软件。
 

@@ -1,11 +1,16 @@
-import type { CanvasGeometry, EditorDocument, Rect, WatermarkLayer } from "./types";
+import type { AlignmentRule, CanvasGeometry, EditorDocument, Rect, WatermarkLayer } from "./types";
 import { safeRect } from "./canvas-camera.ts";
 
 export type LayerPatch = { id: string; patch: Partial<WatermarkLayer> };
 export type Point = { x: number; y: number };
 export type MeasuredLayer = { id: string; position: Point; bounds: Rect };
-export type ArrangeAction = "left" | "center-x" | "right" | "top" | "center-y" | "bottom" | "third-1" | "third-2" | "distribute-x" | "distribute-y";
-export type AlignReference = keyof CanvasGeometry["regions"] | "photo" | "selection";
+export type ArrangeAction = AlignmentRule["action"] | "distribute-x" | "distribute-y";
+export type AlignReference = AlignmentRule["reference"];
+
+export function arrangementAxis(action: ArrangeAction, reference: AlignReference): "x" | "y" {
+  if (action === "third-1" || action === "third-2") return reference === "left" || reference === "right" ? "x" : "y";
+  return ["left", "center-x", "right", "distribute-x"].includes(action) ? "x" : "y";
+}
 
 export function selectLayer(current: string[], id: string, extend = false, preserveGroup = false): string[] {
   if (!id) return [];
@@ -60,7 +65,7 @@ export function arrangeSelection(action: ArrangeAction, reference: AlignReferenc
   const rect = regions && reference !== "selection" && reference !== "photo" && reference !== "canvas"
     ? safeRect(rawRect, regions[reference].safePadding) : rawRect;
   const thirds = action === "third-1" || action === "third-2";
-  const axis = thirds ? (reference === "left" || reference === "right" ? "x" : "y") : ["left", "center-x", "right"].includes(action) ? "x" : "y";
+  const axis = arrangementAxis(action, reference);
   const dimension = axis === "x" ? "width" : "height";
   const fraction = action === "third-1" ? 1 / 3 : action === "third-2" ? 2 / 3 : action === "left" || action === "top" ? 0 : action === "right" || action === "bottom" ? 1 : 0.5;
   const anchor = thirds ? 0.5 : fraction;

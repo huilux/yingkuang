@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureFontsLoaded, fontsChangedEvent, previewFontFamily } from "./font-library";
-import { resolveDocumentLayout } from "./document-layout";
+import { hasLayoutRules, resolveDocumentLayout } from "./document-layout";
+import { isVisible } from "./canvas-camera";
 import type { EditorDocument, PhotoAsset, WatermarkLayer } from "./types";
 
 let context: CanvasRenderingContext2D | null;
@@ -17,7 +18,7 @@ export const resolveBrowserLayout = (document: EditorDocument, photo: PhotoAsset
 export function useDocumentLayouts(raw: Record<string, EditorDocument>, photos: PhotoAsset[]) {
   const [revision, setRevision] = useState(0);
   const cache=useRef(new WeakMap<EditorDocument,WeakMap<PhotoAsset,{revision:number;document:EditorDocument}>>());
-  const families = JSON.stringify([...new Set(Object.values(raw).filter(doc => doc.distributions?.length).flatMap(doc => doc.layers.map(layer => layer.fontFamily)))]);
+  const families = JSON.stringify([...new Set(Object.values(raw).filter(hasLayoutRules).flatMap(doc => doc.layers.filter(layer => isVisible(layer, doc.regions)).map(layer => layer.fontFamily)))]);
   useEffect(() => {
     let alive = true;
     const load = () => { void ensureFontsLoaded(JSON.parse(families)).then(() => { if (alive) setRevision(value => value + 1); }).catch(() => {}); };
@@ -29,7 +30,7 @@ export function useDocumentLayouts(raw: Record<string, EditorDocument>, photos: 
     const byId=new Map(photos.map(photo=>[photo.id,photo]));
     return Object.fromEntries(Object.entries(raw).map(([id,doc]) => {
       const photo=byId.get(id);
-      if(!photo || !doc.distributions?.length)return [id,doc];
+      if(!photo || !hasLayoutRules(doc))return [id,doc];
       let entries=cache.current.get(doc);
       if(!entries){entries=new WeakMap();cache.current.set(doc,entries);}
       let entry=entries.get(photo);

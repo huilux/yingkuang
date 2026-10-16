@@ -41,9 +41,9 @@ import {useTemplateUpdates} from "./use-template-updates";
 import type { EditorCanvasHandle } from "./EditorCanvas";
 import { LayerInspector } from "./LayerInspector";
 import { SliderRow, Segmented } from "./EditorControls";
-import { selectLayer, moveSelection, type ArrangeAction, type LayerPatch } from "./selection-model";
+import { selectLayer, moveSelection, type AlignReference, type ArrangeAction, type LayerPatch } from "./selection-model";
 import { reorientTemplateDocument } from "./template-layout";
-import { releaseDistributionRules } from "./document-layout";
+import { commitArrangement, hasLayoutRules, pruneLayoutRules, releaseLayoutRules } from "./document-layout";
 import { resolveBrowserLayout, useDocumentLayouts } from "./browser-layout";
 import { ensureFontsLoaded } from "./font-library";
 import { isVisible } from "./canvas-camera";
@@ -590,7 +590,7 @@ function App() {
     });
     if (!changed.length) return;
     updateDocument(draft => {
-      releaseDistributionRules(draft, changed);
+      releaseLayoutRules(draft, changed, activePhoto ? calculateGeometry(activePhoto, draft) : undefined);
       for (const { id, patch } of changed) {
         const layer = draft.layers.find(item => item.id === id);
         if (layer) Object.assign(layer, patch);
@@ -598,17 +598,10 @@ function App() {
     }, record);
   }
 
-  function arrangeLayers(patches: LayerPatch[], action: ArrangeAction) {
+  function arrangeLayers(patches: LayerPatch[], action: ArrangeAction, reference: AlignReference) {
+    if (!activePhoto) return;
     updateDocument(draft => {
-      releaseDistributionRules(draft, patches);
-      for (const {id,patch} of patches) Object.assign(draft.layers.find(layer => layer.id === id)!, patch);
-      if (action === "distribute-x" || action === "distribute-y") {
-        draft.distributions ??= [];
-        const axis=action === "distribute-x" ? "x" : "y";
-        const layerIds=patches.map(patch=>patch.id);
-        draft.distributions=draft.distributions.filter(rule=>rule.axis!==axis || !rule.layerIds.some(id=>layerIds.includes(id)));
-        draft.distributions.push({ axis,layerIds });
-      }
+      commitArrangement(draft, patches, action, reference, calculateGeometry(activePhoto, draft));
     });
   }
 
@@ -940,7 +933,7 @@ function App() {
     if (!selectedLayers.length) return;
     updateDocument(draft => {
       draft.layers = draft.layers.filter(item => !selectedLayerIds.includes(item.id));
-      if (draft.distributions) draft.distributions = draft.distributions.filter(rule => rule.layerIds.every(id => draft.layers.some(layer => layer.id === id)));
+      pruneLayoutRules(draft);
     });
     setSelectedLayerIds([]);
   }
@@ -982,8 +975,8 @@ function App() {
     setExportChecking(true);
     let preflight: ExportPreflight;
     try {
-      if(!retry && request.items.some(item=>item.document.distributions?.length)) {
-        await ensureFontsLoaded(request.items.flatMap(item=>item.document.distributions?.length?item.document.layers.map(layer=>layer.fontFamily):[]));
+      if(!retry && request.items.some(item=>hasLayoutRules(item.document))) {
+        await ensureFontsLoaded(request.items.flatMap(item=>hasLayoutRules(item.document)?item.document.layers.filter(layer=>isVisible(layer,item.document.regions)).map(layer=>layer.fontFamily):[]));
         const byPath=new Map(photos.map(photo=>[photo.path,photo]));
         for(const item of request.items) {
           const photo=byPath.get(item.path);
