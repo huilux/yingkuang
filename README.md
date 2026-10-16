@@ -17,13 +17,13 @@
 
 ## 平台与安装
 
-当前测试版为 [0.5.8-beta.6](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.6)。普通用户只需下载对应系统的安装包。
+当前测试版为 [0.5.8-beta.7](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.7)。普通用户只需下载对应系统的安装包。
 
 | 系统 | 下载 |
 | --- | --- |
-| Windows x64 | [EXE 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.6/yingkuang_0.5.8-beta.6_windows-x64.exe) |
-| Debian/Ubuntu x64 | [DEB 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.6/yingkuang_0.5.8-beta.6_linux-x64.deb) |
-| Linux x64（AppImage） | [AppImage](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.6/yingkuang_0.5.8-beta.6_linux-x64.AppImage) |
+| Windows x64 | [EXE 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.7/yingkuang_0.5.8-beta.7_windows-x64.exe) |
+| Debian/Ubuntu x64 | [DEB 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.7/yingkuang_0.5.8-beta.7_linux-x64.deb) |
+| Linux x64（AppImage） | [AppImage](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.7/yingkuang_0.5.8-beta.7_linux-x64.AppImage) |
 
 校验文件和技术材料在同一发布页；许可证已随安装包保留。GitHub 的 `Source code` 是项目源码，不是安装包。
 
@@ -34,8 +34,8 @@ AppImage 依赖系统 OpenGL/EGL/GLES 与 Wayland 客户端运行库。精简 De
 AppImage 下载后赋予执行权限并运行：
 
 ```sh
-chmod +x yingkuang_0.5.8-beta.6_linux-x64.AppImage
-./yingkuang_0.5.8-beta.6_linux-x64.AppImage
+chmod +x yingkuang_0.5.8-beta.7_linux-x64.AppImage
+./yingkuang_0.5.8-beta.7_linux-x64.AppImage
 ```
 
 系统不能挂载 AppImage 时，可添加 `--appimage-extract-and-run` 运行；此方式已在 CI 验证。
