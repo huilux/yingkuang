@@ -421,15 +421,22 @@ fn install(directory: &Path, pack: OfficialPackage) -> Result<CacheStatus, Strin
     )?;
     Ok(status(directory))
 }
-fn download(path: &str, limit: usize) -> Result<String, String> {
-    let client = reqwest::blocking::Client::builder()
+fn template_http_client() -> Result<reqwest::blocking::Client, String> {
+    // rustls-no-provider requires selection before reqwest starts its runtime.
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    }
+    reqwest::blocking::Client::builder()
         .https_only(true)
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(15))
         .user_agent(concat!("Yingkuang/", env!("CARGO_PKG_VERSION")))
         .build()
-        .map_err(|_| "无法初始化模板下载连接")?;
+        .map_err(|_| "无法初始化模板下载连接".into())
+}
+fn download(path: &str, limit: usize) -> Result<String, String> {
+    let client = template_http_client()?;
     let response = client
         .get(format!("{}{path}", config().base_url))
         .header(reqwest::header::CACHE_CONTROL, "no-cache")
@@ -561,6 +568,19 @@ pub(crate) async fn rollback_official_templates(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn template_http_client_initializes_tls_without_network() {
+        let first = template_http_client().expect("cold HTTPS client initialization");
+        let second = template_http_client().expect("repeated HTTPS client initialization");
+        drop((first, second));
+        tauri::async_runtime::block_on(async {
+            tauri::async_runtime::spawn_blocking(|| {
+                drop(template_http_client().expect("Tauri blocking worker HTTPS client"));
+            })
+            .await
+            .expect("Tauri blocking worker completed");
+        });
+    }
     fn published() -> OfficialPackage {
         serde_json::from_str(include_str!("../../src/data/bundled-template-package.json")).unwrap()
     }
