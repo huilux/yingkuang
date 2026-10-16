@@ -96,6 +96,8 @@ def unpack_appimage(inputs, materials, version, commit):
 
 def assemble(root, inputs, output, commit, fetch_crate=obtain_crate):
     version = json.loads((root / 'package.json').read_text())['version']
+    catalog = json.loads((root / 'src/font-catalog.json').read_text())
+    expected_license_files = 4 + len({Path(f['path']).parts[0] for font in catalog for f in font['files']})
     if not re.fullmatch(r'\d+\.\d+\.\d+-beta\.\d+', version) or not re.fullmatch(r'[a-f0-9]{40}', commit):
         raise ValueError('Expected a beta version and full source commit')
     if output.exists() and any(output.iterdir()):
@@ -121,7 +123,7 @@ def assemble(root, inputs, output, commit, fetch_crate=obtain_crate):
         for field in ['startup', 'packageCheck', 'installation', 'uninstall']:
             if checks.get(field) != 'passed':
                 raise ValueError(f'{platform}: {field} did not pass')
-        if checks.get('installedLicenseFilesVerified') != 16:
+        if checks.get('installedLicenseFilesVerified') != expected_license_files:
             raise ValueError('Installed license verification is incomplete')
         if platform == 'windows-x64' and checks.get('themeSwitching') != 'passed':
             raise ValueError('Installed Windows theme check did not pass')

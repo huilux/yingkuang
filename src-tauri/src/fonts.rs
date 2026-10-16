@@ -179,41 +179,11 @@ struct FontFile {
 
 fn builtin_bytes(path: &str) -> Option<&'static [u8]> {
     match path {
-        "spacemono/SpaceMono-Regular.ttf" => Some(include_bytes!(
-            "../../public/fonts/spacemono/SpaceMono-Regular.ttf"
-        )),
-        "spacemono/SpaceMono-Bold.ttf" => Some(include_bytes!(
-            "../../public/fonts/spacemono/SpaceMono-Bold.ttf"
-        )),
-        "manrope/Manrope[wght].ttf" => Some(include_bytes!(
-            "../../public/fonts/manrope/Manrope[wght].ttf"
-        )),
-        "barlowsemicondensed/BarlowSemiCondensed-Regular.ttf" => Some(include_bytes!(
-            "../../public/fonts/barlowsemicondensed/BarlowSemiCondensed-Regular.ttf"
-        )),
-        "barlowsemicondensed/BarlowSemiCondensed-Medium.ttf" => Some(include_bytes!(
-            "../../public/fonts/barlowsemicondensed/BarlowSemiCondensed-Medium.ttf"
-        )),
-        "barlowsemicondensed/BarlowSemiCondensed-SemiBold.ttf" => Some(include_bytes!(
-            "../../public/fonts/barlowsemicondensed/BarlowSemiCondensed-SemiBold.ttf"
-        )),
-        "barlowsemicondensed/BarlowSemiCondensed-Bold.ttf" => Some(include_bytes!(
-            "../../public/fonts/barlowsemicondensed/BarlowSemiCondensed-Bold.ttf"
-        )),
         "cormorantgaramond/CormorantGaramond[wght].ttf" => Some(include_bytes!(
             "../../public/fonts/cormorantgaramond/CormorantGaramond[wght].ttf"
         )),
         "allura/Allura-Regular.ttf" => Some(include_bytes!(
             "../../public/fonts/allura/Allura-Regular.ttf"
-        )),
-        "lxgwwenkaitc/LXGWWenKaiTC-Regular.ttf" => Some(include_bytes!(
-            "../../public/fonts/lxgwwenkaitc/LXGWWenKaiTC-Regular.ttf"
-        )),
-        "lxgwwenkaitc/LXGWWenKaiTC-Bold.ttf" => Some(include_bytes!(
-            "../../public/fonts/lxgwwenkaitc/LXGWWenKaiTC-Bold.ttf"
-        )),
-        "zcoolxiaowei/ZCOOLXiaoWei-Regular.ttf" => Some(include_bytes!(
-            "../../public/fonts/zcoolxiaowei/ZCOOLXiaoWei-Regular.ttf"
         )),
         "longcang/LongCang-Regular.ttf" => Some(include_bytes!(
             "../../public/fonts/longcang/LongCang-Regular.ttf"
@@ -224,20 +194,11 @@ fn builtin_bytes(path: &str) -> Option<&'static [u8]> {
         "cinzel/Cinzel[wght].ttf" => {
             Some(include_bytes!("../../public/fonts/cinzel/Cinzel[wght].ttf"))
         }
-        "rajdhani/Rajdhani-Regular.ttf" => Some(include_bytes!(
-            "../../public/fonts/rajdhani/Rajdhani-Regular.ttf"
+        "spacemono/SpaceMono-Regular.ttf" => Some(include_bytes!(
+            "../../public/fonts/spacemono/SpaceMono-Regular.ttf"
         )),
-        "rajdhani/Rajdhani-Medium.ttf" => Some(include_bytes!(
-            "../../public/fonts/rajdhani/Rajdhani-Medium.ttf"
-        )),
-        "rajdhani/Rajdhani-SemiBold.ttf" => Some(include_bytes!(
-            "../../public/fonts/rajdhani/Rajdhani-SemiBold.ttf"
-        )),
-        "rajdhani/Rajdhani-Bold.ttf" => Some(include_bytes!(
-            "../../public/fonts/rajdhani/Rajdhani-Bold.ttf"
-        )),
-        "bebasneue/BebasNeue-Regular.ttf" => Some(include_bytes!(
-            "../../public/fonts/bebasneue/BebasNeue-Regular.ttf"
+        "spacemono/SpaceMono-Bold.ttf" => Some(include_bytes!(
+            "../../public/fonts/spacemono/SpaceMono-Bold.ttf"
         )),
         _ => None,
     }
@@ -318,7 +279,7 @@ mod tests {
         let directory = root.path().join("library");
         initialize(directory.clone());
         let source = root.path().join("Title.TTF");
-        let bytes = builtin_bytes("manrope/Manrope[wght].ttf").unwrap();
+        let bytes = builtin_bytes("cormorantgaramond/CormorantGaramond[wght].ttf").unwrap();
         fs::write(&source, bytes).unwrap();
         let first = import_at(&directory, &source).unwrap();
         let renamed = root.path().join("Renamed.ttf");
@@ -382,8 +343,8 @@ mod tests {
 
     #[test]
     fn variable_font_weight_changes_outlines() {
-        let regular = builtin_font("Manrope", 400).unwrap().unwrap();
-        let bold = builtin_font("Manrope", 700).unwrap().unwrap();
+        let regular = builtin_font("Cormorant Garamond", 400).unwrap().unwrap();
+        let bold = builtin_font("Cormorant Garamond", 700).unwrap().unwrap();
         let glyph = regular.glyph_id('M').with_scale(40.0);
         let outline = |font: FontArc| {
             let mut coverage = 0.0;

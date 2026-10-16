@@ -12,9 +12,9 @@ export const builtinFonts = catalog;
 export const systemFonts: { value: string; label: string }[] = [];
 function renderingFamilies(value: string) {
   const [primary, ...fallbacks] = resolveFontFamily(value).split(", ");
-  // Native export uses WenKai when the primary face lacks a glyph. Put it
+  // Native export uses Long Cang for Chinese and Space Mono for symbols. Put them
   // before generic fallbacks, which could otherwise select a system CJK face.
-  return [...new Set([primary, "LXGW WenKai TC", ...fallbacks])];
+  return [...new Set([primary, "Long Cang", "Space Mono", ...fallbacks])];
 }
 
 // Keep document fonts separate from the application UI's system fonts.
@@ -120,7 +120,7 @@ function addImportedFont(font: ImportedFont, face: FontFace) {
   for (const previous of faces.get(font.family) ?? []) document.fonts.delete(previous);
   document.fonts.add(face);
   faces.set(font.family, [face]);
-  const option = { family: font.family, value: `${font.family}, LXGW WenKai TC, sans-serif`, label: `${font.name} · 已导入` };
+  const option = { family: font.family, value: `${font.family}, Long Cang, sans-serif`, label: `${font.name} · 已导入` };
   const fonts = [...snapshot.fonts.filter(item => item.family !== font.family), option].sort((a, b) => a.label.localeCompare(b.label));
   publish({ ...snapshot, fonts });
   return option;

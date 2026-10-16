@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
@@ -17,4 +17,13 @@ test("initial JavaScript stays within the desktop startup budget", () => {
   const gzipBytes = contents.reduce((total, content) => total + gzipSync(content).length, 0);
   assert.ok(bytes <= 400 * 1024, `Initial JavaScript is ${(bytes / 1024).toFixed(1)} KiB (budget: 400 KiB)`);
   assert.ok(gzipBytes <= 125 * 1024, `Compressed initial JavaScript is ${(gzipBytes / 1024).toFixed(1)} KiB (budget: 125 KiB)`);
+});
+
+test("complete frontend assets including all offline fonts stay below 9 MiB", () => {
+  const size = path => readdirSync(path, { withFileTypes: true }).reduce((bytes, entry) => {
+    const child = resolve(path, entry.name);
+    return bytes + (entry.isDirectory() ? size(child) : statSync(child).size);
+  }, 0);
+  const bytes = size(dist);
+  assert.ok(bytes <= 9 * 1024 * 1024, `Frontend assets are ${(bytes / 1024 / 1024).toFixed(2)} MiB (budget: 9 MiB)`);
 });

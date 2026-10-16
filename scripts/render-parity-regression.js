@@ -74,8 +74,8 @@
   const manropeBold = await textBounds('manrope_bold', 0, 'Manrope, LXGW WenKai TC, sans-serif', 700);
   const serif = await textBounds('serif_mixed', 0, 'Cormorant Garamond, LXGW WenKai TC, serif', 600);
   const { importFont } = await import('/src/font-library.ts');
-  const fontBytes = await (await fetch('/fonts/barlowsemicondensed/BarlowSemiCondensed-Regular.ttf')).arrayBuffer();
-  const imported = await importFont(new File([fontBytes], 'BarlowSemiCondensed.ttf'));
+  const fontBytes = await (await fetch('/fonts/spacemono/SpaceMono-Regular.ttf')).arrayBuffer();
+  const imported = await importFont(new File([fontBytes], 'SpaceMono.ttf'));
   const importedText = await textBounds('imported_mixed', 0, imported.value);
   return { background, shadow, strongShadow, scaled, text, textRotated, retiredSans, systemMono, manrope, manropeBold, serif, importedText };
 })();

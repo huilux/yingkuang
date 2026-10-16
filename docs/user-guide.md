@@ -51,7 +51,7 @@
 
 ## 字体
 
-内置 Manrope、Barlow Semi Condensed、Cormorant Garamond、Allura、霞鹜文楷 TC、站酷小薇、龙藏体、Sacramento、Cinzel、Rajdhani、Bebas Neue 和 Space Mono，均可离线使用。字体来源和字重见 [字体说明](../public/fonts/README.md)。
+内置 Cormorant Garamond、Allura、龙藏体、Sacramento、Cinzel 和 Space Mono，均可离线使用。旧模板中的已移除字体自动映射到保留字体；个人模板数据不变。龙藏体负责中文回退，Space Mono 补充符号；缺少字形时预检会提示导入支持该字符的 TTF/OTF，避免静默导出缺字。需要原字体效果时，可离线导入原字体文件。字体来源和字重见 [字体说明](../public/fonts/README.md)。
 
 在水印面板点击「导入字体」，可批量选择 TTF/OTF，每个文件最多 32 MB；不支持 TTC、WOFF 或 WOFF2。导入后再从字体列表选择，导入动作本身不会修改当前水印。相同内容的字体自动去重，损坏文件单独提示。
 

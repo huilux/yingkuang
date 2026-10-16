@@ -24,6 +24,10 @@ class ReleaseAssemblyTests(unittest.TestCase):
         (self.root / 'LICENSE').write_text('Project MIT notice\n')
         (self.root / 'THIRD_PARTY_NOTICES.md').write_text('Upstream notices\n')
         (self.root / 'src-tauri').mkdir()
+        (self.root / 'src').mkdir()
+        (self.root / 'src/font-catalog.json').write_text(json.dumps([
+            {'files': [{'path': f'font{index}/regular.ttf'}, {'path': f'font{index}/bold.ttf'}]} for index in range(6)
+        ]))
         self.source = b'Original MPL dependency archive bytes'
         self.source_hash = hashlib.sha256(self.source).hexdigest()
         (self.root / 'src-tauri/Cargo.lock').write_text('[[package]]\nname = "test-mpl"\nversion = "1.0.0"\nchecksum = "' + self.source_hash + '"\n')
@@ -33,7 +37,7 @@ class ReleaseAssemblyTests(unittest.TestCase):
             inventory = {'target': target, 'missingTexts': [], 'reviewRequired': [], 'packages': [{'ecosystem': 'cargo', 'name': 'test-mpl', 'version': '1.0.0', 'license': 'MPL-2.0'}]}
             (self.inputs / (prefix + '_dependency-inventory.json')).write_text(json.dumps(inventory))
             (self.inputs / (prefix + '_LICENSES.txt')).write_text(platform + ' complete license texts')
-            checks = {'version': self.version, 'commit': self.commit, 'platform': platform, 'installedLicenseFilesVerified': 16, 'startup': 'passed', 'packageCheck': 'passed', 'installation': 'passed', 'uninstall': 'passed', 'themeSwitching': 'passed'}
+            checks = {'version': self.version, 'commit': self.commit, 'platform': platform, 'installedLicenseFilesVerified': 10, 'startup': 'passed', 'packageCheck': 'passed', 'installation': 'passed', 'uninstall': 'passed', 'themeSwitching': 'passed'}
             (self.inputs / (prefix + '_checks.json')).write_text(json.dumps(checks))
             self.rehash(platform)
 
@@ -90,6 +94,13 @@ class ReleaseAssemblyTests(unittest.TestCase):
         path = self.inputs / f'yingkuang_{self.version}_windows-x64.exe'
         path.write_bytes(b'changed after staging')
         with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+            self.build()
+
+    def test_installed_license_count_follows_the_current_font_families(self):
+        path = self.inputs / f'yingkuang_{self.version}_linux-x64_checks.json'
+        report = json.loads(path.read_text()); report['installedLicenseFilesVerified'] = 16
+        path.write_text(json.dumps(report)); self.rehash('linux-x64')
+        with self.assertRaisesRegex(ValueError, 'license verification is incomplete'):
             self.build()
 
     def test_other_commit_is_rejected_even_with_valid_checksums(self):

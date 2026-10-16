@@ -635,15 +635,21 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
             errors.push(format!("{error_name}：原图不存在或不可读取"));
             continue;
         }
+        let exif = read_exif(path);
         for layer in
             item.document.layers.iter().filter(|layer| {
                 layer.visible && region_enabled(&layer.region, &item.document.regions)
             })
         {
-            if layer.font_family.starts_with("YingkuangFont")
-                && let Err(error) =
-                    load_font(&layer.font_family, layer.font_weight, &mut checked_fonts)
-            {
+            let checked = load_font(&layer.font_family, layer.font_weight, &mut checked_fonts)
+                .and_then(|font| {
+                    if let Some(text) = resolve_text(layer, &exif, &item.overrides) {
+                        font_runs(&text, font, layer.font_weight, &mut checked_fonts).map(|_| ())
+                    } else {
+                        Ok(())
+                    }
+                });
+            if let Err(error) = checked {
                 errors.push(format!("{error_name}：{}：{error}", layer.name));
                 break;
             }
@@ -669,7 +675,7 @@ fn preflight_export_sync(request: &ExportRequest) -> ExportPreflight {
                 continue;
             }
         };
-        if matches!(read_exif(path).orientation, 5..=8) {
+        if matches!(exif.orientation, 5..=8) {
             std::mem::swap(&mut width, &mut height);
         }
         let (_, _, width, height) = match crop_rectangle(width, height, item.crop.as_ref()) {
@@ -1094,6 +1100,41 @@ fn load_font(
     Ok(font)
 }
 
+fn font_runs(
+    text: &str,
+    primary: FontArc,
+    weight: u16,
+    cache: &mut HashMap<String, FontArc>,
+) -> Result<(Vec<FontArc>, Vec<(String, usize)>), String> {
+    let mut faces = vec![primary];
+    // Match the preview's offline fallback order. Load fallback faces only
+    // when required, retaining the cached native font parsing across a batch.
+    for family in ["Long Cang", "Space Mono"] {
+        if text
+            .chars()
+            .all(|c| c.is_whitespace() || faces.iter().any(|f| f.glyph_id(c).0 != 0))
+        {
+            break;
+        }
+        faces.push(load_font(family, weight, cache)?);
+    }
+    let mut runs: Vec<(String, usize)> = Vec::new();
+    for c in text.chars() {
+        let index = if c.is_whitespace() {
+            Some(0)
+        } else {
+            faces.iter().position(|font| font.glyph_id(c).0 != 0)
+        }
+        .ok_or_else(|| format!("当前字体不支持字符“{c}”，请离线导入包含该字形的 TTF/OTF 字体"))?;
+        if let Some((run, _)) = runs.last_mut().filter(|(_, previous)| *previous == index) {
+            run.push(c);
+        } else {
+            runs.push((c.to_string(), index));
+        }
+    }
+    Ok((faces, runs))
+}
+
 fn draw_layers(
     canvas: &mut RgbaImage,
     item: &ExportItem,
@@ -1124,26 +1165,12 @@ fn draw_layers(
         let font = load_font(&layer.font_family, layer.font_weight, fonts)
             .map_err(|error| format!("{}：{error}", layer.name))?;
         let font_scale = css_font_scale(&font, (layer.font_size * scale).max(1.0));
-        // Use the same Chinese fallback as the browser when a Latin/custom face
-        // lacks glyphs. Keep runs on the primary font's baseline and line box.
-        let fallback = if text.chars().any(|c| font.glyph_id(c).0 == 0) {
-            load_font("LXGW WenKai TC", layer.font_weight, fonts)?
-        } else {
-            font.clone()
-        };
-        let mut runs: Vec<(String, bool)> = Vec::new();
-        for c in text.chars() {
-            let missing = font.glyph_id(c).0 == 0;
-            if let Some((run, _)) = runs.last_mut().filter(|(_, previous)| *previous == missing) {
-                run.push(c);
-            } else {
-                runs.push((c.to_string(), missing));
-            }
-        }
+        let (faces, runs) = font_runs(&text, font.clone(), layer.font_weight, fonts)
+            .map_err(|error| format!("{}：{error}", layer.name))?;
         let run_sizes: Vec<_> = runs
             .iter()
-            .map(|(text, missing)| {
-                let face = if *missing { &fallback } else { &font };
+            .map(|(text, index)| {
+                let face = &faces[*index];
                 let scale = css_font_scale(face, (layer.font_size * scale).max(1.0));
                 let (width, _) = text_size(scale, face, text);
                 (scale, width.saturating_sub(1))
@@ -1174,8 +1201,8 @@ fn draw_layers(
         let color = parse_color(&layer.color, (layer.opacity.clamp(0.0, 1.0) * 255.0) as u8);
         let mut cursor = padding as i32;
         let baseline = font.as_scaled(font_scale).ascent();
-        for ((text, missing), (run_scale, width)) in runs.iter().zip(run_sizes) {
-            let face = if *missing { &fallback } else { &font };
+        for ((text, index), (run_scale, width)) in runs.iter().zip(run_sizes) {
+            let face = &faces[*index];
             let top =
                 padding as i32 + (baseline - face.as_scaled(run_scale).ascent()).round() as i32;
             draw_text_mut(&mut text_image, color, cursor, top, run_scale, face, text);
@@ -2281,7 +2308,7 @@ mod tests {
         crate::fonts::initialize(custom_directory.clone());
         let custom = crate::fonts::import_at(
             &custom_directory,
-            Path::new("../public/fonts/barlowsemicondensed/BarlowSemiCondensed-Regular.ttf"),
+            Path::new("../public/fonts/spacemono/SpaceMono-Regular.ttf"),
         )
         .unwrap();
         let mut item = text_item.clone();
@@ -2359,6 +2386,55 @@ mod tests {
                 .save(root.join("real_export.png"))
                 .unwrap();
         }
+    }
+
+    #[test]
+    fn offline_text_fallback_covers_chinese_and_symbols_and_rejects_missing_glyphs() {
+        let mut cache = HashMap::new();
+        let primary = load_font("Allura", 400, &mut cache).unwrap();
+        let (faces, runs) = font_runs("映框 ® 50mm", primary, 400, &mut cache).unwrap();
+        assert!(faces.len() > 1);
+        for (text, index) in runs {
+            for c in text.chars().filter(|c| !c.is_whitespace()) {
+                assert_ne!(faces[index].glyph_id(c).0, 0, "missing {c}");
+            }
+        }
+        let primary = load_font("Long Cang", 400, &mut cache).unwrap();
+        assert!(
+            font_runs("體", primary, 400, &mut cache)
+                .unwrap_err()
+                .contains("请离线导入")
+        );
+    }
+
+    #[test]
+    fn missing_glyph_is_reported_before_export_instead_of_writing_to_fu() {
+        let root = tempfile::tempdir().unwrap();
+        let input = root.path().join("photo.png");
+        RgbaImage::new(24, 16).save(&input).unwrap();
+        let mut document = test_document();
+        let mut layer = test_layer("custom");
+        layer.custom_value = "體".into();
+        layer.font_family = "Long Cang".into();
+        document.layers.push(layer);
+        let request = ExportRequest {
+            items: vec![ExportItem {
+                path: input.to_string_lossy().into_owned(),
+                document,
+                overrides: HashMap::new(),
+                output_suffix: None,
+                crop: None,
+            }],
+            settings: test_settings(root.path()),
+        };
+        let result = preflight_export_sync(&request);
+        assert!(!result.ready);
+        assert!(result.errors.iter().any(|error| error.contains("字符“體”")));
+        assert!(
+            render_item(&request.items[0], &request.settings)
+                .unwrap_err()
+                .contains("字符“體”")
+        );
     }
 
     #[test]

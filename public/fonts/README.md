@@ -4,23 +4,19 @@ Unmodified font files from the official [Google Fonts repository](https://github
 
 | Family | Watermark use | Bundled weights |
 | --- | --- | --- |
-| Manrope | Clear, restrained photographer names and captions | Variable 400–700 |
-| Barlow Semi Condensed | Compact camera names and EXIF parameters | 400, 500, 600, 700 |
 | Cormorant Garamond | Elegant Latin names and larger titles | Variable 400–700 |
 | Allura | Short Latin handwritten signatures | Regular only |
-| LXGW WenKai TC | Chinese captions and titles; Chinese fallback | Regular, Bold |
-| ZCOOL XiaoWei | Decorative Chinese titles | Regular only |
 | Long Cang | Chinese cursive signatures | Regular only |
 | Sacramento | Thin Latin handwritten signatures | Regular only |
 | Cinzel | Classical inscription-style Latin names | Variable 400–700 |
-| Rajdhani | Technical camera names and EXIF parameters | 400, 500, 600, 700 |
 | Space Mono | Consistent offline monospace parameters | Regular, Bold |
-| Bebas Neue | Condensed uppercase Latin titles | Regular only |
 
-Allura, ZCOOL XiaoWei, Long Cang, Sacramento and Bebas Neue use their original regular outlines for every editor weight; WenKai maps 400/500 to Regular and 600/700 to Bold. No fonts have been modified or subsetted. Space Mono maps 400/500 to Regular and 600/700 to Bold. Saved `monospace` names resolve to bundled Space Mono in both preview and export; no system font lookup is needed.
+Allura, Long Cang and Sacramento use their original regular outlines for every editor weight. Cormorant Garamond and Cinzel provide variable weights; Space Mono maps 400/500 to Regular and 600/700 to Bold. All six families remain complete, unmodified and available offline. No fonts have been subsetted.
+
+Preview and export share an offline fallback chain: the selected family, Long Cang for Chinese, then Space Mono for additional symbols. Missing glyphs are reported before export; users can import a supporting TTF/OTF locally. Long Cang covers fewer characters than the former WenKai fallback, so uncommon or traditional Chinese may require an imported font.
 
 ## Redistribution
 
 Keep every family's `OFL.txt` with the font in source and binary distributions. The files are copied into the frontend distribution by Vite. Font copyright and license remain separate from the application's license. OFL permits use, embedding and bundling with commercial or open-source software; fonts cannot be sold on their own. Modified fonts must follow OFL terms, including any Reserved Font Names. Images created using the fonts do not inherit OFL. See the [official OFL FAQ](https://openfontlicense.org/ofl-faq/).
 
-The earlier font selection has been replaced; Space Mono is bundled again for portable monospace rendering. `src/retired-fonts.json` only maps saved family names to replacements; it contains no old font data. User-imported fonts remain local and are not included in this repository's redistribution grant.
+The six-family catalog reduces bundled font data from 39.6 MiB to 6.7 MiB. `src/retired-fonts.json` only maps saved family names to replacements; it contains no old font data. User-imported fonts remain local and are not included in this repository's redistribution grant.

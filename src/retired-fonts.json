@@ -1,12 +1,18 @@
 {
-  "Noto Sans CJK SC": "LXGW WenKai TC",
-  "Noto Serif CJK SC": "LXGW WenKai TC",
-  "Montserrat": "Manrope",
-  "Lato": "Manrope",
+  "Noto Sans CJK SC": "Long Cang",
+  "Noto Serif CJK SC": "Long Cang",
+  "Montserrat": "Space Mono",
+  "Lato": "Space Mono",
   "Playfair Display": "Cormorant Garamond",
-  "Oswald": "Barlow Semi Condensed",
-  "Ma Shan Zheng": "LXGW WenKai TC",
-  "DejaVu Sans": "Manrope",
-  "Liberation Sans": "Manrope",
-  "monospace": "Space Mono"
+  "Oswald": "Space Mono",
+  "Ma Shan Zheng": "Long Cang",
+  "DejaVu Sans": "Space Mono",
+  "Liberation Sans": "Space Mono",
+  "monospace": "Space Mono",
+  "Manrope": "Space Mono",
+  "Barlow Semi Condensed": "Space Mono",
+  "LXGW WenKai TC": "Long Cang",
+  "ZCOOL XiaoWei": "Long Cang",
+  "Rajdhani": "Space Mono",
+  "Bebas Neue": "Cinzel"
 }

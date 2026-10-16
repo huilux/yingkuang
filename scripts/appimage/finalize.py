@@ -177,7 +177,7 @@ def finalize(appdir, output, materials, runtime):
     inventory_file.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
     with tempfile.TemporaryDirectory() as directory:
         filesystem = Path(directory) / 'payload.squashfs'
-        run('mksquashfs', appdir, filesystem, '-root-owned', '-noappend', '-comp', 'gzip', '-no-progress', '-processors', '2')
+        run('mksquashfs', appdir, filesystem, '-root-owned', '-noappend', '-comp', 'zstd', '-Xcompression-level', '19', '-no-progress', '-processors', '2')
         with output.open('wb') as stream:
             for path in [runtime / 'runtime-x86_64', filesystem]:
                 with path.open('rb') as source:
@@ -187,6 +187,7 @@ def finalize(appdir, output, materials, runtime):
     if offset != (runtime / 'runtime-x86_64').stat().st_size:
         raise ValueError('Packed AppImage runtime offset mismatch')
     report['appImageSha256'] = audit.digest(output)
+    report['filesystemCompression'] = {'algorithm': 'zstd', 'level': 19}
     report['projectCommit'] = os.environ['GITHUB_SHA']
     inventory_file.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
     print(f'AppImage packed: {len(report["packages"])} binary packages, {len(source_records)} exact system source packages; no unresolved payload files')

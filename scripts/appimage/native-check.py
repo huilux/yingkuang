@@ -95,6 +95,28 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-native-') as directory:
             if not result.get('passed'): raise RuntimeError(result)
             png, = output.glob('*.png')
             assert png.read_bytes().startswith(b'\x89PNG\r\n\x1a\n')
+            catalog = json.loads((root / 'src/font-catalog.json').read_text())
+            families = [font['value'] for font in catalog] + ['Manrope, LXGW WenKai TC, sans-serif', 'LXGW WenKai TC, sans-serif']
+            result = execute('''const [path, document, settings, families, done] = arguments;
+                (async () => {
+                  const invoke = window.__TAURI_INTERNALS__.invoke;
+                  document.layers=[{name:'离线字体',source:'custom',customValue:'映框 © ® 50mm',region:'canvas',x:0.5,y:0.5,fontFamily:families[0],fontSize:20,fontWeight:400,color:'#000000',opacity:1,rotation:0,visible:true}];
+                  settings.format='png';
+                  for (const [index,family] of families.entries()) {
+                    document.layers[0].fontFamily=family;settings.suffix='-offline-'+index;
+                    const request={items:[{path,document,overrides:{}}],settings};
+                    const preflight=await invoke('preflight_export',{request});
+                    if (!preflight.ready) throw Error(family+': '+JSON.stringify(preflight));
+                    const summary=await invoke('export_images',{request});
+                    if (summary.succeeded!==1 || summary.failed!==0) throw Error(family+': '+JSON.stringify(summary));
+                  }
+                  document.layers[0].fontFamily='Long Cang';document.layers[0].customValue='體';
+                  const preflight=await invoke('preflight_export',{request:{items:[{path,document,overrides:{}}],settings}});
+                  if (preflight.ready || !preflight.errors.some(error=>error.includes('字符'))) throw Error('Missing glyph was not reported');
+                  done({passed:true});
+                })().catch(error=>done({passed:false,error:String(error)}));''', [str(photo), document, settings, families])
+            if not result.get('passed'): raise RuntimeError(result)
+            assert len(list(output.glob('*-offline-*.png'))) == len(families)
         except Exception:
             print((work / 'driver.log').read_text(), file=sys.stderr)
             raise
@@ -103,5 +125,5 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-native-') as directory:
                 try: request('DELETE', f'/session/{session}')
                 except (RuntimeError, urllib.error.URLError): pass
             driver.terminate(); driver.wait(timeout=15)
-report.write_text(json.dumps({'nativePhotoProcessing': 'passed', 'checks': ['PNG import and preview', '90 degree rotation and native JPEG export', 'JPEG reimport and native PNG export', 'Chinese and space paths', 'shipped default template and font resources'], 'method': 'Unmodified release AppImage launched by WebKitWebDriver with Tauri automation enabled only via the test process environment. Real Rust IPC; no dialogs or file processing mocked.'}, indent=2) + '\n')
+report.write_text(json.dumps({'nativePhotoProcessing': 'passed', 'offlineFontFamilies': [font['family'] for font in catalog], 'legacyFontMigration': 'passed', 'missingGlyphPreflight': 'passed', 'checks': ['PNG import and preview', '90 degree rotation and native JPEG export', 'JPEG reimport and native PNG export', 'Chinese and space paths', 'shipped default template and font resources', 'all selected offline fonts with Chinese and symbol fallback', 'retired family names and missing-glyph preflight'], 'method': 'Unmodified release AppImage launched by WebKitWebDriver with Tauri automation enabled only via the test process environment. Real Rust IPC; no dialogs or file processing mocked.'}, indent=2) + '\n')
 print('AppImage real PNG/JPEG decoding, rotation, default template/font rendering and native exports passed')

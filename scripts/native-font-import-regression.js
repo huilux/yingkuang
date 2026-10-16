@@ -4,7 +4,7 @@
   const moduleUrl = name => performance.getEntriesByType('resource').find(entry => entry.name.includes(`/deps/${name}.js?`)).name;
   const { default: React } = await import(moduleUrl('react'));
   const { default: { createRoot } } = await import(moduleUrl('react-dom_client'));
-  const bytes = await (await fetch('/fonts/barlowsemicondensed/BarlowSemiCondensed-Regular.ttf')).arrayBuffer();
+  const bytes = await (await fetch('/fonts/spacemono/SpaceMono-Regular.ttf')).arrayBuffer();
   const hash = await crypto.subtle.digest('SHA-256', bytes);
   const family = 'YingkuangFont' + [...new Uint8Array(hash)].map(v => v.toString(16).padStart(2, '0')).join('');
   const font = { family, name: 'Native Caption Regular', data: btoa([...new Uint8Array(bytes)].map(v => String.fromCharCode(v)).join('')) };

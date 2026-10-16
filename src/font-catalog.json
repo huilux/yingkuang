@@ -1,42 +1,8 @@
 [
   {
-    "family": "Manrope",
-    "label": "Manrope · 简洁署名",
-    "value": "Manrope, LXGW WenKai TC, sans-serif",
-    "files": [
-      {
-        "path": "manrope/Manrope[wght].ttf",
-        "weight": "400 700"
-      }
-    ]
-  },
-  {
-    "family": "Barlow Semi Condensed",
-    "label": "Barlow Semi Condensed · 紧凑参数",
-    "value": "Barlow Semi Condensed, LXGW WenKai TC, sans-serif",
-    "files": [
-      {
-        "path": "barlowsemicondensed/BarlowSemiCondensed-Regular.ttf",
-        "weight": "400 400"
-      },
-      {
-        "path": "barlowsemicondensed/BarlowSemiCondensed-Medium.ttf",
-        "weight": "500 500"
-      },
-      {
-        "path": "barlowsemicondensed/BarlowSemiCondensed-SemiBold.ttf",
-        "weight": "600 600"
-      },
-      {
-        "path": "barlowsemicondensed/BarlowSemiCondensed-Bold.ttf",
-        "weight": "700 700"
-      }
-    ]
-  },
-  {
     "family": "Cormorant Garamond",
     "label": "Cormorant Garamond · 典雅署名",
-    "value": "Cormorant Garamond, LXGW WenKai TC, sans-serif",
+    "value": "Cormorant Garamond, Long Cang, sans-serif",
     "files": [
       {
         "path": "cormorantgaramond/CormorantGaramond[wght].ttf",
@@ -47,7 +13,7 @@
   {
     "family": "Allura",
     "label": "Allura · 英文手写签名",
-    "value": "Allura, LXGW WenKai TC, sans-serif",
+    "value": "Allura, Long Cang, sans-serif",
     "files": [
       {
         "path": "allura/Allura-Regular.ttf",
@@ -56,35 +22,9 @@
     ]
   },
   {
-    "family": "LXGW WenKai TC",
-    "label": "霞鹜文楷 TC · 中文题字",
-    "value": "LXGW WenKai TC, sans-serif",
-    "files": [
-      {
-        "path": "lxgwwenkaitc/LXGWWenKaiTC-Regular.ttf",
-        "weight": "400 500"
-      },
-      {
-        "path": "lxgwwenkaitc/LXGWWenKaiTC-Bold.ttf",
-        "weight": "600 700"
-      }
-    ]
-  },
-  {
-    "family": "ZCOOL XiaoWei",
-    "label": "站酷小薇 · 中文文艺题字",
-    "value": "ZCOOL XiaoWei, LXGW WenKai TC, sans-serif",
-    "files": [
-      {
-        "path": "zcoolxiaowei/ZCOOLXiaoWei-Regular.ttf",
-        "weight": "400 700"
-      }
-    ]
-  },
-  {
     "family": "Long Cang",
     "label": "龙藏体 · 中文行草署名",
-    "value": "Long Cang, LXGW WenKai TC, sans-serif",
+    "value": "Long Cang, sans-serif",
     "files": [
       {
         "path": "longcang/LongCang-Regular.ttf",
@@ -95,7 +35,7 @@
   {
     "family": "Sacramento",
     "label": "Sacramento · 纤细英文签名",
-    "value": "Sacramento, LXGW WenKai TC, sans-serif",
+    "value": "Sacramento, Long Cang, sans-serif",
     "files": [
       {
         "path": "sacramento/Sacramento-Regular.ttf",
@@ -106,7 +46,7 @@
   {
     "family": "Cinzel",
     "label": "Cinzel · 古典铭文署名",
-    "value": "Cinzel, LXGW WenKai TC, sans-serif",
+    "value": "Cinzel, Long Cang, sans-serif",
     "files": [
       {
         "path": "cinzel/Cinzel[wght].ttf",
@@ -115,43 +55,9 @@
     ]
   },
   {
-    "family": "Rajdhani",
-    "label": "Rajdhani · 科技感参数",
-    "value": "Rajdhani, LXGW WenKai TC, sans-serif",
-    "files": [
-      {
-        "path": "rajdhani/Rajdhani-Regular.ttf",
-        "weight": "400 400"
-      },
-      {
-        "path": "rajdhani/Rajdhani-Medium.ttf",
-        "weight": "500 500"
-      },
-      {
-        "path": "rajdhani/Rajdhani-SemiBold.ttf",
-        "weight": "600 600"
-      },
-      {
-        "path": "rajdhani/Rajdhani-Bold.ttf",
-        "weight": "700 700"
-      }
-    ]
-  },
-  {
-    "family": "Bebas Neue",
-    "label": "Bebas Neue · 窄体大写标题",
-    "value": "Bebas Neue, LXGW WenKai TC, sans-serif",
-    "files": [
-      {
-        "path": "bebasneue/BebasNeue-Regular.ttf",
-        "weight": "400 700"
-      }
-    ]
-  },
-  {
     "family": "Space Mono",
     "label": "Space Mono · 等宽参数",
-    "value": "Space Mono, LXGW WenKai TC, monospace",
+    "value": "Space Mono, Long Cang, monospace",
     "files": [
       {
         "path": "spacemono/SpaceMono-Regular.ttf",
