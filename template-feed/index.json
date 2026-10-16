@@ -1,0 +1,19 @@
+{
+  "format": "yingkuang-template-feed",
+  "schemaVersion": 1,
+  "revision": 1,
+  "version": "2026.10.1",
+  "minAppVersion": "0.5.9-beta.1",
+  "path": "releases/2026.10.1/templates.json",
+  "sha256": "f235c0e4131d65f893ede3d593dac18aa9bab71106c676cd1982ac42c21c2aa3",
+  "bytes": 55166,
+  "templateCount": 5,
+  "notes": "新增五个官方模板，保存等间距排版规则，支持独立在线更新和离线导入。",
+  "fonts": [
+    "Cormorant Garamond",
+    "Allura",
+    "Long Cang",
+    "Cinzel",
+    "Space Mono"
+  ]
+}
