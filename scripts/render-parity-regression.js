@@ -40,7 +40,7 @@
     document.body.append(container);
     const stage = new window.Konva.Stage({ container, width: 600, height: 400 });
     const layer = new window.Konva.Layer();
-    const node = new window.Konva.Text({ x: 300, y: 200, text: '映框 50mm f/2.8',
+    const node = new window.Konva.Text({ x: 300, y: 200, text: '映框　50mm f/2.8',
       fontFamily: previewFontFamily(fontFamily), fontSize: 32, fontStyle: String(fontWeight), fill: '#000', rotation });
     node.offset({ x: node.width() / 2, y: node.height() / 2 });
     layer.add(node); stage.add(layer); stage.draw();

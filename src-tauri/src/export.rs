@@ -1114,7 +1114,7 @@ fn font_runs(
     for family in ["Long Cang", "Space Mono"] {
         if text
             .chars()
-            .all(|c| c.is_whitespace() || faces.iter().any(|f| f.glyph_id(c).0 != 0))
+            .all(|c| c.is_ascii_whitespace() || faces.iter().any(|f| f.glyph_id(c).0 != 0))
         {
             break;
         }
@@ -1122,7 +1122,7 @@ fn font_runs(
     }
     let mut runs: Vec<(String, usize)> = Vec::new();
     for c in text.chars() {
-        let index = if c.is_whitespace() {
+        let index = if c.is_ascii_whitespace() {
             Some(0)
         } else {
             faces.iter().position(|font| font.glyph_id(c).0 != 0)
@@ -2250,7 +2250,7 @@ mod tests {
         text_document.layers.push(WatermarkLayer {
             name: "文字度量".to_owned(),
             source: "custom".to_owned(),
-            custom_value: "映框 50mm f/2.8".to_owned(),
+            custom_value: "映框　50mm f/2.8".to_owned(),
             region: "canvas".to_owned(),
             x: 0.5,
             y: 0.5,
@@ -2394,10 +2394,10 @@ mod tests {
     fn offline_text_fallback_covers_chinese_and_symbols_and_rejects_missing_glyphs() {
         let mut cache = HashMap::new();
         let primary = load_font("Allura", 400, &mut cache).unwrap();
-        let (faces, runs) = font_runs("映框 ® 50mm", primary, 400, &mut cache).unwrap();
+        let (faces, runs) = font_runs("映框　® 50mm", primary, 400, &mut cache).unwrap();
         assert!(faces.len() > 1);
         for (text, index) in runs {
-            for c in text.chars().filter(|c| !c.is_whitespace()) {
+            for c in text.chars().filter(|c| !c.is_ascii_whitespace()) {
                 assert_ne!(faces[index].glyph_id(c).0, 0, "missing {c}");
             }
         }

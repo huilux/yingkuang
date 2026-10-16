@@ -100,7 +100,7 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-native-') as directory:
             result = execute('''const [path, document, settings, families, done] = arguments;
                 (async () => {
                   const invoke = window.__TAURI_INTERNALS__.invoke;
-                  document.layers=[{name:'离线字体',source:'custom',customValue:'映框 © ® 50mm',region:'canvas',x:0.5,y:0.5,fontFamily:families[0],fontSize:20,fontWeight:400,color:'#000000',opacity:1,rotation:0,visible:true}];
+                  document.layers=[{name:'离线字体',source:'custom',customValue:'映框　© ® 50mm',region:'canvas',x:0.5,y:0.5,fontFamily:families[0],fontSize:20,fontWeight:400,color:'#000000',opacity:1,rotation:0,visible:true}];
                   settings.format='png';
                   for (const [index,family] of families.entries()) {
                     document.layers[0].fontFamily=family;settings.suffix='-offline-'+index;
