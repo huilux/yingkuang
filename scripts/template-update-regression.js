@@ -25,7 +25,8 @@
   mockIPC(command=>{
     if(command==='inspect_images_resilient')return {items:[{id:'update-photo',path:'update-photo.jpg',fileName:'update-photo.jpg',width:600,height:400,megapixels:.24,thumbnailDataUrl:'/demo.jpg',metadata:{}}],failures:[]};
     if(command==='read_official_templates')return {current,previousVersion:null,issue:null};
-    if(command==='check_template_update'){networkChecks++;if(offline)throw new Error('网络不可用');return {index,signature:pack.signature,compatible:true};}
+    // Slow IPC makes premature clicks on disabled controls fail deterministically.
+    if(command==='check_template_update'){networkChecks++;if(offline)throw new Error('网络不可用');return new Promise(resolve=>setTimeout(()=>resolve({index,signature:pack.signature,compatible:true}),120));}
     if(command==='install_template_update'){if(failInstall)throw new Error('模板下载中断');current=pack;return {current,previousVersion:'2026.10.1',issue:null};}
     if(command==='rollback_official_templates'){current=originalPack;return {current,previousVersion:null,issue:null};}
     if(command==='plugin:dialog|open')return 'official-package.json';
@@ -62,7 +63,8 @@
     offline=true;button('检查更新').click();await t.waitFor(()=>host.querySelector('.template-update-error'),'Offline failure missing');assertProtected(photo);
     // A fresh mount obtains previous-version availability from native cache.
     current=null;root.unmount();root=createRoot(host);root.render(React.createElement(App));await t.context(host);await openManager();
-    offline=false;button('检查更新').click();await t.frame();
+    offline=false;button('检查更新').click();
+    await t.waitFor(()=>host.textContent.includes('官方模板已是最新版本')&&!button('导入官方模板包').disabled,'Check did not finish before offline import');
     // Use the offline file import path without any network request.
     offline=true;const checks=networkChecks;button('导入官方模板包').click();await t.waitFor(()=>imports===1,'Offline import did not finish');
     await t.waitFor(()=>button('恢复上一版 · 2026.10.1'),'Rollback missing');t.assert(networkChecks===checks,'Offline import contacted network');
