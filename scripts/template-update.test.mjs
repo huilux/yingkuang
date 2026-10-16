@@ -1,9 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {bundledCatalog} from '../src/builtin-template-catalog.ts';
-import {readDefaultTemplateId,readTemplateLibrary,rebaseTemplateLibrary,serializeUserTemplates,templatesKey} from '../src/template-library.ts';
+import {readDefaultTemplateId,readTemplateLibrary,rebaseTemplateLibrary,resolveTemplateReference,serializeUserTemplates,templatesKey} from '../src/template-library.ts';
 
 const original=bundledCatalog();
+for(const version of [1,2])test(`legacy v${version} personal IDs that collide with new built-ins retain their style and default`,()=>{
+  const personal={...structuredClone(original.templates[0]),builtIn:false,name:'我的旧模板'};
+  const key=version===1?'yingkuang-templates-v1':'yingkuang-templates-v2';
+  const source=JSON.stringify(version===1?[personal]:{version:2,overrides:[],custom:[personal]});
+  const previous=globalThis.localStorage;
+  try {
+    globalThis.localStorage={getItem:name=>name===key?source:name==='yingkuang-default-template-v1'?personal.id:null};
+    const library=readTemplateLibrary();assert.equal(library.canPersist,true);
+    const id=readDefaultTemplateId(library.templates,library.catalog,library.referenceMap);
+    assert.notEqual(id,personal.id);assert.deepEqual(library.templates.find(t=>t.id===id).layouts,personal.layouts);
+    assert.equal(library.templates.find(t=>t.id===id).name,personal.name);
+    assert.doesNotThrow(()=>serializeUserTemplates(library.templates,library.catalog,library.overrideBases,id));
+  }finally{if(previous===undefined)delete globalThis.localStorage;else globalThis.localStorage=previous;}
+});
 test('a newer bundled snapshot preserves a colliding personal default and exposes its reference mapping',()=>{
   const older=structuredClone(original);older.revision=0;delete older.revision;delete older.contentVersion;
   const removed=older.templates.shift();older.defaultTemplateId=older.templates[0].id;
@@ -32,7 +46,7 @@ test('official update preserves modifications, personal collisions, retired/defa
   assert.equal(changed.templates.find(t=>t.id===original.templates[1].id).builtIn,false);
   assert.ok(changed.idMap[personal.id]);
   assert.deepEqual(changed.templates.find(t=>t.id===changed.idMap[personal.id]).layouts,personal.layouts);
-  const serialized=serializeUserTemplates(changed.templates,next,changed.overrideBases);
+  const serialized=serializeUserTemplates(changed.templates,next,changed.overrideBases,changed.idMap[personal.id],changed.idMap);
   const previous=globalThis.localStorage;
   try {
     globalThis.localStorage={getItem:key=>key===templatesKey?serialized:null};
@@ -40,6 +54,7 @@ test('official update preserves modifications, personal collisions, retired/defa
     assert.deepEqual(restored.templates,changed.templates);
     assert.deepEqual(restored.catalog,next);
     assert.deepEqual(restored.overrideBases,changed.overrideBases);
+    assert.equal(resolveTemplateReference(personal.id,restored.referenceMap),changed.idMap[personal.id],'An old session reference must still resolve if shutdown interrupted session saving');
     const newest=structuredClone(next);newest.templates[0].name='官方第三版';
     const third=rebaseTemplateLibrary(restored.templates,next,newest,restored.overrideBases);
     assert.equal(third.overrideBases[modified.id].name,original.templates[0].name);

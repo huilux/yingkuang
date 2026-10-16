@@ -55,7 +55,7 @@ import {
   nextLayer,
   photoOrientation,
 } from "./editor-model";
-import { maxTemplateNameLength, templateNameError, copyTemplateName, defaultTemplateKey, documentFromTemplate, importTemplates, readDefaultTemplateId, readTemplateLibrary, rebaseTemplateLibrary, serializeUserTemplates, templatesKey, type ImportDecision } from "./template-library";
+import { maxTemplateNameLength, templateNameError, copyTemplateName, defaultTemplateKey, documentFromTemplate, importTemplates, readDefaultTemplateId, readTemplateLibrary, rebaseTemplateLibrary, resolveTemplateReference, serializeUserTemplates, templatesKey, type ImportDecision } from "./template-library";
 import { buildExportPlan, createExportRequest, retryExportRequest, formatElapsed, type ExportIssue, type ExportRequest } from "./export-workflow";
 import type {
   EditorDocument,
@@ -184,11 +184,7 @@ function App() {
   const [defaultTemplateId, setDefaultTemplateId] = useState(() => readDefaultTemplateId(initialLibrary.templates,initialLibrary.catalog,initialLibrary.referenceMap));
   const templateReferences=useRef(initialLibrary.referenceMap);
   const templatesRef=useRef(templates);templatesRef.current=templates;
-  const mappedTemplateId=(id:string)=>{
-    const seen=new Set<string>();
-    while(templateReferences.current[id] && !seen.has(id)){seen.add(id);id=templateReferences.current[id];}
-    return id;
-  };
+  const mappedTemplateId=(id:string)=>resolveTemplateReference(id,templateReferences.current);
   const [templateByPhoto, setTemplateByPhoto] = useState<Record<string, string>>(isNative ? {} : { [demoPhoto.id]: builtInDefaultTemplateId() });
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
   const editorRef = useRef<EditorCanvasHandle>(null);
@@ -227,13 +223,14 @@ function App() {
   function applyOfficialCatalog(catalog:BuiltInTemplateCatalog) {
     if(templateWriteBlocked.current)throw new Error("本机模板库尚未恢复，已保留原记录");
     const result=rebaseTemplateLibrary(templates,officialCatalog,catalog,overrideBases);
-    const nextDefault=result.idMap[defaultTemplateId]??defaultTemplateId;
+    const references={...templateReferences.current,...result.idMap};
+    const nextDefault=resolveTemplateReference(defaultTemplateId,references);
     // Persist the baseline and edits as one snapshot before changing the UI.
-    localStorage.setItem(templatesKey,serializeUserTemplates(result.templates,catalog,result.overrideBases,nextDefault));
+    localStorage.setItem(templatesKey,serializeUserTemplates(result.templates,catalog,result.overrideBases,nextDefault,references));
+    templateReferences.current=references;
     setTemplates(result.templates);setOfficialCatalog(catalog);setOverrideBases(result.overrideBases);
     if(nextDefault!==defaultTemplateId)setDefaultTemplateId(nextDefault);
     if(Object.keys(result.idMap).length) {
-      templateReferences.current={...templateReferences.current,...result.idMap};
       if(restoredSession.current.templateIdsByPath) restoredSession.current.templateIdsByPath=Object.fromEntries(Object.entries(restoredSession.current.templateIdsByPath).map(([path,id])=>[path,mappedTemplateId(id)]));
       setTemplateByPhoto(current=>Object.fromEntries(Object.entries(current).map(([id,template])=>[id,result.idMap[template]??template])));
       for(const entry of [...undoStack.current,...redoStack.current]) for(const [id,template] of Object.entries(entry.templates)) if(template && result.idMap[template])entry.templates[id]=result.idMap[template];
@@ -265,7 +262,7 @@ function App() {
 
   useEffect(() => {
     if (templateWriteBlocked.current) { storageError("templates", initialLibrary.issue); return; }
-    try { localStorage.setItem(templatesKey, serializeUserTemplates(templates,officialCatalog,overrideBases,defaultTemplateId)); storageError("templates", ""); }
+    try { localStorage.setItem(templatesKey, serializeUserTemplates(templates,officialCatalog,overrideBases,defaultTemplateId,templateReferences.current)); storageError("templates", ""); }
     catch (error) { storageError("templates", `模板库暂未保存，请先导出备份：${String(error)}`); }
   }, [templates,officialCatalog,overrideBases,defaultTemplateId]);
 
@@ -406,7 +403,7 @@ function App() {
     try {
       const key = scope === "session" ? sessionKey : templatesKey;
       const keys = scope === "session" ? [key] : [key, "yingkuang-templates-v2", "yingkuang-templates-v1"];
-      const currentContent = scope === "session" ? JSON.stringify(captureSession()) : serializeUserTemplates(templates,officialCatalog,overrideBases,defaultTemplateId);
+      const currentContent = scope === "session" ? JSON.stringify(captureSession()) : serializeUserTemplates(templates,officialCatalog,overrideBases,defaultTemplateId,templateReferences.current);
       if (scope === "session") parseSession(currentContent);
       setPendingStorageRecovery({ scope, key, label: scope === "session" ? "工作记录" : "模板库",
         description: scope === "session" ? `当前批次有 ${photos.length} 张可用照片和 ${missingPhotos.length} 条缺失记录。` : `当前可读取 ${templates.length} 个模板。`,
