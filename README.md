@@ -17,27 +17,27 @@
 
 ## 平台与安装
 
-当前测试版为 [0.5.8-beta.7](https://github.com/huilux/yingkuang/releases/tag/v0.5.8-beta.7)。普通用户只需下载对应系统的安装包。
+当前测试版为 [0.5.9-beta.1](https://github.com/huilux/yingkuang/releases/tag/v0.5.9-beta.1)。普通用户只需下载对应系统的安装包。
 
-在线模板更新、五个基础模板及横竖布局/等间距修复从开发版本 0.5.9-beta.1 开始提供，尚未包含在下列 0.5.8-beta.7 安装包中。
+本版包含五个基础模板、在线模板更新，以及横竖布局和等间距修复。官方模板可在「模板库」中手动检查更新，也可从[模板站点](https://huilux.github.io/yingkuang/)下载离线模板包。
 
 | 系统 | 下载 |
 | --- | --- |
-| Windows x64 | [EXE 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.7/yingkuang_0.5.8-beta.7_windows-x64.exe) |
-| Debian/Ubuntu x64 | [DEB 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.7/yingkuang_0.5.8-beta.7_linux-x64.deb) |
-| Linux x64（AppImage） | [AppImage](https://github.com/huilux/yingkuang/releases/download/v0.5.8-beta.7/yingkuang_0.5.8-beta.7_linux-x64.AppImage) |
+| Windows x64 | [EXE 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.9-beta.1/yingkuang_0.5.9-beta.1_windows-x64.exe) |
+| Debian/Ubuntu x64 | [DEB 安装包](https://github.com/huilux/yingkuang/releases/download/v0.5.9-beta.1/yingkuang_0.5.9-beta.1_linux-x64.deb) |
+| Linux x64（AppImage） | [AppImage](https://github.com/huilux/yingkuang/releases/download/v0.5.9-beta.1/yingkuang_0.5.9-beta.1_linux-x64.AppImage) |
 
 校验文件和技术材料在同一发布页；许可证已随安装包保留。GitHub 的 `Source code` 是项目源码，不是安装包。
 
-Windows 测试包暂未可信签名，缺少 WebView2 时需要联网安装运行时。DEB 已在 Ubuntu 22.04 验证安装与卸载；AppImage 已在 Ubuntu 22.04 与本机 Arch Linux 验证启动和部分真实图片处理，使用 X11/XWayland。其他系统配置、完整编辑交互和升级仍需实机测试。macOS 暂缓交付。
+Windows 测试包暂未可信签名，缺少 WebView2 时需要联网安装运行时。DEB 与 AppImage 在 Ubuntu 22.04 CI 验证，Windows 安装与主题交互在 Windows Server 2022 CI 验证。AppImage 使用 X11/XWayland。其他系统配置、完整编辑交互和升级仍需实机测试；macOS 暂缓交付。
 
 AppImage 依赖系统 OpenGL/EGL/GLES 与 Wayland 客户端运行库。精简 Debian/Ubuntu 环境缺库时安装 `libgl1 libegl1 libgles2 libwayland-client0`。
 
 AppImage 下载后赋予执行权限并运行：
 
 ```sh
-chmod +x yingkuang_0.5.8-beta.7_linux-x64.AppImage
-./yingkuang_0.5.8-beta.7_linux-x64.AppImage
+chmod +x yingkuang_0.5.9-beta.1_linux-x64.AppImage
+./yingkuang_0.5.9-beta.1_linux-x64.AppImage
 ```
 
 系统不能挂载 AppImage 时，可添加 `--appimage-extract-and-run` 运行；此方式已在 CI 验证。

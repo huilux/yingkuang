@@ -49,12 +49,13 @@ with zipfile.ZipFile(inputs / names[1]) as bundle:
 report = json.loads((materials / 'payload/inventory.json').read_text())
 assert report['projectCommit'] == commit and report['appImageSha256'] == digest(inputs / names[0])
 assert not report['unresolvedFiles'] and not report['missingCopyright'] and not report['remainingReview']
-assert json.loads((materials / 'native-checks.json').read_text())['nativePhotoProcessing'] == 'passed'
 tools = materials / 'verification-tools'; tools.mkdir()
-for name in ['stage.py', 'renderer.py', 'recover.py']:
+for name in ['stage.py', 'renderer.py', 'recover.py', 'native-check.py']:
     shutil.copy2(root / 'scripts/appimage' / name, tools / name)
 env = dict(os.environ, YINGKUANG_BINARY_COMMIT=commit)
 package = inputs / names[0]; package.chmod(0o755)
+run('xvfb-run', '-a', '-s', '-screen 0 1920x1080x24', sys.executable, str(root / 'scripts/appimage/native-check.py'), str(package), str(materials / 'native-checks.json'), env=env)
+assert json.loads((materials / 'native-checks.json').read_text())['nativePhotoProcessing'] == 'passed'
 run('xvfb-run', '-a', '-s', '-screen 0 1920x1080x24', sys.executable, str(root / 'scripts/appimage/stage.py'), str(package), str(materials), env=env)
 run('node', 'scripts/beta-release.mjs', 'upload-appimage', tag, commit, cwd=root)
 run('node', 'scripts/beta-release.mjs', 'validate', tag, commit, cwd=root)
