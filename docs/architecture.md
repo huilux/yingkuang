@@ -14,12 +14,15 @@
 | `src/CropEditor.tsx`、`src/photo-crop.ts`、`src/photo-transform.ts` | 裁切交互、旋转与像素几何 |
 | `src/use-editor-photo.ts`、`src/use-preview-backdrop.ts` | 高清编辑图和相框预览缓存 |
 | `src/template-library.ts`、`src/builtin-template-catalog.ts` | 模板校验、备份冲突和内置模板合并 |
+| `src/official-templates.ts`、`src/use-template-updates.ts` | 官方模板协议、版本状态、手动更新和离线导入 |
+| `src/document-layout.ts`、`src/browser-layout.ts`、`src/template-layout.ts` | 等间距规则、字体测量和保留局部修改的横竖布局切换 |
 | `src/session-storage.ts` | 会话校验、迁移和恢复 |
 | `src/font-library.ts`、`src/font-catalog.json` | 字体加载、导入与旧字体映射 |
 | `src/export-workflow.ts` | 导出设置、任务快照、进度及重试范围 |
 | `src-tauri/src/lib.rs` | Tauri 命令、原图检查、EXIF、预览和路径解析 |
 | `src-tauri/src/export.rs` | 导出预检、图像变换、渲染、编码和队列 |
 | `src-tauri/src/fonts.rs` | 内置与导入字体的解析、存储和查找 |
+| `src-tauri/src/templates.rs` | 固定 HTTPS 模板源、签名及哈希验证、原子缓存和回退 |
 
 ## 状态与交互
 
@@ -28,6 +31,14 @@
 React 保存已提交状态，Konva 节点保存拖动中的临时位置。松手提交一次文档变更和撤销步骤；取消拖动不写入结果。多选对齐使用文字实际包围框，批量修改作为一个撤销步骤处理。
 
 会话恢复依赖原图路径；文件丢失时保留排版并允许重定位。模板和会话在载入时校验，损坏数据先保留备份，避免自动保存覆盖。模板备份不嵌入自定义字体文件。
+
+模板库 v3 在单个本机快照中保存官方基准、个人修改、修改时的原版及默认模板，兼容读取 v1/v2，保留旧存储键。官方更新通过 ID 合并，修改过的模板整体保留，撤下的模板归为本地模板，个人 ID 冲突通过映射保留引用。模板更新不修改照片文档。
+
+引用迁移记录带独立版本，只应用到旧会话；新的默认选择和照片模板引用按当前版本保存，避免旧映射把用户后来主动选择的官方模板改为个人副本。
+
+等间距规则记录方向及图层 ID，按照片几何和实际文字宽度计算位置；字体加载后重新测量，未变化的照片文档复用弱引用缓存。导出冻结快照后等待所需字体加载，再生成坐标供 Rust 渲染；重试沿用首次冻结结果。手动坐标操作解除相交方向的规则。横竖切换把相对于原布局的局部修改带入目标布局，并与裁切共用一个撤销步骤。
+
+官方模板通过 GitHub Pages 单独发布。应用启动只验证本机缓存；联网只发生在用户检查和下载时。Rust 验证 Ed25519 索引、SHA-256、最低应用版本、固定路径、2 MiB 配置上限、离线字体及文档字段，然后原子替换当前缓存并保留上一版。前端再次验证文档结构。来源和公钥随软件固定，生产 CSP 不增加外部连接权限。
 
 ## 预览与导出
 

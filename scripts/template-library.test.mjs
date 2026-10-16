@@ -104,7 +104,7 @@ test('backup round trip preserves layouts and selected default', () => {
   const backup = parseTemplateBackup(serializeTemplateBackup([...builtIns, custom], custom.id));
   assert.equal(backup.defaultTemplateId, custom.id);
   assert.deepEqual(backup.templates.at(-1)?.layouts, custom.layouts);
-  assert.equal(backup.templates.length, 4);
+  assert.equal(backup.templates.length, builtIns.length + 1);
 });
 
 test('malformed backup and unsupported watermark source are rejected', () => {
@@ -132,14 +132,14 @@ test('each conflict can be overwritten, copied, or skipped independently', () =>
     { template: skipped, conflictId: builtIns[1].id, choice: 'skip' },
   ]);
   assert.equal(result.imported, 2);
-  assert.equal(result.templates.length, 5);
+  assert.equal(result.templates.length, builtIns.length + 2);
   assert.equal(result.templates[0].description, '备份里的新描述');
   assert.equal(result.templates[0].builtIn, true);
   assert.equal(result.templates[1].description, builtIns[1].description);
   assert.equal(result.idMap[skipped.id], skipped.id);
-  assert.equal(result.idMap[sameName.id], result.templates[4].id);
-  assert.notEqual(result.templates[4].id, custom.id);
-  assert.equal(result.templates[4].name, '我的相框 副本');
+  assert.equal(result.idMap[sameName.id], result.templates.at(-1).id);
+  assert.notEqual(result.templates.at(-1).id, custom.id);
+  assert.equal(result.templates.at(-1).name, '我的相框 副本');
 });
 
 test('new photo receives a separate copy of the matching orientation layout', () => {

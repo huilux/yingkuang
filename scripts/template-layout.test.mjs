@@ -1,0 +1,54 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {builtInTemplates,calculateGeometry,layerPosition} from '../src/editor-model.ts';
+import {resolveDocumentLayout,releaseDistributionRules} from '../src/document-layout.ts';
+import {reorientTemplateDocument} from '../src/template-layout.ts';
+import {isValidEditorDocument} from '../src/builtin-template-catalog.ts';
+
+const template=structuredClone(builtInTemplates().find(t=>t.id==='wide-float'));
+const before={id:'a',width:600,height:400,metadata:{},fileName:'a.jpg'};
+const after={...before,crop:{x:0,y:0,width:1,height:1,rotation:90}};
+test('a move on one axis preserves the other axis rule; zero-delta coordinate patches preserve both',()=>{
+  const doc=structuredClone(template.layouts.landscape);
+  const ids=doc.layers.slice(0,3).map(layer=>layer.id);
+  doc.distributions=[{axis:'x',layerIds:ids},{axis:'y',layerIds:ids}];
+  const layer=doc.layers[0];
+  releaseDistributionRules(doc,[{id:layer.id,patch:{x:layer.x,y:layer.y}}]);
+  assert.equal(doc.distributions.length,2);
+  releaseDistributionRules(doc,[{id:layer.id,patch:{x:layer.x+.1,y:layer.y}}]);
+  assert.deepEqual(doc.distributions.map(rule=>rule.axis),['y']);
+});
+test('orientation switches template layout, retaining local styles, added/deleted layers and undo input',()=>{
+  template.layouts.portrait.frame.color='#123456';
+  const current=structuredClone(template.layouts.landscape);
+  current.layers[0].fontSize+=3;
+  const deleted=current.layers.splice(1,1)[0].id;
+  current.layers.push({...current.layers[0],id:'added'});
+  const untouched=structuredClone(current);
+  const result=reorientTemplateDocument(template,before,after,current);
+  assert.equal(result.frame.color,'#123456');
+  assert.equal(result.layers[0].fontSize,current.layers[0].fontSize);
+  assert.ok(!result.layers.some(l=>l.id===deleted));
+  assert.ok(result.layers.some(l=>l.id==='added'));
+  assert.deepEqual(current,untouched);
+  assert.equal(reorientTemplateDocument(template,before,before,current),current);
+});
+for(const axis of ['x','y']) test(`saved ${axis} distribution recomputes actual edge gaps and is idempotent on other photos`,()=>{
+  const doc=structuredClone(template.layouts.landscape);
+  doc.layers=doc.layers.slice(0,3).map((l,i)=>({...l,id:String(i),visible:true,region:'canvas',source:'custom',customValue:'x'.repeat(i+1),x:.2+i*.3,y:.2+i*.3}));
+  doc.distributions=[{axis,layerIds:['0','1','2']}];
+  const measure=(l,text)=>({width:text.length*20,height:l.fontSize});
+  const resolved=resolveDocumentLayout(doc,{...before,width:1600,height:900},measure);
+  const again=resolveDocumentLayout(resolved,{...before,width:1600,height:900},measure);
+  resolved.layers.forEach((l,i)=>assert.ok(Math.abs(l[axis]-again.layers[i][axis])<1e-10));
+  assert.equal(isValidEditorDocument(resolved),true);
+  const geometry=calculateGeometry({...before,width:1600,height:900},resolved);
+  const positions=resolved.layers.map(l=>layerPosition(l,geometry)[axis]);
+  const sizes=resolved.layers.map(l=>axis==='x'?measure(l,l.customValue).width:measure(l,l.customValue).height);
+  const gaps=[positions[1]-positions[0]-(sizes[0]+sizes[1])/2,positions[2]-positions[1]-(sizes[1]+sizes[2])/2];
+  assert.ok(Math.abs(gaps[0]-gaps[1])<1e-8);
+  releaseDistributionRules(resolved,[{id:'1',patch:{[axis]:.4}}]);
+  assert.equal(resolved.distributions,undefined);
+  const invalid=structuredClone(doc);invalid.distributions[0].layerIds[2]='missing';
+  assert.equal(isValidEditorDocument(invalid),false);
+});

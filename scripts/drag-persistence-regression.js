@@ -27,12 +27,12 @@
     const initial = node.position();
     const origin = t.screen(ctx, node);
     t.mouse(ctx.content, 'mousedown', origin); t.mouse(window, 'mouseup', origin, 0); await t.frame();
-    for (const name of ['相机型号', '焦距']) {
+    for (const name of ['光圈', '快门']) {
       const button = host.querySelector(`button[aria-label="选择图层 ${name}"]`);
       if (button.getAttribute('aria-pressed') !== 'true') button.dispatchEvent(new MouseEvent('click', { bubbles:true, shiftKey:true }));
       await t.frame();
     }
-    const originals = ctx.world.find('.watermark-layer').filter(node => ['brand','camera','focal'].includes(node.id())).map(node => ({id:node.id(),x:node.x()}));
+    const originals = ctx.world.find('.watermark-layer').filter(node => ['aperture','shutter','focal'].includes(node.id())).map(node => ({id:node.id(),x:node.x()}));
     Storage.prototype.setItem = function(name, value) {
       if (name === key) writes++;
       return originalWrite.call(this, name, value);

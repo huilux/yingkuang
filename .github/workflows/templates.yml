@@ -1,0 +1,81 @@
+name: Official template feed
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'template-feed/**'
+      - 'scripts/template-feed.mjs'
+      - 'src/official-templates.ts'
+      - 'src/builtin-template-catalog.ts'
+      - 'src/data/template-update.json'
+      - '.github/workflows/templates.yml'
+  pull_request:
+    paths:
+      - 'template-feed/**'
+      - 'scripts/template-feed.mjs'
+      - 'src/official-templates.ts'
+      - 'src/builtin-template-catalog.ts'
+      - 'src/data/template-update.json'
+      - '.github/workflows/templates.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: official-template-pages
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Verify current and historical template signatures
+        run: node scripts/template-feed.mjs check
+      - name: Reject changes to previously published versions
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          TEMPLATE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        shell: bash
+        run: |
+          if [ -n "$TEMPLATE_BASE" ] && git cat-file -e "$TEMPLATE_BASE^{commit}" 2>/dev/null; then
+            if git diff --name-status "$TEMPLATE_BASE" HEAD -- template-feed/releases/ | awk '$1 != "A" { found=1 } END { exit !found }'; then
+              echo "Published template versions are immutable. Add a new version directory."
+              exit 1
+            fi
+          fi
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - uses: actions/configure-pages@v5
+      - name: Build and sign the template-only site
+        run: node scripts/template-feed.mjs build --output test-output/template-site
+        env:
+          TEMPLATE_SIGNING_PRIVATE_KEY: ${{ secrets.TEMPLATE_SIGNING_PRIVATE_KEY }}
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: test-output/template-site
+      - name: Deploy official templates
+        id: deployment
+        uses: actions/deploy-pages@v4

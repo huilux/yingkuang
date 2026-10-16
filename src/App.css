@@ -575,6 +575,24 @@ input[type="checkbox"]:disabled { opacity: .45; cursor: not-allowed; }
 .template-manager-toolbar-actions { display: flex; gap: 7px; flex: 0 0 auto; }
 .template-manager-body { min-height: 0; overflow-y: auto; padding: 16px 22px 20px; scrollbar-color: var(--line-strong) transparent; }
 .template-manager-list, .template-import-list { display: grid; gap: 8px; }
+.template-update-panel { flex: 0 0 auto; padding: 13px 22px; border-bottom: 1px solid var(--line); background: var(--bg-raised); font-size: 11px; }
+.template-update-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.template-update-heading > div { display: grid; gap: 5px; }
+.template-update-panel small { color: var(--text-tertiary); line-height: 1.6; }
+.template-update-panel p { margin: 7px 0 0; line-height: 1.6; white-space: pre-wrap; }
+.template-update-actions { display: flex; gap: 16px; margin-top: 9px; }
+.template-update-actions button { padding: 0; border: 0; background: transparent; color: var(--accent); font-size: 11px; cursor: pointer; }
+.template-update-actions button:disabled { color: var(--text-tertiary); }
+.template-update-candidate { display: grid; grid-template-columns: 1fr auto; gap: 5px 18px; margin-top: 12px; padding: 12px; border: 1px solid var(--line-strong); border-radius: 8px; }
+.template-update-candidate > strong, .template-update-candidate > p, .template-update-candidate > small { grid-column: 1; }
+.template-update-candidate > button { grid-column: 2; grid-row: 1 / 4; align-self: center; }
+.template-update-error { color: var(--danger); }
+.template-library-filters { display: flex; gap: 5px; margin-bottom: 12px; }
+.template-library-filters button { padding: 7px 12px; border: 1px solid transparent; background: transparent; color: var(--text-secondary); border-radius: 6px; font-size: 11px; cursor: pointer; }
+.template-library-filters button[aria-pressed="true"] { border-color: var(--line-strong); background: var(--bg-raised); color: var(--accent); }
+.template-upstream { margin-top: 6px; font-size: 10px; color: var(--text-secondary); }
+.template-upstream summary { cursor: pointer; line-height: 1.6; }
+.template-upstream .template-preview { width: 100%; height: 110px; margin-top: 8px; }
 .template-manager-row { display: grid; grid-template-columns: 236px minmax(0, 1fr) auto; align-items: center; gap: 16px; min-height: 154px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-raised); }
 .template-manager-row .template-preview { width: 236px; height: 132px; border-radius: 6px; }
 .template-manager-copy { display: grid; gap: 6px; min-width: 0; }

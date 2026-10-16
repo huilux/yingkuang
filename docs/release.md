@@ -60,8 +60,32 @@ Windows 测试包暂未做可信代码签名；缺少 WebView2 时安装程序�
 
 ## 发布内置模板
 
-内置模板源为 `src/data/builtin-templates.json`，包含横竖布局与默认模板 ID，构建时打包。
+官方模板静态文件存放在 `template-feed/`，通过独立的 `Official template feed` 工作流发布到 GitHub Pages。更新不创建软件 Release，也不重新构建安装包。公开索引为 `https://huilux.github.io/yingkuang/index.json`，离线模板包从站点首页下载。
 
-在应用中调整模板并「更新原模板」，然后在模板库「导出内置文件」，替换上述 JSON，再运行 `npm run test:templates` 和 `npm run build`。该导出使用项目演示图封面，不包含本机照片缩略图。
+维护者在应用中调整模板后，可以导出内置文件；发布全部模板（包括新增自定义模板）时使用完整备份作为发布工具的输入。不要直接将完整备份提交到仓库，它可能包含私人照片封面。发布工具只保留已知排版字段、将封面替换为项目演示图，并映射旧字体名称。发布前检查模板名称、描述和固定文字是否适合公开。
 
-不要用「导出完整备份」替换发布源：完整备份还包含个人模板与本机封面。应用内修改仅保存在本机；升级保留个人修改，用户可选择重置内置模板。
+示例：发布第二个模板版本，版本号必须唯一，revision 必须递增：
+
+```sh
+node scripts/template-feed.mjs prepare \
+  --source /path/to/template-backup.json \
+  --version 2026.10.2 --revision 2 \
+  --notes "说明新增或修改的模板" \
+  --min-app-version 0.5.9-beta.1 \
+  --key /private/path/to/official-ed25519.pem
+npm run templates:check
+```
+
+提交新增的版本目录、`index.json` 和 `index.sig`，合入 main 后自动部署。工作流验证全部版本的签名和内容，禁止修改或删除已有版本目录；构建站点时使用仓库 Secret `TEMPLATE_SIGNING_PRIVATE_KEY` 签名。私钥不进入仓库、安装包或公开站点，公钥保存在 `src/data/template-update.json`。维护者需自行安全备份私钥；更换公钥需要发布支持新公钥的软件。
+
+每个版本包括原始模板配置 `templates.json` 和包含签名索引的离线包 `official-templates.json`。索引包含格式版本、内容版本、单调 revision、最低应用版本、模板数量、字体、大小及 SHA-256。普通模板包只使用软件自带字体，引用项目演示图，不包含照片、外部图像地址、脚本或字体下载。
+
+准备下一次软件发行时，可同步安装包中的离线基础版本：
+
+```sh
+node scripts/template-feed.mjs sync-bundled --version 2026.10.2
+npm test
+npm run build
+```
+
+该命令同步 `src/data/builtin-templates.json`、签名离线包和基础版本配置。应用内修改只保存在用户本机；官方更新、离线导入及回退均保留个人模板和修改。软件渲染能力变化时提高最低应用版本。

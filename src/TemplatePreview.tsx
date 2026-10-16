@@ -4,6 +4,7 @@ import { calculateGeometry, layerPosition, photoOrientation, resolveLayerText } 
 import { isVisible } from "./canvas-camera";
 import { rasterize } from "./use-preview-backdrop";
 import type { PhotoAsset, TemplateRecord } from "./types";
+import { resolveBrowserLayout } from "./browser-layout";
 
 const sampleMetadata = {
   make: "CAMERA", model: "X", camera: "CAMERA X", lens: "50mm F1.8", focalLength: "50mm", aperture: "f/2.8",
@@ -23,8 +24,10 @@ async function previewImage(template: TemplateRecord, activePhoto: PhotoAsset | 
     id: "template-preview", path: "", fileName: "预览照片", width, height,
     megapixels: width * height / 1_000_000, thumbnailDataUrl: source, metadata: sampleMetadata,
   };
-  const document = template.layouts[photoOrientation(photo)] ?? template.layouts.landscape ?? template.layouts.portrait;
-  if (!document) return null;
+  const sourceDocument = template.layouts[photoOrientation(photo)] ?? template.layouts.landscape ?? template.layouts.portrait;
+  if (!sourceDocument) return null;
+  await ensureFontsLoaded(sourceDocument.layers.filter(layer => isVisible(layer, sourceDocument.regions)).map(layer => layer.fontFamily));
+  const document = resolveBrowserLayout(sourceDocument, photo);
   const geometry = calculateGeometry(photo, document);
   const canvas = await rasterize(source, document.frame, geometry, signal, true, 560, photo);
   if (!canvas || signal.aborted) return null;

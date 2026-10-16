@@ -1,6 +1,6 @@
 [package]
 name = "yingkuang"
-version = "0.5.8-beta.7"
+version = "0.5.9-beta.1"
 description = "Local photography watermark and frame editor"
 authors = ["Ming"]
 license = "MIT"
@@ -34,6 +34,10 @@ lcms2 = "6.1.1"
 tempfile = "3.27.0"
 sha2 = "0.10.9"
 ttf-parser = "0.25.1"
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+ring = "0.17.14"
+semver = "1"
 
 # Standalone Mac packages must not depend on Homebrew libraries on the builder.
 [target.'cfg(target_os = "macos")'.dependencies]

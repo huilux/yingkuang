@@ -4,7 +4,7 @@
  const moduleUrl=name=>performance.getEntriesByType('resource').find(e=>e.name.includes(`/deps/${name}.js?`)).name;
  const {default:React}=await import(moduleUrl('react'));
  const {default:{createRoot}}=await import(moduleUrl('react-dom_client'));
- const keys=['yingkuang-session-v2','yingkuang-templates-v2','yingkuang-templates-v1','yingkuang-default-template-v1'];
+ const keys=['yingkuang-session-v2','yingkuang-templates-v3','yingkuang-templates-v1','yingkuang-default-template-v1'];
  const saved=keys.map(key=>[key,localStorage.getItem(key)]);keys.forEach(key=>localStorage.removeItem(key));
  localStorage.setItem(keys[0],JSON.stringify({paths:['picker.jpg'],activePath:'picker.jpg',checkedPaths:['picker.jpg']}));
  mockIPC(command=>command==='inspect_images_resilient'?{items:[{id:'picker',path:'picker.jpg',fileName:'picker.jpg',width:6000,height:4000,megapixels:24,thumbnailDataUrl:'/demo.jpg',metadata:{camera:'测试相机',artist:'作者名字'.repeat(100),'exif:LONG_FIELD_NAME':'LONG_VALUE'.repeat(100)}}],failures:[]}:command==='load_editor_photo'?'/demo.jpg':undefined,{shouldMockEvents:true});

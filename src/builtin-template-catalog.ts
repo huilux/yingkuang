@@ -10,6 +10,8 @@ export type BuiltInTemplateCatalog = {
   version: typeof catalogVersion;
   defaultTemplateId: string;
   templates: TemplateRecord[];
+  contentVersion?: string;
+  revision?: number;
 };
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -39,6 +41,18 @@ export function isValidEditorDocument(value: unknown): value is EditorDocument {
   }
   if (value.layers.length > 100) return false;
   if (new Set(value.layers.map(layer => record(layer) ? layer.id : undefined)).size !== value.layers.length) return false;
+  if (value.distributions !== undefined) {
+    if (!Array.isArray(value.distributions) || value.distributions.length > 64) return false;
+    const used = new Set<string>();
+    for (const rule of value.distributions) {
+      if (!record(rule) || !["x", "y"].includes(rule.axis as string) || !Array.isArray(rule.layerIds) || rule.layerIds.length < 3 || rule.layerIds.length > 100 || new Set(rule.layerIds).size !== rule.layerIds.length) return false;
+      for (const id of rule.layerIds) {
+        const key = `${rule.axis}:${id}`;
+        if (typeof id !== "string" || !value.layers.some(layer => record(layer) && layer.id === id) || used.has(key)) return false;
+        used.add(key);
+      }
+    }
+  }
   return value.layers.every((layer) => record(layer) && text(layer.id, 100) && !!layer.id.trim() && text(layer.name, 120) &&
     validLayerSource(layer.source) &&
     text(layer.customValue, 2000) &&
@@ -50,7 +64,7 @@ export function isValidEditorDocument(value: unknown): value is EditorDocument {
 }
 
 export function isValidTemplate(value: unknown): value is TemplateRecord {
-  if (!record(value) || !text(value.id, 100) || !/^[a-zA-Z0-9_-]+$/.test(value.id) ||
+  if (!record(value) || !text(value.id, 100) || !/^[a-zA-Z0-9_-]+$/.test(value.id) || ["__proto__","constructor","prototype"].includes(value.id) ||
       !text(value.name, 120) || !value.name.trim() || !text(value.description, 500) ||
       typeof value.builtIn !== "boolean" || !text(value.cover, 2_000_000) ||
       !(/^\/[a-zA-Z0-9/_-]+\.(?:jpg|jpeg|png|webp)$/.test(value.cover) || /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value.cover)) ||
@@ -72,6 +86,8 @@ export function parseBuiltInCatalog(value: unknown): BuiltInTemplateCatalog {
     throw new Error("内置模板文件格式或模板字段不正确");
   }
   const ids = value.templates.map((template: TemplateRecord) => template.id);
+  if ((value.revision !== undefined && (!Number.isSafeInteger(value.revision) || Number(value.revision) < 1)) ||
+    (value.contentVersion !== undefined && (typeof value.contentVersion !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(value.contentVersion)))) throw new Error("官方模板内容版本无效");
   if (new Set(ids).size !== ids.length || !ids.includes(value.defaultTemplateId)) {
     throw new Error("内置模板 ID 重复或默认模板不存在");
   }
@@ -79,26 +95,27 @@ export function parseBuiltInCatalog(value: unknown): BuiltInTemplateCatalog {
 }
 
 const published = parseBuiltInCatalog(catalogSource);
+export const bundledCatalog = (): BuiltInTemplateCatalog => structuredClone(published);
 
-export function builtInTemplates(): TemplateRecord[] {
-  return structuredClone(published.templates);
+export function builtInTemplates(catalog = published): TemplateRecord[] {
+  return structuredClone(catalog.templates);
 }
 
-export function builtInDefaultTemplateId(): string {
-  return published.defaultTemplateId;
+export function builtInDefaultTemplateId(catalog = published): string {
+  return catalog.defaultTemplateId;
 }
 
-export function builtInTemplateChanges(template: TemplateRecord): TemplateChange[] {
-  const original = published.templates.find((item) => item.id === template.id);
+export function builtInTemplateChanges(template: TemplateRecord, catalog = published): TemplateChange[] {
+  const original = catalog.templates.find((item) => item.id === template.id);
   return original ? diffTemplates(original, template) : [];
 }
 
-export function isBuiltInModified(template: TemplateRecord): boolean {
-  return builtInTemplateChanges(template).length > 0;
+export function isBuiltInModified(template: TemplateRecord, catalog = published): boolean {
+  return builtInTemplateChanges(template, catalog).length > 0;
 }
 
-export function serializeBuiltInCatalog(templates: TemplateRecord[], defaultTemplateId: string): string {
-  if (!published.templates.some((item) => item.id === defaultTemplateId)) {
+export function serializeBuiltInCatalog(templates: TemplateRecord[], defaultTemplateId: string, baseline = published): string {
+  if (!baseline.templates.some((item) => item.id === defaultTemplateId)) {
     throw new Error("请先将一个内置模板设为新照片默认，再导出内置模板文件");
   }
   const replacements = new Map(templates.map((template) => [template.id, template]));
@@ -106,7 +123,7 @@ export function serializeBuiltInCatalog(templates: TemplateRecord[], defaultTemp
     format: catalogFormat,
     version: catalogVersion,
     defaultTemplateId,
-    templates: published.templates.map((original) => {
+    templates: baseline.templates.map((original) => {
       const current = replacements.get(original.id) ?? original;
       return { ...structuredClone(current), id: original.id, builtIn: true, cover: original.cover, updatedAt: 0 };
     }),

@@ -569,6 +569,12 @@ fn validate_document(document: &EditorDocument) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) fn validate_template_document(value: &serde_json::Value) -> Result<(), String> {
+    let document: EditorDocument =
+        serde_json::from_value(value.clone()).map_err(|_| "官方模板中的编辑文档无效".to_owned())?;
+    validate_document(&document)
+}
+
 fn validate_export_request(request: &ExportRequest) -> Vec<String> {
     let mut errors = validate_export_settings(&request.settings);
     if request.items.is_empty() {

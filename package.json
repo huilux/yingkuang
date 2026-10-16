@@ -2,7 +2,7 @@
   "name": "yingkuang",
   "private": true,
   "license": "MIT",
-  "version": "0.5.8-beta.7",
+  "version": "0.5.9-beta.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,6 +14,8 @@
     "test:crop": "node --test scripts/photo-crop.test.mjs",
     "test:selection": "node --test scripts/selection-regression.test.mjs",
     "test:templates": "node --test scripts/template-library.test.mjs",
+    "templates:check": "node scripts/template-feed.mjs check",
+    "templates:prepare": "node scripts/template-feed.mjs prepare",
     "tauri": "node scripts/tauri.mjs",
     "version:check": "node scripts/version.mjs",
     "version:set": "node scripts/version.mjs",

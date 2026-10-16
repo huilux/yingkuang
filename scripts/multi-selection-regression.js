@@ -60,10 +60,11 @@
   document.querySelector('button[aria-label="撤销"]').click(); await t.frame();
   // Batch styling is one undo step and leaves each metadata value intact.
   const weight = document.querySelector('select[aria-label="字重"]');
+  const originalWeights = nodes.map(node => node.findOne('Text').fontStyle());
   weight.value = '700'; weight.dispatchEvent(new Event('change', {bubbles:true})); await t.frame();
   nodes.forEach(node => t.assert(node.findOne('Text').fontStyle() === '700', 'Batch weight missed a layer'));
   document.querySelector('button[aria-label="撤销"]').click(); await t.frame();
-  nodes.forEach(node => t.assert(node.findOne('Text').fontStyle() === '500', 'Batch style undo missed a layer'));
+  nodes.forEach((node,index) => t.assert(node.findOne('Text').fontStyle() === originalWeights[index], 'Batch style undo missed a layer'));
   const key = (key, options={}) => ctx.viewport.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,cancelable:true,key,...options}));
   key('ArrowRight', {shiftKey:true}); await t.frame();
   nodes.forEach((node,index)=>t.near(node.x(),original[index].x+10,'Group nudge'));
