@@ -2,3 +2,6 @@
 public/fonts/**/OFL.txt -text -whitespace
 # Keep supplemental upstream license files byte-identical to their source hashes.
 licenses/upstream/** -text -whitespace
+# Signed template payloads must survive Windows checkout byte-for-byte.
+template-feed/** -text
+src/data/bundled-template-package.json -text
