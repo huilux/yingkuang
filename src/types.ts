@@ -92,8 +92,18 @@ export interface EditorDocument {
   regions: Record<Exclude<RegionId, "canvas">, RegionSettings>;
   layers: WatermarkLayer[];
   /** Equal edge gaps are recomputed for each photo's geometry and text. */
-  distributions?: { axis: "x" | "y"; layerIds: string[] }[];
+  distributions?: DistributionRule[];
+  alignments?: AlignmentRule[];
 }
+
+export type DistributionRange = { reference: RegionId | "photo"; ratio: number; anchor: number };
+export type DistributionRule = { axis: "x" | "y"; layerIds: string[]; range?: DistributionRange };
+
+export type AlignmentRule = {
+  action: "left" | "center-x" | "right" | "top" | "center-y" | "bottom" | "third-1" | "third-2";
+  reference: RegionId | "photo" | "selection";
+  layerIds: string[];
+};
 
 export interface TemplateRecord {
   id: string;

@@ -266,23 +266,98 @@ fn validate_catalog(source: &str, expected_count: usize) -> Result<(), String> {
             }
             if let Some(rules) = document.get("distributions") {
                 let rules = rules.as_array().ok_or("模板等间距规则无效")?;
-                if rules.len() > 64 {
+                if rules.len() > 100 {
                     return Err("模板等间距规则过多".into());
                 }
                 let mut used = HashSet::new();
                 for rule in rules {
+                    if let Some(range) = rule.get("range") {
+                        let reference = range["reference"].as_str().unwrap_or("");
+                        let ratio = range["ratio"].as_f64().unwrap_or(f64::NAN);
+                        let anchor = range["anchor"].as_f64().unwrap_or(f64::NAN);
+                        if !range.is_object()
+                            || !matches!(
+                                reference,
+                                "canvas" | "photo" | "top" | "bottom" | "left" | "right"
+                            )
+                            || !ratio.is_finite()
+                            || ratio <= 0.0
+                            || ratio > 1.0
+                            || !(anchor as f32).is_finite()
+                        {
+                            return Err("模板分布范围无效".into());
+                        }
+                    }
                     let axis = rule["axis"]
                         .as_str()
                         .filter(|v| matches!(*v, "x" | "y"))
                         .ok_or("模板等间距方向无效")?;
                     let ids = rule["layerIds"]
                         .as_array()
-                        .filter(|v| (3..=100).contains(&v.len()))
+                        .filter(|v| {
+                            ((if rule.get("range").is_some() { 2 } else { 3 })..=100)
+                                .contains(&v.len())
+                        })
                         .ok_or("模板等间距图层无效")?;
                     for id in ids {
                         let id = id.as_str().ok_or("模板等间距图层无效")?;
                         if !layer_ids.contains(id) || !used.insert((axis, id)) {
                             return Err("模板等间距图层重复或不存在".into());
+                        }
+                    }
+                }
+            }
+            if let Some(rules) = document.get("alignments") {
+                let rules = rules.as_array().ok_or("模板对齐规则无效")?;
+                if rules.len() > 200 {
+                    return Err("模板对齐规则过多".into());
+                }
+                let mut used = HashSet::new();
+                for rule in rules {
+                    let action = rule["action"]
+                        .as_str()
+                        .filter(|v| {
+                            matches!(
+                                *v,
+                                "left"
+                                    | "center-x"
+                                    | "right"
+                                    | "top"
+                                    | "center-y"
+                                    | "bottom"
+                                    | "third-1"
+                                    | "third-2"
+                            )
+                        })
+                        .ok_or("模板对齐方式无效")?;
+                    let reference = rule["reference"]
+                        .as_str()
+                        .filter(|v| {
+                            matches!(
+                                *v,
+                                "canvas"
+                                    | "photo"
+                                    | "selection"
+                                    | "top"
+                                    | "bottom"
+                                    | "left"
+                                    | "right"
+                            )
+                        })
+                        .ok_or("模板对齐参照无效")?;
+                    let axis = match action {
+                        "third-1" | "third-2" if matches!(reference, "left" | "right") => "x",
+                        "left" | "center-x" | "right" => "x",
+                        _ => "y",
+                    };
+                    let ids = rule["layerIds"]
+                        .as_array()
+                        .filter(|v| (1..=100).contains(&v.len()))
+                        .ok_or("模板对齐图层无效")?;
+                    for id in ids {
+                        let id = id.as_str().ok_or("模板对齐图层无效")?;
+                        if !layer_ids.contains(id) || !used.insert((axis, id)) {
+                            return Err("模板对齐图层重复或不存在".into());
                         }
                     }
                 }
@@ -623,7 +698,7 @@ mod tests {
         changed.catalog.push(' ');
         assert!(install(temp.path(), changed).is_err());
         let mut changed = pack;
-        changed.index = changed.index.replace("2026.10.1", "2026.10.2");
+        changed.index.push(' ');
         assert!(install(temp.path(), changed).is_err());
         assert_eq!(
             fs::read(temp.path().join("current.json")).unwrap(),
@@ -647,6 +722,77 @@ mod tests {
             fs::read(temp.path().join("current.json")).unwrap(),
             b"broken"
         );
+    }
+    #[test]
+    fn distribution_ranges_validate_ratios_references_and_two_members() {
+        let pack = published();
+        let mut catalog: Value = serde_json::from_str(&pack.catalog).unwrap();
+        let document = &mut catalog["templates"][0]["layouts"]["landscape"];
+        let members: Vec<Value> = document["layers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .take(2)
+            .map(|layer| layer["id"].clone())
+            .collect();
+        let range = serde_json::json!({"reference":"canvas","ratio":0.6,"anchor":0.5});
+        document["distributions"] =
+            serde_json::json!([{"axis":"x","layerIds":members,"range":range}]);
+        assert!(validate_catalog(&catalog.to_string(), 5).is_ok());
+        for invalid_range in [
+            Value::Null,
+            serde_json::json!({}),
+            serde_json::json!({"reference":"selection","ratio":0.6,"anchor":0.5}),
+            serde_json::json!({"reference":"canvas","ratio":0.0,"anchor":0.5}),
+            serde_json::json!({"reference":"canvas","ratio":1.1,"anchor":0.5}),
+            serde_json::json!({"reference":"canvas","ratio":0.6,"anchor":1e40}),
+        ] {
+            let mut invalid = catalog.clone();
+            invalid["templates"][0]["layouts"]["landscape"]["distributions"][0]["range"] =
+                invalid_range;
+            assert!(validate_catalog(&invalid.to_string(), 5).is_err());
+        }
+        catalog["templates"][0]["layouts"]["landscape"]["distributions"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("range");
+        assert!(validate_catalog(&catalog.to_string(), 5).is_err());
+    }
+    #[test]
+    fn alignment_rules_validate_references_axes_and_members() {
+        let pack = published();
+        let mut catalog: Value = serde_json::from_str(&pack.catalog).unwrap();
+        let document = &mut catalog["templates"][0]["layouts"]["landscape"];
+        let members: Vec<Value> = document["layers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .take(3)
+            .map(|layer| layer["id"].clone())
+            .collect();
+        let rule = serde_json::json!({"action":"center-x","reference":"bottom","layerIds":members});
+        document["alignments"] = serde_json::json!([rule.clone()]);
+        assert!(validate_catalog(&catalog.to_string(), 5).is_ok());
+        for (field, value) in [
+            ("action", serde_json::json!("execute")),
+            ("reference", serde_json::json!("missing")),
+            ("layerIds", serde_json::json!([])),
+            ("layerIds", serde_json::json!(["missing"])),
+            ("layerIds", serde_json::json!([members[0], members[0]])),
+        ] {
+            let mut invalid = catalog.clone();
+            invalid["templates"][0]["layouts"]["landscape"]["alignments"][0][field] = value;
+            assert!(validate_catalog(&invalid.to_string(), 5).is_err());
+        }
+        let mut second = rule.clone();
+        second["action"] = serde_json::json!("third-1");
+        second["reference"] = serde_json::json!("left");
+        catalog["templates"][0]["layouts"]["landscape"]["alignments"] =
+            serde_json::json!([rule, second]);
+        assert!(validate_catalog(&catalog.to_string(), 5).is_err());
+        catalog["templates"][0]["layouts"]["landscape"]["alignments"][1]["reference"] =
+            serde_json::json!("bottom");
+        assert!(validate_catalog(&catalog.to_string(), 5).is_ok());
     }
     #[test]
     fn malformed_rules_external_covers_and_missing_fonts_are_rejected() {

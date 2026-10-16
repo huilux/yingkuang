@@ -25,7 +25,7 @@ export interface EditorCanvasProps {
   onZoomChange: (zoom: number) => void;
   onSelectionChange: (ids: string[]) => void;
   onLayersCommit: (patches: LayerPatch[]) => void;
-  onArrangeCommit?: (patches: LayerPatch[], action: ArrangeAction) => void;
+  onArrangeCommit?: (patches: LayerPatch[], action: ArrangeAction, reference: AlignReference) => void;
 }
 
 // React owns document changes. Konva owns transient camera/drag positions.
@@ -114,7 +114,7 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
     if (drag.current || pan.current) return;
     const patches = arrangeSelection(action, reference, measureSelection(), design.layers, geometry, design.regions);
     if (patches.length) {
-      if (onArrangeCommit) onArrangeCommit(patches, action); else onLayersCommit(patches);
+      if (onArrangeCommit) onArrangeCommit(patches, action, reference); else onLayersCommit(patches);
     }
   } }));
 

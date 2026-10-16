@@ -43,6 +43,7 @@ function validate(directory) {
 }
 
 if(positionals[0]==='prepare') {
+  if(!values['min-app-version']) throw new Error('Provide --min-app-version explicitly for the rendering features used by these templates');
   const version=values.version,revision=Number(values.revision);
   if(!version || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(version) || !Number.isSafeInteger(revision) || revision<1) throw new Error('Provide --version and increasing integer --revision');
   const directory=resolve(feed,'releases',version);
@@ -55,7 +56,7 @@ if(positionals[0]==='prepare') {
   const source=JSON.stringify(prepared,null,2)+'\n';
   parseOfficialCatalog(source);
   const used=new Set(templates.flatMap(t=>Object.values(t.layouts).flatMap(doc=>doc.layers.flatMap(l=>l.fontFamily.split(',').map(name=>name.trim())))));
-  const index=JSON.stringify({format:'yingkuang-template-feed',schemaVersion:1,revision,version,minAppVersion:values['min-app-version']??'0.5.9-beta.1',path:`releases/${version}/templates.json`,sha256:hash(source),bytes:Buffer.byteLength(source),templateCount:templates.length,notes:values.notes??'',fonts:fonts.filter(font=>used.has(font.family)).map(font=>font.family)},null,2)+'\n';
+  const index=JSON.stringify({format:'yingkuang-template-feed',schemaVersion:1,revision,version,minAppVersion:values['min-app-version'],path:`releases/${version}/templates.json`,sha256:hash(source),bytes:Buffer.byteLength(source),templateCount:templates.length,notes:values.notes??'',fonts:fonts.filter(font=>used.has(font.family)).map(font=>font.family)},null,2)+'\n';
   parseTemplateIndex(index);
   const signature=sign(null,Buffer.from(index),signingKey()).toString('base64');
   mkdirSync(directory,{recursive:true});

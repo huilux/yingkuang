@@ -13,6 +13,7 @@
   const original = template.layouts.landscape.layers.find(l => l.source === 'focalLength');
   template.layouts.landscape.layers = ['focalLength','aperture','iso'].map((source,i) => ({...original,id:`fixture-${i}`,name:`测试${i}`,source,x:.2+i*.3,y:.5,visible:true,fontFamily:'Space Mono',fontSize:24}));
   delete template.layouts.landscape.distributions;
+  delete template.layouts.landscape.alignments;
   template.layouts.landscape.frame.color = '#123456';
   template.layouts.portrait = structuredClone(template.layouts.landscape);
   template.layouts.portrait.frame.color = '#654321';

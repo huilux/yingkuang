@@ -6,13 +6,21 @@ on:
     branches: [main, master]
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      build_packages:
+        description: 'Build installation packages for internal review'
+        type: boolean
+        default: false
+
+env:
+  BUILD_PACKAGES: ${{ github.event_name == 'workflow_dispatch' && inputs.build_packages }}
 
 permissions:
   contents: read
 
 concurrency:
   group: desktop-${{ github.ref }}
-  # Let main's installation builds finish; superseded PR checks can be cancelled.
+  # Superseded PR checks can be cancelled; explicit package builds finish.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -76,7 +84,7 @@ jobs:
             if curl -fsS http://127.0.0.1:1422/ > /dev/null; then break; fi
             sleep 0.2
           done
-          WATERMARK_TEST_WIDTH=1100 WATERMARK_TEST_HEIGHT=720 xvfb-run -a /usr/bin/python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 template-layout-regression.js template-update-regression.js
+          WATERMARK_TEST_WIDTH=1100 WATERMARK_TEST_HEIGHT=720 xvfb-run -a /usr/bin/python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 template-layout-regression.js template-layout-persistence-regression.js distribution-range-regression.js distribution-direction-regression.js template-update-regression.js
       - name: Verify production CSP in WebKit
         if: runner.os == 'Linux'
         run: xvfb-run -a /usr/bin/python3 scripts/check-csp.py
@@ -84,20 +92,21 @@ jobs:
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
       - name: Build installation package
+        if: env.BUILD_PACKAGES == 'true'
         run: npm run tauri build -- --bundles ${{ matrix.bundles }} --ci
         env:
           # Ad-hoc signing for test builds; this is not Developer ID notarization.
           APPLE_SIGNING_IDENTITY: '-'
       - name: Build Linux AppImage
-        if: runner.os == 'Linux'
+        if: env.BUILD_PACKAGES == 'true' && runner.os == 'Linux'
         run: npm run build:appimage -- --bundle-only
       - name: Validate actual Debian package metadata
-        if: runner.os == 'Linux'
+        if: env.BUILD_PACKAGES == 'true' && runner.os == 'Linux'
         run: |
           package=$(node scripts/beta-release.mjs package linux-x64)
           node scripts/check-deb.mjs "$package"
       - name: Audit actual AppImage system payload
-        if: runner.os == 'Linux'
+        if: env.BUILD_PACKAGES == 'true' && runner.os == 'Linux'
         shell: bash
         run: |
           /usr/bin/python3 -m unittest discover -s scripts -p 'test_appimage_audit.py'
@@ -107,7 +116,7 @@ jobs:
           /usr/bin/python3 scripts/audit-appimage.py "$audit_dir/squashfs-root" test-output/appimage-audit
           sha256sum "$package" | sed 's|  .*/|  |' > test-output/appimage-audit/APPIMAGE-SHA256.txt
       - name: Upload AppImage system license review materials
-        if: runner.os == 'Linux'
+        if: env.BUILD_PACKAGES == 'true' && runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: yingkuang-appimage-system-review

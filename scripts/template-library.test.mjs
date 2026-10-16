@@ -59,7 +59,7 @@ test('built-in differences identify changed values by orientation and layer with
   const changes = builtInTemplateChanges(edited);
   assert.equal(isBuiltInModified(edited), true);
   assert.ok(changes.some((change) => change.group === '基本信息' && change.field === '模板名称' && change.localValue === '我的版本'));
-  assert.ok(changes.some((change) => change.group === '横图 · 相框' && change.field === '左右留白' && change.builtInValue === '4' && change.localValue === '6'));
+  assert.ok(changes.some((change) => change.group === '横图 · 相框' && change.field === '左右留白' && change.builtInValue === String(builtIns[0].layouts.landscape.frame.paddingX) && change.localValue === String(edited.layouts.landscape.frame.paddingX)));
   assert.ok(changes.some((change) => change.group === '横图 · 顶部区域' && change.field === '启用' && change.localValue === '开启'));
   assert.ok(changes.some((change) => change.group === '横图 · 水印图层' && change.field === '图层顺序'));
   assert.ok(changes.some((change) => change.group.startsWith('竖图 · 水印「') && change.field === '字号'));

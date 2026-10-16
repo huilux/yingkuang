@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {builtInTemplates,calculateGeometry,layerPosition} from '../src/editor-model.ts';
-import {resolveDocumentLayout,releaseDistributionRules} from '../src/document-layout.ts';
+import {resolveDocumentLayout,releaseLayoutRules} from '../src/document-layout.ts';
 import {reorientTemplateDocument} from '../src/template-layout.ts';
 import {isValidEditorDocument} from '../src/builtin-template-catalog.ts';
 
@@ -13,9 +13,9 @@ test('a move on one axis preserves the other axis rule; zero-delta coordinate pa
   const ids=doc.layers.slice(0,3).map(layer=>layer.id);
   doc.distributions=[{axis:'x',layerIds:ids},{axis:'y',layerIds:ids}];
   const layer=doc.layers[0];
-  releaseDistributionRules(doc,[{id:layer.id,patch:{x:layer.x,y:layer.y}}]);
+  releaseLayoutRules(doc,[{id:layer.id,patch:{x:layer.x,y:layer.y}}]);
   assert.equal(doc.distributions.length,2);
-  releaseDistributionRules(doc,[{id:layer.id,patch:{x:layer.x+.1,y:layer.y}}]);
+  releaseLayoutRules(doc,[{id:layer.id,patch:{x:layer.x+.1,y:layer.y}}]);
   assert.deepEqual(doc.distributions.map(rule=>rule.axis),['y']);
 });
 test('orientation switches template layout, retaining local styles, added/deleted layers and undo input',()=>{
@@ -27,7 +27,7 @@ test('orientation switches template layout, retaining local styles, added/delete
   const untouched=structuredClone(current);
   const result=reorientTemplateDocument(template,before,after,current);
   assert.equal(result.frame.color,'#123456');
-  assert.equal(result.layers[0].fontSize,current.layers[0].fontSize);
+  assert.equal(result.layers.find(layer=>layer.id===current.layers[0].id).fontSize,current.layers[0].fontSize);
   assert.ok(!result.layers.some(l=>l.id===deleted));
   assert.ok(result.layers.some(l=>l.id==='added'));
   assert.deepEqual(current,untouched);
@@ -36,6 +36,7 @@ test('orientation switches template layout, retaining local styles, added/delete
 for(const axis of ['x','y']) test(`saved ${axis} distribution recomputes actual edge gaps and is idempotent on other photos`,()=>{
   const doc=structuredClone(template.layouts.landscape);
   doc.layers=doc.layers.slice(0,3).map((l,i)=>({...l,id:String(i),visible:true,region:'canvas',source:'custom',customValue:'x'.repeat(i+1),x:.2+i*.3,y:.2+i*.3}));
+  delete doc.alignments;
   doc.distributions=[{axis,layerIds:['0','1','2']}];
   const measure=(l,text)=>({width:text.length*20,height:l.fontSize});
   const resolved=resolveDocumentLayout(doc,{...before,width:1600,height:900},measure);
@@ -47,7 +48,7 @@ for(const axis of ['x','y']) test(`saved ${axis} distribution recomputes actual 
   const sizes=resolved.layers.map(l=>axis==='x'?measure(l,l.customValue).width:measure(l,l.customValue).height);
   const gaps=[positions[1]-positions[0]-(sizes[0]+sizes[1])/2,positions[2]-positions[1]-(sizes[1]+sizes[2])/2];
   assert.ok(Math.abs(gaps[0]-gaps[1])<1e-8);
-  releaseDistributionRules(resolved,[{id:'1',patch:{[axis]:.4}}]);
+  releaseLayoutRules(resolved,[{id:'1',patch:{[axis]:.4}}]);
   assert.equal(resolved.distributions,undefined);
   const invalid=structuredClone(doc);invalid.distributions[0].layerIds[2]='missing';
   assert.equal(isValidEditorDocument(invalid),false);

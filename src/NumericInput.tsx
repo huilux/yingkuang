@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
-export function NumericInput({ label, value, min, max, step = 1, onCommit, onPreview, disabled = false, isValid }: {
+export function NumericInput({ label, value, min, max, step = 1, onCommit, onPreview, disabled = false, isValid, normalize }: {
   label: string; value: number; min?: number; max?: number; step?: number; disabled?: boolean; isValid?: (value: number) => boolean; onCommit: (value: number) => void;
   /** Optional live draft preview; Escape or invalid input restores the value at focus. */
   onPreview?: (value: number) => void;
+  normalize?: (value: number) => number;
 }) {
   const [draft, setDraft] = useState(String(value));
   const editing = useRef(false);
@@ -17,7 +18,8 @@ export function NumericInput({ label, value, min, max, step = 1, onCommit, onPre
       const restored = onPreview ? initialValue.current : value;
       setDraft(String(restored)); onPreview?.(restored); cancelled.current = false; return;
     }
-    const next = Math.min(max ?? Infinity, Math.max(min ?? -Infinity, parsed));
+    const bounded = Math.min(max ?? Infinity, Math.max(min ?? -Infinity, parsed));
+    const next = normalize ? normalize(bounded) : bounded;
     if (isValid && !isValid(next)) { const restored = onPreview ? initialValue.current : value; setDraft(String(restored)); onPreview?.(restored); return; }
     setDraft(String(next));
     if (next !== value) onCommit(next);

@@ -1,6 +1,7 @@
 import catalogSource from "./data/builtin-templates.json" with { type: "json" };
 import { diffTemplates, type TemplateChange } from "./template-diff.ts";
-import type { EditorDocument, TemplateRecord } from "./types";
+import { arrangementAxis } from "./selection-model.ts";
+import type { AlignmentRule, EditorDocument, TemplateRecord } from "./types";
 
 const catalogFormat = "yingkuang-builtin-templates";
 const catalogVersion = 1;
@@ -42,12 +43,29 @@ export function isValidEditorDocument(value: unknown): value is EditorDocument {
   if (value.layers.length > 100) return false;
   if (new Set(value.layers.map(layer => record(layer) ? layer.id : undefined)).size !== value.layers.length) return false;
   if (value.distributions !== undefined) {
-    if (!Array.isArray(value.distributions) || value.distributions.length > 64) return false;
+    if (!Array.isArray(value.distributions) || value.distributions.length > 100) return false;
     const used = new Set<string>();
     for (const rule of value.distributions) {
-      if (!record(rule) || !["x", "y"].includes(rule.axis as string) || !Array.isArray(rule.layerIds) || rule.layerIds.length < 3 || rule.layerIds.length > 100 || new Set(rule.layerIds).size !== rule.layerIds.length) return false;
+      if (!record(rule) || !["x", "y"].includes(rule.axis as string) || !Array.isArray(rule.layerIds) || rule.layerIds.length < (rule.range === undefined ? 3 : 2) || rule.layerIds.length > 100 || new Set(rule.layerIds).size !== rule.layerIds.length) return false;
+      if (rule.range !== undefined && (!record(rule.range) || !["canvas", "photo", "top", "bottom", "left", "right"].includes(rule.range.reference as string) ||
+          !bounded(rule.range.ratio, 1) || rule.range.ratio <= 0 || !finite(rule.range.anchor) || !Number.isFinite(Math.fround(rule.range.anchor)))) return false;
       for (const id of rule.layerIds) {
         const key = `${rule.axis}:${id}`;
+        if (typeof id !== "string" || !value.layers.some(layer => record(layer) && layer.id === id) || used.has(key)) return false;
+        used.add(key);
+      }
+    }
+  }
+  if (value.alignments !== undefined) {
+    if (!Array.isArray(value.alignments) || value.alignments.length > 200) return false;
+    const used = new Set<string>();
+    for (const rule of value.alignments) {
+      if (!record(rule) || !["left", "center-x", "right", "top", "center-y", "bottom", "third-1", "third-2"].includes(rule.action as string) ||
+          !["canvas", "photo", "selection", "top", "bottom", "left", "right"].includes(rule.reference as string) ||
+          !Array.isArray(rule.layerIds) || !rule.layerIds.length || rule.layerIds.length > 100) return false;
+      const axis = arrangementAxis(rule.action as AlignmentRule["action"], rule.reference as AlignmentRule["reference"]);
+      for (const id of rule.layerIds) {
+        const key = `${axis}:${id}`;
         if (typeof id !== "string" || !value.layers.some(layer => record(layer) && layer.id === id) || used.has(key)) return false;
         used.add(key);
       }
