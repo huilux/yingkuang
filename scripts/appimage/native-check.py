@@ -16,6 +16,8 @@ import urllib.error
 import urllib.request
 import zlib
 
+from renderer import stop_process_group
+
 root = Path(__file__).resolve().parents[2]
 package = Path(sys.argv[1]).resolve()
 report = Path(sys.argv[2])
@@ -44,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-native-') as directory:
             raise RuntimeError(value)
         return value
     with (work / 'driver.log').open('w') as log:
-        driver = subprocess.Popen(['WebKitWebDriver', f'--port={port}'], stdout=log, stderr=log, env=env)
+        driver = subprocess.Popen(['WebKitWebDriver', f'--port={port}'], stdout=log, stderr=log, env=env, start_new_session=True)
         session = None
         try:
             for _ in range(60):
@@ -124,6 +126,6 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-native-') as directory:
             if session:
                 try: request('DELETE', f'/session/{session}')
                 except (RuntimeError, urllib.error.URLError): pass
-            driver.terminate(); driver.wait(timeout=15)
+            stop_process_group(driver)
 report.write_text(json.dumps({'nativePhotoProcessing': 'passed', 'offlineFontFamilies': [font['family'] for font in catalog], 'legacyFontMigration': 'passed', 'missingGlyphPreflight': 'passed', 'checks': ['PNG import and preview', '90 degree rotation and native JPEG export', 'JPEG reimport and native PNG export', 'Chinese and space paths', 'shipped default template and font resources', 'all selected offline fonts with Chinese and symbol fallback', 'retired family names and missing-glyph preflight'], 'method': 'Unmodified release AppImage launched by WebKitWebDriver with Tauri automation enabled only via the test process environment. Real Rust IPC; no dialogs or file processing mocked.'}, indent=2) + '\n')
 print('AppImage real PNG/JPEG decoding, rotation, default template/font rendering and native exports passed')

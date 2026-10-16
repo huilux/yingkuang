@@ -181,12 +181,12 @@ jobs:
       - name: Require unchanged application source when resuming assembly
         run: |
           node scripts/beta-release.mjs validate "$RELEASE_TAG" "$BUILD_COMMIT"
-          git diff --exit-code "$BUILD_COMMIT" HEAD -- . ':(exclude)scripts/assemble-beta-release.py' ':(exclude)scripts/test_beta_release.py' ':(exclude).github/workflows/beta-draft.yml' ':(exclude)scripts/appimage/stage.py' ':(exclude)scripts/appimage/renderer.py' ':(exclude)scripts/appimage/recover.py' ':(exclude)scripts/test_appimage_delivery.py' ':(exclude)scripts/check-installed-theme.mjs'
+          git diff --exit-code "$BUILD_COMMIT" HEAD -- . ':(exclude)scripts/assemble-beta-release.py' ':(exclude)scripts/test_beta_release.py' ':(exclude).github/workflows/beta-draft.yml' ':(exclude)scripts/appimage/stage.py' ':(exclude)scripts/appimage/renderer.py' ':(exclude)scripts/appimage/recover.py' ':(exclude)scripts/appimage/native-check.py' ':(exclude)scripts/test_appimage_delivery.py' ':(exclude)scripts/check-installed-theme.mjs'
       - name: Recheck unchanged AppImage after verification-only fixes
         if: inputs.assemble_only
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb xdotool libwayland-client0 libgl1 libegl1 libegl-mesa0 libgles2
+          sudo apt-get install -y xvfb xdotool libwayland-client0 libgl1 libegl1 libegl-mesa0 libgles2 webkit2gtk-driver
           python scripts/appimage/recover.py "$RELEASE_TAG" "$BUILD_COMMIT"
       - name: Download verified files from the private draft
         run: |
