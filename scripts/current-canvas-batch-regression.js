@@ -8,9 +8,9 @@
   const { createDefaultDocument } = await import('/src/editor-model.ts');
   const key = 'yingkuang-session-v2';
   const saved = localStorage.getItem(key);
-  const source = createDefaultDocument();
+  const source = t.withBrandFixture(createDefaultDocument());
   source.layers.find(layer => layer.id === 'brand').customValue = 'CURRENT UNSAVED';
-  const other = createDefaultDocument();
+  const other = t.withBrandFixture(createDefaultDocument());
   other.layers.find(layer => layer.id === 'brand').customValue = 'SECOND ORIGINAL';
   localStorage.setItem(key, JSON.stringify({
     paths: ['first.jpg', 'second.jpg'],

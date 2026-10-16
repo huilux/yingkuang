@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { selectLayer, arrangeSelection, moveSelection } from '../src/selection-model.ts';
+import { safeRect, snapSelection } from '../src/canvas-camera.ts';
 const canvas = { x: 0, y: 0, width: 1000, height: 800 };
 const geometry = { width: 1000, height: 800, photo: { x: 100, y: 100, width: 800, height: 500 }, regions: { canvas, bottom: { x: 0, y: 600, width: 1000, height: 200 }, left: { x: 0, y: 100, width: 100, height: 500 } } };
 const measured = [
@@ -10,6 +11,19 @@ const measured = [
 ];
 const layers = measured.map(item => ({ id: item.id, region: 'bottom', x: item.position.x / 1000, y: (item.position.y - 600) / 200 }));
 const near = (a,b) => assert.ok(Math.abs(a-b)<1e-8, `${a} != ${b}`);
+test('dragging to a safe-region third and pressing the matching row does not move the element', () => {
+  const region = geometry.regions.bottom;
+  const layer = { id:'single', region:'bottom', x:.5, y:.5 };
+  const position = { x:500, y:700 };
+  const bounds = { x:480, y:690, width:40, height:20 };
+  const target = safeRect(region, 2);
+  const wanted = target.y + target.height / 3;
+  const snap = snapSelection(bounds, {x:0,y:wanted-position.y+1}, geometry, [{id:'bottom',bounds:target}], [], 1, true);
+  const moved = {x:position.x+snap.delta.x,y:position.y+snap.delta.y};
+  near(moved.y,wanted);
+  const patches = arrangeSelection('third-1','bottom',[{id:layer.id,position:moved,bounds:{...bounds,y:bounds.y+snap.delta.y}}],[layer],geometry,{bottom:{safePadding:2}});
+  near(region.y + patches[0].patch.y * region.height,moved.y);
+});
 test('Shift toggles; dragging a selected member preserves the group', () => {
   assert.deepEqual(selectLayer(['a'], 'b', true), ['a','b']);
   assert.deepEqual(selectLayer(['a','b'], 'a', true), ['b']);

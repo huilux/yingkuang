@@ -35,11 +35,16 @@ import { ExportElapsed } from "./ExportElapsed";
 import { StorageRecoveryDialog, type StorageRecovery } from "./StorageRecoveryDialog";
 import { TemplateManager } from "./TemplateManager";
 import { TemplatePreview } from "./TemplatePreview";
-import { builtInDefaultTemplateId } from "./builtin-template-catalog";
+import { builtInDefaultTemplateId, type BuiltInTemplateCatalog } from "./builtin-template-catalog";
+import {useTemplateUpdates} from "./use-template-updates";
 import type { EditorCanvasHandle } from "./EditorCanvas";
 import { LayerInspector } from "./LayerInspector";
 import { SliderRow, Segmented } from "./EditorControls";
-import { selectLayer, moveSelection, type LayerPatch } from "./selection-model";
+import { selectLayer, moveSelection, type ArrangeAction, type LayerPatch } from "./selection-model";
+import { reorientTemplateDocument } from "./template-layout";
+import { releaseDistributionRules } from "./document-layout";
+import { resolveBrowserLayout, useDocumentLayouts } from "./browser-layout";
+import { ensureFontsLoaded } from "./font-library";
 import { isVisible } from "./canvas-camera";
 import { retainBrowserPhoto, releaseBrowserPhoto, releaseBrowserPhotos } from "./use-editor-photo";
 import {
@@ -50,7 +55,7 @@ import {
   nextLayer,
   photoOrientation,
 } from "./editor-model";
-import { maxTemplateNameLength, templateNameError, copyTemplateName, defaultTemplateKey, documentFromTemplate, importTemplates, readDefaultTemplateId, readTemplateLibrary, serializeUserTemplates, templatesKey, type ImportDecision } from "./template-library";
+import { maxTemplateNameLength, templateNameError, copyTemplateName, defaultTemplateKey, documentFromTemplate, importTemplates, readDefaultTemplateId, readTemplateLibrary, rebaseTemplateLibrary, serializeUserTemplates, templatesKey, type ImportDecision } from "./template-library";
 import { buildExportPlan, createExportRequest, retryExportRequest, formatElapsed, type ExportIssue, type ExportRequest } from "./export-workflow";
 import type {
   EditorDocument,
@@ -169,11 +174,21 @@ function App() {
   const [photoFilter, setPhotoFilter] = useState<PhotoFilter>(emptyPhotoFilter);
   const [activeId, setActiveId] = useState(isNative ? "" : demoPhoto.id);
   const [checkedIds, setCheckedIds] = useState<string[]>(isNative ? [] : [demoPhoto.id]);
-  const [documents, setDocuments] = useState<Record<string, EditorDocument>>(initialDocuments);
+  const [rawDocuments, setDocuments] = useState<Record<string, EditorDocument>>(initialDocuments);
+  const documents = useDocumentLayouts(rawDocuments, photos);
   const [initialLibrary] = useState(readTemplateLibrary);
   const templateWriteBlocked = useRef(!initialLibrary.canPersist);
   const [templates, setTemplates] = useState<TemplateRecord[]>(initialLibrary.templates);
-  const [defaultTemplateId, setDefaultTemplateId] = useState(() => readDefaultTemplateId(initialLibrary.templates));
+  const [officialCatalog,setOfficialCatalog] = useState(initialLibrary.catalog);
+  const [overrideBases,setOverrideBases] = useState(initialLibrary.overrideBases);
+  const [defaultTemplateId, setDefaultTemplateId] = useState(() => readDefaultTemplateId(initialLibrary.templates,initialLibrary.catalog,initialLibrary.referenceMap));
+  const templateReferences=useRef(initialLibrary.referenceMap);
+  const templatesRef=useRef(templates);templatesRef.current=templates;
+  const mappedTemplateId=(id:string)=>{
+    const seen=new Set<string>();
+    while(templateReferences.current[id] && !seen.has(id)){seen.add(id);id=templateReferences.current[id];}
+    return id;
+  };
   const [templateByPhoto, setTemplateByPhoto] = useState<Record<string, string>>(isNative ? {} : { [demoPhoto.id]: builtInDefaultTemplateId() });
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
   const editorRef = useRef<EditorCanvasHandle>(null);
@@ -207,6 +222,23 @@ function App() {
   const [relinkError, setRelinkError] = useState<{ path: string; message: string } | null>(null);
   const [storageErrors, setStorageErrors] = useState<Record<string, string>>({});
   const [pendingStorageRecovery, setPendingStorageRecovery] = useState<StorageRecovery | null>(null);
+  const templateUpdates=useTemplateUpdates(applyOfficialCatalog,!templateWriteBlocked.current,initialLibrary.catalog);
+
+  function applyOfficialCatalog(catalog:BuiltInTemplateCatalog) {
+    if(templateWriteBlocked.current)throw new Error("本机模板库尚未恢复，已保留原记录");
+    const result=rebaseTemplateLibrary(templates,officialCatalog,catalog,overrideBases);
+    const nextDefault=result.idMap[defaultTemplateId]??defaultTemplateId;
+    // Persist the baseline and edits as one snapshot before changing the UI.
+    localStorage.setItem(templatesKey,serializeUserTemplates(result.templates,catalog,result.overrideBases,nextDefault));
+    setTemplates(result.templates);setOfficialCatalog(catalog);setOverrideBases(result.overrideBases);
+    if(nextDefault!==defaultTemplateId)setDefaultTemplateId(nextDefault);
+    if(Object.keys(result.idMap).length) {
+      templateReferences.current={...templateReferences.current,...result.idMap};
+      if(restoredSession.current.templateIdsByPath) restoredSession.current.templateIdsByPath=Object.fromEntries(Object.entries(restoredSession.current.templateIdsByPath).map(([path,id])=>[path,mappedTemplateId(id)]));
+      setTemplateByPhoto(current=>Object.fromEntries(Object.entries(current).map(([id,template])=>[id,result.idMap[template]??template])));
+      for(const entry of [...undoStack.current,...redoStack.current]) for(const [id,template] of Object.entries(entry.templates)) if(template && result.idMap[template])entry.templates[id]=result.idMap[template];
+    }
+  }
 
   function storageError(scope: string, message: string) {
     setStorageErrors(current => current[scope] === message ? current : { ...current, [scope]: message });
@@ -233,9 +265,9 @@ function App() {
 
   useEffect(() => {
     if (templateWriteBlocked.current) { storageError("templates", initialLibrary.issue); return; }
-    try { localStorage.setItem(templatesKey, serializeUserTemplates(templates)); storageError("templates", ""); }
+    try { localStorage.setItem(templatesKey, serializeUserTemplates(templates,officialCatalog,overrideBases,defaultTemplateId)); storageError("templates", ""); }
     catch (error) { storageError("templates", `模板库暂未保存，请先导出备份：${String(error)}`); }
-  }, [templates]);
+  }, [templates,officialCatalog,overrideBases,defaultTemplateId]);
 
   useEffect(() => {
     try { localStorage.setItem(defaultTemplateKey, defaultTemplateId); storageError("defaultTemplate", ""); }
@@ -283,9 +315,10 @@ function App() {
             if (cancelled) return;
             for (const item of report.items) {
               const photo = { ...item, overrides: saved.overridesByPath?.[item.path], crop: saved.cropsByPath?.[item.path] };
-              setDocuments(current => ({ ...current, [photo.id]: saved.documentsByPath?.[photo.path] ?? createDefaultDocument() }));
-              const sourceTemplate = saved.templateIdsByPath?.[photo.path] ?? saved.activeTemplate ?? defaultTemplateId;
-              if (templates.some((template) => template.id === sourceTemplate)) setTemplateByPhoto(current => ({ ...current, [photo.id]: sourceTemplate }));
+              const sourceTemplate = mappedTemplateId(saved.templateIdsByPath?.[photo.path] ?? saved.activeTemplate ?? defaultTemplateId);
+              const template=templatesRef.current.find(template=>template.id===sourceTemplate)??templatesRef.current[0];
+              setDocuments(current => ({ ...current, [photo.id]: saved.documentsByPath?.[photo.path] ?? documentFromTemplate(template,photo) }));
+              setTemplateByPhoto(current => ({ ...current, [photo.id]: template.id }));
               setPhotos(current => [...current, photo].sort((a, b) => (order.get(a.path) ?? 0) - (order.get(b.path) ?? 0)));
               if (restored === 0) setActiveId(photo.id);
               if (checkedPaths.has(photo.path)) setCheckedIds(current => [...current, photo.id]);
@@ -372,8 +405,8 @@ function App() {
     if (!sessionReady || loadState === "loading") return;
     try {
       const key = scope === "session" ? sessionKey : templatesKey;
-      const keys = scope === "session" ? [key] : [key, "yingkuang-templates-v1"];
-      const currentContent = scope === "session" ? JSON.stringify(captureSession()) : serializeUserTemplates(templates);
+      const keys = scope === "session" ? [key] : [key, "yingkuang-templates-v2", "yingkuang-templates-v1"];
+      const currentContent = scope === "session" ? JSON.stringify(captureSession()) : serializeUserTemplates(templates,officialCatalog,overrideBases,defaultTemplateId);
       if (scope === "session") parseSession(currentContent);
       setPendingStorageRecovery({ scope, key, label: scope === "session" ? "工作记录" : "模板库",
         description: scope === "session" ? `当前批次有 ${photos.length} 张可用照片和 ${missingPhotos.length} 条缺失记录。` : `当前可读取 ${templates.length} 个模板。`,
@@ -419,7 +452,7 @@ function App() {
       if (photos.some(photo => photo.path === inspected.path || photo.id === inspected.id)) throw new Error("所选照片已在当前批次中");
       const saved = relocateSessionPath(restoredSession.current, oldPath, inspected.path);
       const photo = { ...inspected, overrides: saved.overridesByPath?.[inspected.path], crop: saved.cropsByPath?.[inspected.path] };
-      const templateId = saved.templateIdsByPath?.[photo.path] ?? defaultTemplateId;
+      const templateId = mappedTemplateId(saved.templateIdsByPath?.[photo.path] ?? defaultTemplateId);
       const template = templates.find(template => template.id === templateId) ?? templates[0];
       const document = saved.documentsByPath?.[photo.path] ?? (template ? documentFromTemplate(template, photo) : createDefaultDocument());
       commitTransaction();
@@ -525,6 +558,13 @@ function App() {
     commitTransaction();
     if (JSON.stringify(activePhoto.crop) !== JSON.stringify(crop)) {
       pushHistory(captureHistory([activeId]));
+      const nextPhoto = { ...activePhoto, crop };
+      if (activeDocument) {
+        const nextDocument = reorientTemplateDocument(templates.find(template => template.id === activeTemplate), activePhoto, nextPhoto, activeDocument);
+        currentDocument.current = nextDocument;
+        setDocuments(current => ({ ...current, [activeId]: nextDocument }));
+        setSelectedLayerIds(current => current.filter(id => nextDocument.layers.some(layer => layer.id === id)));
+      }
       setPhotos(current => current.map(photo => photo.id === activeId ? { ...photo, crop } : photo));
     }
     setShowCrop(false);
@@ -549,11 +589,26 @@ function App() {
     });
     if (!changed.length) return;
     updateDocument(draft => {
+      releaseDistributionRules(draft, changed);
       for (const { id, patch } of changed) {
         const layer = draft.layers.find(item => item.id === id);
         if (layer) Object.assign(layer, patch);
       }
     }, record);
+  }
+
+  function arrangeLayers(patches: LayerPatch[], action: ArrangeAction) {
+    updateDocument(draft => {
+      releaseDistributionRules(draft, patches);
+      for (const {id,patch} of patches) Object.assign(draft.layers.find(layer => layer.id === id)!, patch);
+      if (action === "distribute-x" || action === "distribute-y") {
+        draft.distributions ??= [];
+        const axis=action === "distribute-x" ? "x" : "y";
+        const layerIds=patches.map(patch=>patch.id);
+        draft.distributions=draft.distributions.filter(rule=>rule.axis!==axis || !rule.layerIds.some(id=>layerIds.includes(id)));
+        draft.distributions.push({ axis,layerIds });
+      }
+    });
   }
 
   function addPhotos(next: PhotoAsset[], activate = true) {
@@ -580,7 +635,7 @@ function App() {
     });
     if (selectedTemplate) setTemplateByPhoto((current) => {
       const result = { ...current };
-      for (const photo of next) if (!result[photo.id]) result[photo.id] = (recovered.has(photo.path) ? restoredSession.current.templateIdsByPath?.[photo.path] : undefined) ?? selectedTemplate.id;
+      for (const photo of next) if (!result[photo.id]) result[photo.id] = mappedTemplateId((recovered.has(photo.path) ? restoredSession.current.templateIdsByPath?.[photo.path] : undefined) ?? selectedTemplate.id);
       return result;
     });
     const toCheck = next.filter(photo => !recovered.has(photo.path) || restoredSession.current.checkedPaths?.includes(photo.path));
@@ -852,15 +907,16 @@ function App() {
 
   function deleteTemplate(id: string) {
     setTemplates((current) => current.filter((template) => template.id !== id));
-    if (defaultTemplateId === id) setDefaultTemplateId(builtInDefaultTemplateId());
+    if (defaultTemplateId === id) setDefaultTemplateId(builtInDefaultTemplateId(officialCatalog));
     setTemplateByPhoto((current) => Object.fromEntries(Object.entries(current).filter(([, templateId]) => templateId !== id)));
     setMessage("已删除模板，已套用到照片的内容保持不变");
   }
 
   function resetTemplate(id: string) {
-    const original = builtInTemplates().find((template) => template.id === id);
+    const original = builtInTemplates(officialCatalog).find((template) => template.id === id);
     if (!original) return;
     setTemplates((current) => current.map((template) => template.id === id ? original : template));
+    setOverrideBases(current=>Object.fromEntries(Object.entries(current).filter(([key])=>key!==id)));
     setMessage(`已重置“${original.name}”，现有照片保持不变`);
   }
 
@@ -881,7 +937,10 @@ function App() {
 
   function deleteSelectedLayers() {
     if (!selectedLayers.length) return;
-    updateDocument(draft => { draft.layers = draft.layers.filter(item => !selectedLayerIds.includes(item.id)); });
+    updateDocument(draft => {
+      draft.layers = draft.layers.filter(item => !selectedLayerIds.includes(item.id));
+      if (draft.distributions) draft.distributions = draft.distributions.filter(rule => rule.layerIds.every(id => draft.layers.some(layer => layer.id === id)));
+    });
     setSelectedLayerIds([]);
   }
 
@@ -922,6 +981,14 @@ function App() {
     setExportChecking(true);
     let preflight: ExportPreflight;
     try {
+      if(!retry && request.items.some(item=>item.document.distributions?.length)) {
+        await ensureFontsLoaded(request.items.flatMap(item=>item.document.distributions?.length?item.document.layers.map(layer=>layer.fontFamily):[]));
+        const byPath=new Map(photos.map(photo=>[photo.path,photo]));
+        for(const item of request.items) {
+          const photo=byPath.get(item.path);
+          if(photo)item.document=resolveBrowserLayout(item.document,{...photo,overrides:item.overrides,crop:item.crop});
+        }
+      }
       preflight = await invoke<ExportPreflight>("preflight_export", { request });
     } catch (error) {
       const message = `预检失败：${String(error)}`;
@@ -1094,7 +1161,7 @@ function App() {
         </aside>
 
         <section className="editor-panel">
-          <EditorWorkspace photo={activePhoto} document={activeDocument} loading={loadState === "loading"} onImport={() => handleImport()} onCrop={() => { commitTransaction(); setShowCrop(true); }} onToggleSnap={() => setSnapEnabled(value => !value)} editorRef={editorRef} selectedLayerIds={selectedLayerIds} snapEnabled={snapEnabled} onSelectionChange={(ids) => { setSelectedLayerIds(ids); if (ids.length) setInspectorTab("watermark"); }} onLayersCommit={updateLayers} />
+          <EditorWorkspace photo={activePhoto} document={activeDocument} loading={loadState === "loading"} onImport={() => handleImport()} onCrop={() => { commitTransaction(); setShowCrop(true); }} onToggleSnap={() => setSnapEnabled(value => !value)} editorRef={editorRef} selectedLayerIds={selectedLayerIds} snapEnabled={snapEnabled} onSelectionChange={(ids) => { setSelectedLayerIds(ids); if (ids.length) setInspectorTab("watermark"); }} onLayersCommit={updateLayers} onArrangeCommit={arrangeLayers} />
 
           <div className={`status-bar ${loadState === "error" ? "error" : ""}`}><span>{message || (selectedLayers.length ? `已选：${selectedLayers.length === 1 ? selectedLayers[0].name : `${selectedLayers.length} 个元素`}` : activePhoto ? `${activePhoto.fileName}  ${activePhoto.megapixels.toFixed(1)} MP` : "准备就绪")}</span><span>{activePhoto ? `${formatPixels(activePhoto)}  sRGB  预览` : "完全本地处理"}</span></div>
         </section>
@@ -1148,7 +1215,7 @@ function App() {
         </aside>
       </main>
 
-      {showTemplateManager && <TemplateManager templates={templates} defaultTemplateId={defaultTemplateId} photo={activePhoto} onClose={() => setShowTemplateManager(false)} onDefaultChange={setDefaultTemplateId} onRename={renameTemplate} onDuplicate={duplicateTemplate} onDelete={deleteTemplate} onReset={resetTemplate} onImport={restoreTemplates} />}
+      {showTemplateManager && <TemplateManager templates={templates} officialCatalog={officialCatalog} overrideBases={overrideBases} updates={templateUpdates} defaultTemplateId={defaultTemplateId} photo={activePhoto} onClose={() => setShowTemplateManager(false)} onDefaultChange={setDefaultTemplateId} onRename={renameTemplate} onDuplicate={duplicateTemplate} onDelete={deleteTemplate} onReset={resetTemplate} onImport={restoreTemplates} />}
 
       {pendingStorageRecovery && <StorageRecoveryDialog recovery={pendingStorageRecovery} onClose={() => setPendingStorageRecovery(null)} onRecovered={storageRecovered} />}
 

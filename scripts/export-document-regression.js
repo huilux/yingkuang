@@ -8,7 +8,7 @@
   const { createDefaultDocument } = await import('/src/editor-model.ts');
   const key = 'yingkuang-session-v2';
   const saved = localStorage.getItem(key);
-  const current = createDefaultDocument();
+  const current = t.withBrandFixture(createDefaultDocument());
   const brand = current.layers.find(layer => layer.id === 'brand');
   brand.customValue = 'LATEST CANVAS';
   brand.x = 0.42;

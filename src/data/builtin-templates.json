@@ -1,6 +1,8 @@
 {
   "format": "yingkuang-builtin-templates",
   "version": 1,
+  "contentVersion": "2026.10.1",
+  "revision": 1,
   "defaultTemplateId": "wide-float",
   "templates": [
     {
@@ -9,6 +11,7 @@
       "description": "模糊背景，双行参数",
       "builtIn": true,
       "cover": "/demo.jpg",
+      "updatedAt": 0,
       "layouts": {
         "landscape": {
           "version": 1,
@@ -137,7 +140,7 @@
               "region": "canvas",
               "x": 0.632430117739532,
               "y": 0.9279862009486849,
-              "fontFamily": "monospace",
+              "fontFamily": "Space Mono",
               "fontSize": 24,
               "fontWeight": 500,
               "color": "#ffffff",
@@ -177,6 +180,18 @@
               "rotation": 0,
               "visible": true
             }
+          ],
+          "distributions": [
+            {
+              "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791943429728-6"
+              ]
+            }
           ]
         },
         "portrait": {
@@ -189,7 +204,7 @@
             "paddingX": 4,
             "paddingY": 4,
             "radius": 10,
-            "shadow": 32
+            "shadow": 60
           },
           "regions": {
             "top": {
@@ -199,7 +214,7 @@
               "direction": 0
             },
             "bottom": {
-              "enabled": true,
+              "enabled": false,
               "extra": 13,
               "safePadding": 2,
               "direction": 0
@@ -219,47 +234,31 @@
           },
           "layers": [
             {
-              "id": "brand",
-              "name": "品牌文字",
-              "source": "custom",
-              "customValue": "LUMIX",
-              "region": "bottom",
-              "x": 0.13,
-              "y": 0.36,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
-              "fontSize": 36,
-              "fontWeight": 700,
-              "color": "#ffffff",
-              "opacity": 1,
-              "rotation": 0,
-              "visible": true
-            },
-            {
               "id": "camera",
               "name": "相机型号",
               "source": "camera",
               "customValue": "",
-              "region": "bottom",
-              "x": 0.13,
-              "y": 0.69,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
-              "fontSize": 16,
+              "region": "canvas",
+              "x": 0.5,
+              "y": 0.8854525418044176,
+              "fontFamily": "Allura, Long Cang, sans-serif",
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
               "rotation": 0,
-              "visible": true
+              "visible": false
             },
             {
               "id": "focal",
               "name": "焦距",
               "source": "focalLength",
               "customValue": "",
-              "region": "bottom",
-              "x": 0.57,
-              "y": 0.36,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
-              "fontSize": 18,
+              "region": "canvas",
+              "x": 0.2697715600966865,
+              "y": 0.9279862009486849,
+              "fontFamily": "Cinzel, Long Cang, sans-serif",
+              "fontSize": 22,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
@@ -271,11 +270,11 @@
               "name": "光圈",
               "source": "aperture",
               "customValue": "",
-              "region": "bottom",
-              "x": 0.67,
-              "y": 0.36,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
-              "fontSize": 18,
+              "region": "canvas",
+              "x": 0.3649222753983686,
+              "y": 0.9279862009486849,
+              "fontFamily": "Cinzel, Long Cang, sans-serif",
+              "fontSize": 22,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
@@ -287,11 +286,11 @@
               "name": "快门",
               "source": "shutter",
               "customValue": "",
-              "region": "bottom",
-              "x": 0.78,
-              "y": 0.36,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
-              "fontSize": 18,
+              "region": "canvas",
+              "x": 0.4643208327116789,
+              "y": 0.9279862009486849,
+              "fontFamily": "Cinzel, Long Cang, sans-serif",
+              "fontSize": 22,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
@@ -303,11 +302,11 @@
               "name": "ISO",
               "source": "iso",
               "customValue": "",
-              "region": "bottom",
-              "x": 0.88,
-              "y": 0.36,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
-              "fontSize": 18,
+              "region": "canvas",
+              "x": 0.5744955919089412,
+              "y": 0.9279862009486849,
+              "fontFamily": "Cinzel, Long Cang, sans-serif",
+              "fontSize": 22,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
@@ -319,21 +318,64 @@
               "name": "拍摄时间",
               "source": "capturedAt",
               "customValue": "",
-              "region": "bottom",
-              "x": 0.73,
-              "y": 0.69,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
-              "fontSize": 14,
+              "region": "canvas",
+              "x": 0.632430117739532,
+              "y": 0.9279862009486849,
+              "fontFamily": "Space Mono",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "layer-1791943429728-6",
+              "name": "拍摄日期",
+              "source": "capturedDate",
+              "customValue": "",
+              "region": "canvas",
+              "x": 0.7053254744989443,
+              "y": 0.9279862009486849,
+              "fontFamily": "Cinzel, Long Cang, sans-serif",
+              "fontSize": 22,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "layer-1791943653925-7",
+              "name": "相机厂商",
+              "source": "make",
+              "customValue": "",
+              "region": "canvas",
+              "x": 0.5,
+              "y": 0.8854525418044176,
+              "fontFamily": "Allura, Long Cang, sans-serif",
+              "fontSize": 40,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
               "rotation": 0,
               "visible": true
             }
+          ],
+          "distributions": [
+            {
+              "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791943429728-6"
+              ]
+            }
           ]
         }
-      },
-      "updatedAt": 0
+      }
     },
     {
       "id": "wide-float",
@@ -341,6 +383,7 @@
       "description": "宽留白，柔和阴影",
       "builtIn": true,
       "cover": "/demo.jpg",
+      "updatedAt": 0,
       "layouts": {
         "landscape": {
           "version": 1,
@@ -389,7 +432,7 @@
               "region": "bottom",
               "x": 0.5,
               "y": 0.3333333333333333,
-              "fontFamily": "Noto Serif CJK SC, serif",
+              "fontFamily": "Long Cang, serif",
               "fontSize": 24,
               "fontWeight": 400,
               "color": "#ffffff",
@@ -403,8 +446,8 @@
               "source": "focalLength",
               "customValue": "",
               "region": "bottom",
-              "x": 0.3363710427450909,
-              "y": 0.6604166666666667,
+              "x": 0.3156933771511473,
+              "y": 0.6666666666666666,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 24,
               "fontWeight": 500,
@@ -419,8 +462,8 @@
               "source": "aperture",
               "customValue": "",
               "region": "bottom",
-              "x": 0.4013777524929162,
-              "y": 0.6729166666666667,
+              "x": 0.393677714859665,
+              "y": 0.6666666666666666,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 24,
               "fontWeight": 500,
@@ -435,8 +478,8 @@
               "source": "shutter",
               "customValue": "",
               "region": "bottom",
-              "x": 0.4736139310024097,
-              "y": 0.6729166666666667,
+              "x": 0.47467693190976795,
+              "y": 0.6666666666666666,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 24,
               "fontWeight": 500,
@@ -451,8 +494,8 @@
               "source": "iso",
               "customValue": "",
               "region": "bottom",
-              "x": 0.5494648438927372,
-              "y": 0.6729166666666667,
+              "x": 0.5633244882888665,
+              "y": 0.6666666666666666,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
               "fontSize": 24,
               "fontWeight": 500,
@@ -469,7 +512,7 @@
               "region": "bottom",
               "x": 0.6005243667740239,
               "y": 0.6729166666666667,
-              "fontFamily": "monospace",
+              "fontFamily": "Space Mono",
               "fontSize": 24,
               "fontWeight": 500,
               "color": "#ffffff",
@@ -499,15 +542,27 @@
               "source": "capturedDate",
               "customValue": "",
               "region": "bottom",
-              "x": 0.6408576226381528,
-              "y": 0.66,
+              "x": 0.6666318940876164,
+              "y": 0.6666666666666666,
               "fontFamily": "Cinzel, Long Cang, sans-serif",
-              "fontSize": 22,
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
               "rotation": 0,
               "visible": true
+            }
+          ],
+          "distributions": [
+            {
+              "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791943846920-7"
+              ]
             }
           ]
         },
@@ -516,10 +571,10 @@
           "frame": {
             "type": "blur",
             "color": "#f4f4f1",
-            "blur": 70,
-            "brightness": 65,
-            "paddingX": 6,
-            "paddingY": 6,
+            "blur": 30,
+            "brightness": 55,
+            "paddingX": 8,
+            "paddingY": 5,
             "radius": 12,
             "shadow": 64
           },
@@ -532,7 +587,7 @@
             },
             "bottom": {
               "enabled": true,
-              "extra": 4,
+              "extra": 10,
               "safePadding": 2,
               "direction": 0
             },
@@ -551,15 +606,31 @@
           },
           "layers": [
             {
+              "id": "camera",
+              "name": "相机型号",
+              "source": "camera",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.5,
+              "y": 0.3333333333333333,
+              "fontFamily": "Long Cang, serif",
+              "fontSize": 24,
+              "fontWeight": 400,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
               "id": "focal",
               "name": "焦距",
               "source": "focalLength",
               "customValue": "",
               "region": "bottom",
-              "x": 0.25768918551519077,
-              "y": 0.5,
-              "fontFamily": "monospace",
-              "fontSize": 30,
+              "x": 0.29369793433564967,
+              "y": 0.6633333333333333,
+              "fontFamily": "Cinzel, Long Cang, sans-serif",
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
@@ -572,10 +643,10 @@
               "source": "aperture",
               "customValue": "",
               "region": "bottom",
-              "x": 0.35875530704330966,
-              "y": 0.5,
-              "fontFamily": "monospace",
-              "fontSize": 30,
+              "x": 0.3765726771950591,
+              "y": 0.6633333333333333,
+              "fontFamily": "Cinzel, Long Cang, sans-serif",
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
@@ -588,10 +659,10 @@
               "source": "shutter",
               "customValue": "",
               "region": "bottom",
-              "x": 0.453125,
-              "y": 0.5,
-              "fontFamily": "monospace",
-              "fontSize": 30,
+              "x": 0.4637618163536335,
+              "y": 0.67,
+              "fontFamily": "Cinzel, Long Cang, sans-serif",
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
@@ -604,10 +675,10 @@
               "source": "iso",
               "customValue": "",
               "region": "bottom",
-              "x": 0.5541911215281189,
-              "y": 0.5,
-              "fontFamily": "monospace",
-              "fontSize": 30,
+              "x": 0.5618959928278394,
+              "y": 0.67,
+              "fontFamily": "Cinzel, Long Cang, sans-serif",
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
@@ -620,27 +691,71 @@
               "source": "capturedAt",
               "customValue": "",
               "region": "bottom",
-              "x": 0.7021322430562378,
-              "y": 0.5,
-              "fontFamily": "monospace",
-              "fontSize": 30,
+              "x": 0.6005243667740239,
+              "y": 0.6729166666666667,
+              "fontFamily": "Space Mono",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "layer-1791943822339-6",
+              "name": "相机厂商",
+              "source": "make",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.5,
+              "y": 0.3333333333333333,
+              "fontFamily": "Allura, Long Cang, sans-serif",
+              "fontSize": 40,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "layer-1791943846920-7",
+              "name": "拍摄日期",
+              "source": "capturedDate",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.6810089193336155,
+              "y": 0.67,
+              "fontFamily": "Cinzel, Long Cang, sans-serif",
+              "fontSize": 24,
               "fontWeight": 500,
               "color": "#ffffff",
               "opacity": 1,
               "rotation": 0,
               "visible": true
             }
+          ],
+          "distributions": [
+            {
+              "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791943846920-7"
+              ]
+            }
           ]
         }
-      },
-      "updatedAt": 0
+      }
     },
     {
       "id": "solid-white",
-      "name": "纯白相框",
+      "name": "纯白相框-壹",
       "description": "白色背景，深色文字",
       "builtIn": true,
       "cover": "/demo.jpg",
+      "updatedAt": 0,
       "layouts": {
         "landscape": {
           "version": 1,
@@ -689,7 +804,7 @@
               "region": "bottom",
               "x": 0.12999999999999998,
               "y": 0.3400000000000011,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontFamily": "Long Cang, sans-serif",
               "fontSize": 36,
               "fontWeight": 700,
               "color": "#202522",
@@ -705,7 +820,7 @@
               "region": "bottom",
               "x": 0.08284145491371094,
               "y": 0.4526470588235297,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "fontFamily": "Long Cang, sans-serif",
               "fontSize": 16,
               "fontWeight": 500,
               "color": "#202522",
@@ -719,10 +834,10 @@
               "source": "focalLength",
               "customValue": "",
               "region": "bottom",
-              "x": 0.23809018914378904,
+              "x": 0.23925227147789704,
               "y": 0.49875000000000114,
-              "fontFamily": "monospace",
-              "fontSize": 32,
+              "fontFamily": "Space Mono",
+              "fontSize": 30,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -735,10 +850,10 @@
               "source": "aperture",
               "customValue": "",
               "region": "bottom",
-              "x": 0.34735390503532904,
+              "x": 0.34057552600546354,
               "y": 0.49875000000000114,
-              "fontFamily": "monospace",
-              "fontSize": 32,
+              "fontFamily": "Space Mono",
+              "fontSize": 30,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -751,10 +866,10 @@
               "source": "shutter",
               "customValue": "",
               "region": "bottom",
-              "x": 0.4566176209268691,
+              "x": 0.45932914637312106,
               "y": 0.49875000000000114,
-              "fontFamily": "monospace",
-              "fontSize": 32,
+              "fontFamily": "Space Mono",
+              "fontSize": 30,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -767,10 +882,10 @@
               "source": "iso",
               "customValue": "",
               "region": "bottom",
-              "x": 0.5720788195431421,
+              "x": 0.5838928886874755,
               "y": 0.49875000000000114,
-              "fontFamily": "monospace",
-              "fontSize": 32,
+              "fontFamily": "Space Mono",
+              "fontSize": 30,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -785,7 +900,7 @@
               "region": "bottom",
               "x": 0.7307788162193415,
               "y": 0.5025000000000006,
-              "fontFamily": "monospace",
+              "fontFamily": "Space Mono",
               "fontSize": 32,
               "fontWeight": 500,
               "color": "#202522",
@@ -799,15 +914,27 @@
               "source": "capturedDate",
               "customValue": "",
               "region": "bottom",
-              "x": 0.724724914507813,
+              "x": 0.725886996841921,
               "y": 0.5012499999999989,
-              "fontFamily": "Space Mono, Long Cang, monospace",
-              "fontSize": 32,
+              "fontFamily": "Space Mono, Long Cang",
+              "fontSize": 30,
               "fontWeight": 500,
               "color": "#000000",
               "opacity": 1,
               "rotation": 0,
               "visible": true
+            }
+          ],
+          "distributions": [
+            {
+              "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1792035071572-7"
+              ]
             }
           ]
         },
@@ -832,7 +959,7 @@
             },
             "bottom": {
               "enabled": true,
-              "extra": 13,
+              "extra": 4,
               "safePadding": 2,
               "direction": 0
             },
@@ -856,15 +983,15 @@
               "source": "custom",
               "customValue": "LUMIX",
               "region": "bottom",
-              "x": 0.13,
-              "y": 0.36,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "x": 0.12999999999999998,
+              "y": 0.3400000000000011,
+              "fontFamily": "Long Cang, sans-serif",
               "fontSize": 36,
               "fontWeight": 700,
               "color": "#202522",
               "opacity": 1,
               "rotation": 0,
-              "visible": true
+              "visible": false
             },
             {
               "id": "camera",
@@ -872,15 +999,15 @@
               "source": "camera",
               "customValue": "",
               "region": "bottom",
-              "x": 0.13,
-              "y": 0.69,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
+              "x": 0.08284145491371094,
+              "y": 0.4526470588235297,
+              "fontFamily": "Long Cang, sans-serif",
               "fontSize": 16,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
               "rotation": 0,
-              "visible": true
+              "visible": false
             },
             {
               "id": "focal",
@@ -888,10 +1015,10 @@
               "source": "focalLength",
               "customValue": "",
               "region": "bottom",
-              "x": 0.57,
-              "y": 0.36,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
-              "fontSize": 18,
+              "x": 0.2063004896598133,
+              "y": 0.49937500000000057,
+              "fontFamily": "Space Mono",
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -904,10 +1031,10 @@
               "source": "aperture",
               "customValue": "",
               "region": "bottom",
-              "x": 0.67,
-              "y": 0.36,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
-              "fontSize": 18,
+              "x": 0.31631687024132876,
+              "y": 0.49937500000000057,
+              "fontFamily": "Space Mono",
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -920,10 +1047,10 @@
               "source": "shutter",
               "customValue": "",
               "region": "bottom",
-              "x": 0.78,
-              "y": 0.36,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
-              "fontSize": 18,
+              "x": 0.448433275575991,
+              "y": 0.49937500000000057,
+              "fontFamily": "Space Mono",
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -936,10 +1063,10 @@
               "source": "iso",
               "customValue": "",
               "region": "bottom",
-              "x": 0.88,
-              "y": 0.36,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
-              "fontSize": 18,
+              "x": 0.5879163558283688,
+              "y": 0.49937500000000057,
+              "fontFamily": "Space Mono",
+              "fontSize": 26,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
@@ -952,20 +1079,791 @@
               "source": "capturedAt",
               "customValue": "",
               "region": "bottom",
-              "x": 0.73,
-              "y": 0.69,
-              "fontFamily": "Noto Sans CJK SC, sans-serif",
-              "fontSize": 14,
+              "x": 0.7307788162193415,
+              "y": 0.5025000000000006,
+              "fontFamily": "Space Mono",
+              "fontSize": 32,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "layer-1792035071572-7",
+              "name": "拍摄日期",
+              "source": "capturedDate",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.7494994608338933,
+              "y": 0.5006249999999994,
+              "fontFamily": "Space Mono, Long Cang",
+              "fontSize": 26,
+              "fontWeight": 500,
+              "color": "#000000",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            }
+          ],
+          "distributions": [
+            {
+              "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1792035071572-7"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "blur-bottom-no-camera",
+      "name": "模糊-底部文字-无相机标识",
+      "description": "横图布局，自定义模板",
+      "builtIn": true,
+      "cover": "/demo.jpg",
+      "updatedAt": 0,
+      "layouts": {
+        "landscape": {
+          "version": 1,
+          "frame": {
+            "type": "blur",
+            "color": "#f4f4f1",
+            "blur": 25,
+            "brightness": 55,
+            "paddingX": 5,
+            "paddingY": 5,
+            "radius": 12,
+            "shadow": 100
+          },
+          "regions": {
+            "top": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "bottom": {
+              "enabled": true,
+              "extra": 3,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "left": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": -90
+            },
+            "right": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 90
+            }
+          },
+          "layers": [
+            {
+              "id": "brand",
+              "name": "品牌文字",
+              "source": "custom",
+              "customValue": "LUMIX",
+              "region": "bottom",
+              "x": 0.4621328843889402,
+              "y": 0.33,
+              "fontFamily": "Long Cang, serif",
+              "fontSize": 24,
+              "fontWeight": 400,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "camera",
+              "name": "相机型号",
+              "source": "camera",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.49088791812899646,
+              "y": 0.3333333333333333,
+              "fontFamily": "Long Cang, serif",
+              "fontSize": 24,
+              "fontWeight": 400,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "focal",
+              "name": "焦距",
+              "source": "focalLength",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.31068720973332054,
+              "y": 0.496875,
+              "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
+              "fontSize": 30,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "aperture",
+              "name": "光圈",
+              "source": "aperture",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.39080768901506724,
+              "y": 0.503125,
+              "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
+              "fontSize": 30,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "shutter",
+              "name": "快门",
+              "source": "shutter",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.472925043106079,
+              "y": 0.503125,
+              "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
+              "fontSize": 30,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "iso",
+              "name": "ISO",
+              "source": "iso",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.5663298813660972,
+              "y": 0.503125,
+              "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
+              "fontSize": 30,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "date",
+              "name": "拍摄时间",
+              "source": "capturedAt",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.6374825060165945,
+              "y": 0.496875,
+              "fontFamily": "Space Mono",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "layer-1791551950179-7",
+              "name": "拍摄日期",
+              "source": "capturedDate",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.6735253175417648,
+              "y": 0.5,
+              "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
+              "fontSize": 30,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            }
+          ],
+          "distributions": [
+            {
+              "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791551950179-7"
+              ]
+            }
+          ]
+        },
+        "portrait": {
+          "version": 1,
+          "frame": {
+            "type": "blur",
+            "color": "#f4f4f1",
+            "blur": 25,
+            "brightness": 55,
+            "paddingX": 5,
+            "paddingY": 5,
+            "radius": 12,
+            "shadow": 100
+          },
+          "regions": {
+            "top": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "bottom": {
+              "enabled": true,
+              "extra": 3,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "left": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": -90
+            },
+            "right": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 90
+            }
+          },
+          "layers": [
+            {
+              "id": "brand",
+              "name": "品牌文字",
+              "source": "custom",
+              "customValue": "LUMIX",
+              "region": "bottom",
+              "x": 0.4621328843889402,
+              "y": 0.33,
+              "fontFamily": "Long Cang, serif",
+              "fontSize": 24,
+              "fontWeight": 400,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "camera",
+              "name": "相机型号",
+              "source": "camera",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.49088791812899646,
+              "y": 0.3333333333333333,
+              "fontFamily": "Long Cang, serif",
+              "fontSize": 24,
+              "fontWeight": 400,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "focal",
+              "name": "焦距",
+              "source": "focalLength",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.2823959469716156,
+              "y": 0.496875,
+              "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
+              "fontSize": 30,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "aperture",
+              "name": "光圈",
+              "source": "aperture",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.37005482315621796,
+              "y": 0.503125,
+              "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
+              "fontSize": 30,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "shutter",
+              "name": "快门",
+              "source": "shutter",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.46061824451793326,
+              "y": 0.503125,
+              "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
+              "fontSize": 30,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "iso",
+              "name": "ISO",
+              "source": "iso",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.5675998246709304,
+              "y": 0.503125,
+              "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
+              "fontSize": 30,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "date",
+              "name": "拍摄时间",
+              "source": "capturedAt",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.6374825060165945,
+              "y": 0.496875,
+              "fontFamily": "Space Mono",
+              "fontSize": 24,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "layer-1791551950179-7",
+              "name": "拍摄日期",
+              "source": "capturedDate",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.6946404563375996,
+              "y": 0.5,
+              "fontFamily": "Cormorant Garamond, Long Cang, sans-serif",
+              "fontSize": 30,
+              "fontWeight": 500,
+              "color": "#ffffff",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            }
+          ],
+          "distributions": [
+            {
+              "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791551950179-7"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "solid-white-two",
+      "name": "纯白相框-贰",
+      "description": "横图布局，自定义模板",
+      "builtIn": true,
+      "cover": "/demo.jpg",
+      "updatedAt": 0,
+      "layouts": {
+        "landscape": {
+          "version": 1,
+          "frame": {
+            "type": "solid",
+            "color": "#f7f7f4",
+            "blur": 32,
+            "brightness": 75,
+            "paddingX": 0,
+            "paddingY": 0,
+            "radius": 0,
+            "shadow": 0
+          },
+          "regions": {
+            "top": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "bottom": {
+              "enabled": true,
+              "extra": 7,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "left": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": -90
+            },
+            "right": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 90
+            }
+          },
+          "layers": [
+            {
+              "id": "brand",
+              "name": "品牌文字",
+              "source": "custom",
+              "customValue": "LUMIX",
+              "region": "bottom",
+              "x": 0.12999999999999998,
+              "y": 0.3400000000000011,
+              "fontFamily": "Long Cang, sans-serif",
+              "fontSize": 36,
+              "fontWeight": 700,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "camera",
+              "name": "相机型号",
+              "source": "camera",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.08284145491371094,
+              "y": 0.4526470588235297,
+              "fontFamily": "Long Cang, sans-serif",
+              "fontSize": 16,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "focal",
+              "name": "焦距",
+              "source": "focalLength",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.24000820140502643,
+              "y": 0.49875000000000197,
+              "fontFamily": "Space Mono",
+              "fontSize": 30,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "aperture",
+              "name": "光圈",
+              "source": "aperture",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.3394041251165757,
+              "y": 0.49875000000000197,
+              "fontFamily": "Space Mono",
+              "fontSize": 30,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "shutter",
+              "name": "快门",
+              "source": "shutter",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.4571600341796875,
+              "y": 0.49875000000000197,
+              "fontFamily": "Space Mono",
+              "fontSize": 30,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "iso",
+              "name": "ISO",
+              "source": "iso",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.5810359383599868,
+              "y": 0.49875000000000197,
+              "fontFamily": "Space Mono",
+              "fontSize": 30,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "date",
+              "name": "拍摄时间",
+              "source": "capturedAt",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.7307788162193415,
+              "y": 0.5025000000000006,
+              "fontFamily": "Space Mono",
+              "fontSize": 32,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "layer-1791818240880-7",
+              "name": "拍摄日期",
+              "source": "capturedDate",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.7232718278918485,
+              "y": 0.5012499999999981,
+              "fontFamily": "Space Mono",
+              "fontSize": 30,
               "fontWeight": 500,
               "color": "#202522",
               "opacity": 1,
               "rotation": 0,
               "visible": true
             }
+          ],
+          "distributions": [
+            {
+              "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791818240880-7"
+              ]
+            }
+          ]
+        },
+        "portrait": {
+          "version": 1,
+          "frame": {
+            "type": "solid",
+            "color": "#f7f7f4",
+            "blur": 32,
+            "brightness": 75,
+            "paddingX": 0,
+            "paddingY": 0,
+            "radius": 0,
+            "shadow": 0
+          },
+          "regions": {
+            "top": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "bottom": {
+              "enabled": true,
+              "extra": 7,
+              "safePadding": 2,
+              "direction": 0
+            },
+            "left": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": -90
+            },
+            "right": {
+              "enabled": false,
+              "extra": 0,
+              "safePadding": 2,
+              "direction": 90
+            }
+          },
+          "layers": [
+            {
+              "id": "brand",
+              "name": "品牌文字",
+              "source": "custom",
+              "customValue": "LUMIX",
+              "region": "bottom",
+              "x": 0.12999999999999998,
+              "y": 0.3400000000000011,
+              "fontFamily": "Long Cang, sans-serif",
+              "fontSize": 36,
+              "fontWeight": 700,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "camera",
+              "name": "相机型号",
+              "source": "camera",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.08284145491371094,
+              "y": 0.4526470588235297,
+              "fontFamily": "Long Cang, sans-serif",
+              "fontSize": 16,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "focal",
+              "name": "焦距",
+              "source": "focalLength",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.20489820471592796,
+              "y": 0.4993750000000026,
+              "fontFamily": "Space Mono",
+              "fontSize": 26,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "aperture",
+              "name": "光圈",
+              "source": "aperture",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.3126690578022999,
+              "y": 0.4993750000000026,
+              "fontFamily": "Space Mono",
+              "fontSize": 26,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "shutter",
+              "name": "快门",
+              "source": "shutter",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.4443079376220703,
+              "y": 0.4993750000000026,
+              "fontFamily": "Space Mono",
+              "fontSize": 26,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "iso",
+              "name": "ISO",
+              "source": "iso",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.5839028263529735,
+              "y": 0.4993750000000026,
+              "fontFamily": "Space Mono",
+              "fontSize": 26,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            },
+            {
+              "id": "date",
+              "name": "拍摄时间",
+              "source": "capturedAt",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.7307788162193415,
+              "y": 0.5025000000000006,
+              "fontFamily": "Space Mono",
+              "fontSize": 32,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": false
+            },
+            {
+              "id": "layer-1791818240880-7",
+              "name": "拍摄日期",
+              "source": "capturedDate",
+              "customValue": "",
+              "region": "bottom",
+              "x": 0.7473657418172752,
+              "y": 0.5006249999999974,
+              "fontFamily": "Space Mono",
+              "fontSize": 26,
+              "fontWeight": 500,
+              "color": "#202522",
+              "opacity": 1,
+              "rotation": 0,
+              "visible": true
+            }
+          ],
+          "distributions": [
+            {
+              "axis": "x",
+              "layerIds": [
+                "focal",
+                "aperture",
+                "shutter",
+                "iso",
+                "layer-1791818240880-7"
+              ]
+            }
           ]
         }
-      },
-      "updatedAt": 0
+      }
     }
   ]
 }

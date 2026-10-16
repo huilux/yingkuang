@@ -5,6 +5,7 @@
   const { default: React } = await import(moduleUrl('react'));
   const { default: { createRoot } } = await import(moduleUrl('react-dom_client'));
   const { builtInTemplates } = await import('/src/editor-model.ts');
+  const {bundledCatalog}=await import('/src/builtin-template-catalog.ts');
   const { serializeTemplateBackup } = await import('/src/template-library.ts');
   const templates = builtInTemplates();
   const incoming = [1, 2].map(index => ({ ...structuredClone(templates[0]), id: `incoming-${index}`, name: `导入边界 ${index}`, builtIn: false }));
@@ -20,7 +21,8 @@
   try {
     const { TemplateManager } = await import(`/src/TemplateManager.tsx?template-import=${Date.now()}`);
     root.render(React.createElement(TemplateManager, {
-      templates, defaultTemplateId: templates[0].id,
+      templates, defaultTemplateId: templates[0].id,officialCatalog:bundledCatalog(),overrideBases:{},
+      updates:{native:false,current:{version:'2026.10.1',revision:1},previousVersion:null,candidate:null,busy:false,message:'',error:'',ready:true,canApply:true,check(){},install(){},importPackage(){},rollback(){}},
       onClose() {}, onDefaultChange() {}, onRename() {}, onDuplicate() {}, onDelete() {}, onReset() {},
       onImport: (...args) => imports.push(args),
     }));

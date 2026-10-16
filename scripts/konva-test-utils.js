@@ -2,6 +2,14 @@
 // but drive user actions through DOM mouse/wheel/input events.
 export const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 export const assert = (condition, message) => { if (!condition) throw new Error(message); };
+// Export/batch tests need editable custom text regardless of published styles.
+export function withBrandFixture(document) {
+  if (!document.layers.some(layer => layer.id === 'brand')) document.layers.unshift({
+    ...document.layers[0], id:'brand', name:'品牌文字', source:'custom', customValue:'LUMIX', visible:true,
+    fontFamily:'Space Mono', fontSize:24, x:.5, y:1/3,
+  });
+  return document;
+}
 export const near = (actual, expected, message, tolerance = 0.5) => assert(Math.abs(actual - expected) <= tolerance, `${message}: ${actual} != ${expected}`);
 export async function waitFor(predicate, message = 'Timed out', timeout = 5000) {
   const start = performance.now();

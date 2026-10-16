@@ -5,7 +5,7 @@
  const moduleUrl=name=>performance.getEntriesByType('resource').find(e=>e.name.includes(`/deps/${name}.js?`)).name;
  const {default:React}=await import(moduleUrl('react'));
  const {default:{createRoot}}=await import(moduleUrl('react-dom_client'));
- const keys=['yingkuang-session-v2','yingkuang-templates-v2','yingkuang-templates-v1','yingkuang-default-template-v1'];
+ const keys=['yingkuang-session-v2','yingkuang-templates-v3','yingkuang-templates-v1','yingkuang-default-template-v1'];
  const saved=keys.map(key=>[key,localStorage.getItem(key)]);keys.forEach(key=>localStorage.removeItem(key));
  const fileName='a'.repeat(249)+'.JPG';
  const photos=Array.from({length:200},(_,i)=>({id:`p-${i}`,path:`/fixtures/${i}/${fileName}`,fileName,width:600,height:400,megapixels:.24,thumbnailDataUrl:'/demo.jpg',metadata:{}}));

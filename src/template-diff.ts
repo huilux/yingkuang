@@ -59,6 +59,9 @@ function compareDocument(changes: TemplateChange[], orientation: string, builtIn
     if (builtIn !== local) changes.push({ group: `${orientation}布局`, field: "布局", builtInValue: builtIn ? "存在" : "无", localValue: local ? "存在" : "无" });
     return;
   }
+  if (JSON.stringify(builtIn.distributions ?? []) !== JSON.stringify(local.distributions ?? [])) {
+    changes.push({group:`${orientation} · 排版`,field:"等间距规则",builtInValue:`${builtIn.distributions?.length ?? 0} 组`,localValue:`${local.distributions?.length ?? 0} 组（已修改）`});
+  }
   for (const [key, label] of frameFields) compareField(changes, `${orientation} · 相框`, key, label, builtIn.frame[key], local.frame[key]);
   for (const region of ["top", "bottom", "left", "right"] as const) {
     for (const [key, label] of regionFields) {

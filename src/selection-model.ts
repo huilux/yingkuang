@@ -1,4 +1,5 @@
-import type { CanvasGeometry, Rect, WatermarkLayer } from "./types";
+import type { CanvasGeometry, EditorDocument, Rect, WatermarkLayer } from "./types";
+import { safeRect } from "./canvas-camera.ts";
 
 export type LayerPatch = { id: string; patch: Partial<WatermarkLayer> };
 export type Point = { x: number; y: number };
@@ -35,7 +36,7 @@ export function moveSelection(layers: WatermarkLayer[], geometry: CanvasGeometry
   });
 }
 
-export function arrangeSelection(action: ArrangeAction, reference: AlignReference, measured: MeasuredLayer[], layers: WatermarkLayer[], geometry: CanvasGeometry): LayerPatch[] {
+export function arrangeSelection(action: ArrangeAction, reference: AlignReference, measured: MeasuredLayer[], layers: WatermarkLayer[], geometry: CanvasGeometry, regions?: EditorDocument["regions"]): LayerPatch[] {
   const group = unionBounds(measured);
   if (!group) return [];
   const selected = new Map(layers.map(layer => [layer.id, layer]));
@@ -55,7 +56,9 @@ export function arrangeSelection(action: ArrangeAction, reference: AlignReferenc
       return patch(item, axis === "x" ? delta : 0, axis === "y" ? delta : 0);
     });
   }
-  const rect = reference === "selection" ? group : reference === "photo" ? geometry.photo : geometry.regions[reference];
+  const rawRect = reference === "selection" ? group : reference === "photo" ? geometry.photo : geometry.regions[reference];
+  const rect = regions && reference !== "selection" && reference !== "photo" && reference !== "canvas"
+    ? safeRect(rawRect, regions[reference].safePadding) : rawRect;
   const thirds = action === "third-1" || action === "third-2";
   const axis = thirds ? (reference === "left" || reference === "right" ? "x" : "y") : ["left", "center-x", "right"].includes(action) ? "x" : "y";
   const dimension = axis === "x" ? "width" : "height";

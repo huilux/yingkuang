@@ -4,7 +4,7 @@
  const moduleUrl=name=>performance.getEntriesByType('resource').find(e=>e.name.includes(`/deps/${name}.js?`)).name;
  const {default:React}=await import(moduleUrl('react'));
  const {default:{createRoot}}=await import(moduleUrl('react-dom_client'));
- const keys=['yingkuang-session-v2','yingkuang-templates-v2','yingkuang-templates-v1','yingkuang-default-template-v1'];
+ const keys=['yingkuang-session-v2','yingkuang-templates-v3','yingkuang-templates-v1','yingkuang-default-template-v1'];
  const saved=keys.map(key=>[key,localStorage.getItem(key)]); keys.forEach(key=>localStorage.removeItem(key));
  const fixtures=Array.from({length:200},(_,i)=>({id:`photo-${i}`,path:`/fixtures/photo-${i}.jpg`,fileName:`旅行-${String(i).padStart(3,'0')}-${'长文件名'.repeat(15)}.JPG`,width:i%3===1?4000:6000,height:i%3===0?4000:6000,megapixels:24,thumbnailDataUrl:'/demo.jpg',metadata:{camera:'CAMERA'}}));
  localStorage.setItem(keys[0],JSON.stringify({paths:fixtures.map(p=>p.path),activePath:fixtures[0].path,checkedPaths:fixtures.map(p=>p.path)}));

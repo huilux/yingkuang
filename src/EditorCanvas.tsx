@@ -25,12 +25,13 @@ export interface EditorCanvasProps {
   onZoomChange: (zoom: number) => void;
   onSelectionChange: (ids: string[]) => void;
   onLayersCommit: (patches: LayerPatch[]) => void;
+  onArrangeCommit?: (patches: LayerPatch[], action: ArrangeAction) => void;
 }
 
 // React owns document changes. Konva owns transient camera/drag positions.
 // These must not be sent through the document store on each input event.
 export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProps>(function EditorCanvas({
-  photo, document: design, selectedLayerIds, snapEnabled, onZoomChange, onSelectionChange, onLayersCommit,
+  photo, document: design, selectedLayerIds, snapEnabled, onZoomChange, onSelectionChange, onLayersCommit, onArrangeCommit,
 }, ref) {
   const helpId = useId();
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -111,8 +112,10 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
   }
   useImperativeHandle(ref, () => ({ setZoom, fit, isInteracting: () => !!drag.current || !!pan.current, arrange(action, reference) {
     if (drag.current || pan.current) return;
-    const patches = arrangeSelection(action, reference, measureSelection(), design.layers, geometry);
-    if (patches.length) onLayersCommit(patches);
+    const patches = arrangeSelection(action, reference, measureSelection(), design.layers, geometry, design.regions);
+    if (patches.length) {
+      if (onArrangeCommit) onArrangeCommit(patches, action); else onLayersCommit(patches);
+    }
   } }));
 
   useLayoutEffect(() => {

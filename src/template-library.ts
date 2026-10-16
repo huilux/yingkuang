@@ -1,8 +1,9 @@
 import { builtInTemplates, cloneDocument, photoOrientation } from "./editor-model.ts";
-import { builtInDefaultTemplateId, isBuiltInModified, isValidTemplate } from "./builtin-template-catalog.ts";
+import { bundledCatalog, parseBuiltInCatalog, builtInDefaultTemplateId, isBuiltInModified, isValidTemplate, type BuiltInTemplateCatalog } from "./builtin-template-catalog.ts";
 import type { EditorDocument, PhotoAsset, TemplateRecord } from "./types";
 
-export const templatesKey = "yingkuang-templates-v2";
+export const templatesKey = "yingkuang-templates-v3";
+const previousTemplatesKey = "yingkuang-templates-v2";
 const legacyTemplatesKey = "yingkuang-templates-v1";
 export const defaultTemplateKey = "yingkuang-default-template-v1";
 const backupFormat = "yingkuang-template-backup";
@@ -57,22 +58,45 @@ function mergeTemplates(builtIns: TemplateRecord[], overrides: unknown[], custom
   ];
 }
 
-export function readTemplateLibrary(): { templates: TemplateRecord[]; canPersist: boolean; issue: string } {
-  const builtIns = builtInTemplates();
-  const result = (templates: TemplateRecord[], valid: boolean) => ({ templates, canPersist: valid,
-    issue: valid ? "" : "模板库包含无法读取的内容，原始记录已保留；本次模板修改请导出备份保存。" });
+export type OverrideBases = Record<string, TemplateRecord>;
+export type TemplateLibrary = { templates: TemplateRecord[]; canPersist: boolean; issue: string; catalog: BuiltInTemplateCatalog; overrideBases: OverrideBases; referenceMap:Record<string,string> };
+
+export function readTemplateLibrary(): TemplateLibrary {
+  let catalog = bundledCatalog();
+  let overrideBases: OverrideBases = {};
+  let referenceMap:Record<string,string> = {};
+  const result = (templates: TemplateRecord[], valid: boolean) => {
+    const bundled = bundledCatalog();
+    if(valid && (catalog.revision ?? 0) < (bundled.revision ?? 0)) {
+      const updated=rebaseTemplateLibrary(templates,catalog,bundled,overrideBases);
+      templates=updated.templates;overrideBases=updated.overrideBases;catalog=bundled;referenceMap=updated.idMap;
+    }
+    return { templates, canPersist: valid, catalog, overrideBases,referenceMap,
+      issue: valid ? "" : "模板库包含无法读取的内容，原始记录已保留；本次模板修改请导出备份保存。" };
+  };
   try {
-    const stored = localStorage.getItem(templatesKey);
+    const stored = localStorage.getItem(templatesKey) ?? localStorage.getItem(previousTemplatesKey);
     if (stored) {
       const saved: unknown = JSON.parse(stored);
-      if (!record(saved) || saved.version !== 2 || !Array.isArray(saved.overrides) || !Array.isArray(saved.custom)) return result(builtIns, false);
+      if (!record(saved) || ![2,3].includes(saved.version as number) || !Array.isArray(saved.overrides) || !Array.isArray(saved.custom)) return result(catalog.templates, false);
+      if (saved.version === 3) {
+        catalog = parseBuiltInCatalog(saved.catalog);
+        if (!record(saved.overrideBases) || !Object.entries(saved.overrideBases).every(([id,base]) => isValidTemplate(base) && base.id === id && base.builtIn)) return result(catalog.templates, false);
+        overrideBases = saved.overrideBases as OverrideBases;
+      }
+      const builtIns = builtInTemplates(catalog);
       const entries = [...saved.overrides, ...saved.custom];
+      const savedOverrides = saved.overrides;
       const builtInIds = new Set(builtIns.map(template => template.id));
+      if(saved.version===3 && saved.defaultTemplateId!==undefined && (!text(saved.defaultTemplateId,100) || (!builtInIds.has(saved.defaultTemplateId) && !entries.some(template=>isValidTemplate(template) && template.id===saved.defaultTemplateId))))return result(mergeTemplates(builtIns,saved.overrides,saved.custom),false);
       const valid = saved.overrides.every(template => isValidTemplate(template) && template.builtIn && builtInIds.has(template.id)) &&
         saved.custom.every(template => isValidTemplate(template) && !template.builtIn && !builtInIds.has(template.id)) &&
         new Set(entries.map(template => template.id)).size === entries.length;
-      return result(mergeTemplates(builtIns, saved.overrides, saved.custom), valid);
+      if (valid && saved.version === 2) overrideBases = Object.fromEntries(saved.overrides.map(template => [template.id, structuredClone(builtIns.find(base => base.id === template.id)!)]));
+      const basesValid = saved.version !== 3 || Object.keys(overrideBases).every(id => savedOverrides.some((template: TemplateRecord) => template.id === id)) && savedOverrides.every((template: TemplateRecord) => overrideBases[template.id]);
+      return result(mergeTemplates(builtIns, saved.overrides, saved.custom), valid && !!basesValid);
     }
+    const builtIns = builtInTemplates(catalog);
     const legacy: unknown = JSON.parse(localStorage.getItem(legacyTemplatesKey) ?? "[]");
     if (!Array.isArray(legacy)) return result(builtIns, false);
     const valid = legacy.filter(isValidTemplate);
@@ -80,30 +104,70 @@ export function readTemplateLibrary(): { templates: TemplateRecord[]; canPersist
     return result(mergeTemplates(builtIns,
       valid.filter(template => builtInIds.has(template.id) && template.updatedAt > 0),
       valid.filter(template => !builtInIds.has(template.id) && (!template.builtIn || template.updatedAt > 0))), valid.length === legacy.length && new Set(valid.map(template => template.id)).size === valid.length);
-  } catch { return result(builtIns, false); }
+  } catch { return result(builtInTemplates(catalog), false); }
 }
 
 export function readTemplates(): TemplateRecord[] {
   return readTemplateLibrary().templates;
 }
 
-export function serializeUserTemplates(templates: TemplateRecord[]): string {
+export function serializeUserTemplates(templates: TemplateRecord[], catalog = bundledCatalog(), bases: OverrideBases = {}, defaultTemplateId?:string): string {
   if (!templates.every(isValidTemplate)) throw new Error("模板字段不完整或超出支持范围，未覆盖已保存的模板库");
   if (new Set(templates.map(template => template.id)).size !== templates.length) throw new Error("模板 ID 重复，未覆盖已保存的模板库");
-  const builtIns = builtInTemplates();
+  if(defaultTemplateId!==undefined && !templates.some(template=>template.id===defaultTemplateId))throw new Error("默认模板不存在，未覆盖已保存的模板库");
+  const builtIns = builtInTemplates(catalog);
   const builtInIds = new Set(builtIns.map((template) => template.id));
+  if (templates.some(template => template.builtIn !== builtInIds.has(template.id))) throw new Error("官方模板与个人模板 ID 冲突，未覆盖已保存的模板库");
+  const overrides = templates.filter(template => template.builtIn && builtInIds.has(template.id) && (bases[template.id] || isBuiltInModified(template,catalog)));
   return JSON.stringify({
-    version: 2,
-    overrides: templates.filter((template) => builtInIds.has(template.id) && isBuiltInModified(template)),
-    custom: templates.filter((template) => !builtInIds.has(template.id)),
+    version: 3,
+    catalog,
+    defaultTemplateId,
+    overrideBases: Object.fromEntries(overrides.map(template => [template.id, bases[template.id] ?? builtIns.find(base => base.id === template.id)!])),
+    overrides,
+    custom: templates.filter((template) => !template.builtIn && !builtInIds.has(template.id)),
   });
 }
 
-export function readDefaultTemplateId(templates: TemplateRecord[]): string {
+// Update only the official baseline. Edited/retired records and personal ID
+// collisions remain recoverable; callers remap references using idMap.
+export function rebaseTemplateLibrary(templates: TemplateRecord[], previous: BuiltInTemplateCatalog, next: BuiltInTemplateCatalog, bases: OverrideBases = {}) {
+  parseBuiltInCatalog(next);
+  const ids = new Set([...next.templates, ...templates].map(template => template.id));
+  const official = new Map(next.templates.map(template => [template.id,structuredClone(template)]));
+  const custom: TemplateRecord[] = [];
+  const overrideBases: OverrideBases = {};
+  const idMap: Record<string,string> = {};
+  for (const template of templates) {
+    if (template.builtIn) {
+      if (!official.has(template.id)) custom.push({...structuredClone(template),builtIn:false});
+      else if (bases[template.id] || isBuiltInModified(template,previous)) {
+        official.set(template.id,structuredClone(template));
+        overrideBases[template.id] = structuredClone(bases[template.id] ?? previous.templates.find(base => base.id === template.id) ?? template);
+      }
+    } else {
+      const copy = structuredClone(template);
+      if (official.has(copy.id)) {
+        const prefix = `local-${copy.id}`.slice(0,90);
+        let id = prefix, counter = 1;
+        while(ids.has(id)) id = `${prefix}-${counter++}`;
+        ids.add(id);idMap[copy.id] = id;copy.id = id;
+      }
+      custom.push(copy);
+    }
+  }
+  return {templates:[...official.values(),...custom],overrideBases,idMap};
+}
+
+export function readDefaultTemplateId(templates: TemplateRecord[], catalog = bundledCatalog(),referenceMap:Record<string,string>={}): string {
   try {
+    const saved=JSON.parse(localStorage.getItem(templatesKey)??"null");
+    const snapshotDefault=referenceMap[saved?.defaultTemplateId]??saved?.defaultTemplateId;
+    if(saved?.version===3 && typeof snapshotDefault==="string" && templates.some(template=>template.id===snapshotDefault))return snapshotDefault;
     const stored = localStorage.getItem(defaultTemplateKey);
-    return templates.some((template) => template.id === stored) ? stored! : builtInDefaultTemplateId();
-  } catch { return builtInDefaultTemplateId(); }
+    const id=stored?(referenceMap[stored]??stored):null;
+    return templates.some((template) => template.id === id) ? id! : builtInDefaultTemplateId(catalog);
+  } catch { return builtInDefaultTemplateId(catalog); }
 }
 
 export function documentFromTemplate(template: TemplateRecord, photo: PhotoAsset): EditorDocument {

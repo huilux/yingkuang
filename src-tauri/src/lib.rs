@@ -14,6 +14,7 @@ use tauri_plugin_opener::OpenerExt;
 
 mod export;
 mod fonts;
+mod templates;
 #[cfg(test)]
 mod test_fixtures;
 
@@ -582,6 +583,11 @@ pub fn run() {
             list_image_files,
             read_template_backup,
             write_template_backup,
+            templates::read_official_templates,
+            templates::check_template_update,
+            templates::install_template_update,
+            templates::import_official_templates,
+            templates::rollback_official_templates,
             open_export_directory,
             load_editor_photo,
             export::preflight_export,

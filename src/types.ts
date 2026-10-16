@@ -91,6 +91,8 @@ export interface EditorDocument {
   frame: FrameSettings;
   regions: Record<Exclude<RegionId, "canvas">, RegionSettings>;
   layers: WatermarkLayer[];
+  /** Equal edge gaps are recomputed for each photo's geometry and text. */
+  distributions?: { axis: "x" | "y"; layerIds: string[] }[];
 }
 
 export interface TemplateRecord {
