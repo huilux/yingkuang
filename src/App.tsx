@@ -44,9 +44,8 @@ import type { EditorCanvasHandle } from "./EditorCanvas";
 import { LayerInspector } from "./LayerInspector";
 import { SliderRow, Segmented } from "./EditorControls";
 import { selectLayer, moveSelection, type AlignReference, type ArrangeAction, type LayerPatch } from "./selection-model";
-import { reorientTemplateDocument } from "./template-layout";
 import { commitArrangement, hasLayoutRules, pruneLayoutRules, releaseLayoutRules } from "./document-layout";
-import { resolveBrowserLayout, setBrowserDistributionRange, useDocumentLayouts } from "./browser-layout";
+import { reorientBrowserTemplateDocument, resolveBrowserLayout, setBrowserDistributionRange, useDocumentLayouts } from "./browser-layout";
 import { ensureFontsLoaded } from "./font-library";
 import { isVisible } from "./canvas-camera";
 import { retainBrowserPhoto, releaseBrowserPhoto, releaseBrowserPhotos } from "./use-editor-photo";
@@ -567,7 +566,7 @@ function App() {
       pushHistory(captureHistory([activeId]));
       const nextPhoto = { ...activePhoto, crop };
       if (activeDocument) {
-        const nextDocument = reorientTemplateDocument(templates.find(template => template.id === activeTemplate), activePhoto, nextPhoto, activeDocument);
+        const nextDocument = reorientBrowserTemplateDocument(templates.find(template => template.id === activeTemplate), activePhoto, nextPhoto, activeDocument);
         currentDocument.current = nextDocument;
         setDocuments(current => ({ ...current, [activeId]: nextDocument }));
         setSelectedLayerIds(current => current.filter(id => nextDocument.layers.some(layer => layer.id === id)));

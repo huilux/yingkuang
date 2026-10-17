@@ -8,6 +8,7 @@ import {isValidEditorDocument} from '../src/builtin-template-catalog.ts';
 const template=structuredClone(builtInTemplates().find(t=>t.id==='wide-float'));
 const before={id:'a',width:600,height:400,metadata:{},fileName:'a.jpg'};
 const after={...before,crop:{x:0,y:0,width:1,height:1,rotation:90}};
+const measure=(layer,text)=>({width:text.length*layer.fontSize*.7,height:layer.fontSize});
 test('a move on one axis preserves the other axis rule; zero-delta coordinate patches preserve both',()=>{
   const doc=structuredClone(template.layouts.landscape);
   const ids=doc.layers.slice(0,3).map(layer=>layer.id);
@@ -25,13 +26,56 @@ test('orientation switches template layout, retaining local styles, added/delete
   const deleted=current.layers.splice(1,1)[0].id;
   current.layers.push({...current.layers[0],id:'added'});
   const untouched=structuredClone(current);
-  const result=reorientTemplateDocument(template,before,after,current);
+  const result=reorientTemplateDocument(template,before,after,current,measure);
   assert.equal(result.frame.color,'#123456');
   assert.equal(result.layers.find(layer=>layer.id===current.layers[0].id).fontSize,current.layers[0].fontSize);
   assert.ok(!result.layers.some(l=>l.id===deleted));
   assert.ok(result.layers.some(l=>l.id==='added'));
   assert.deepEqual(current,untouched);
-  assert.equal(reorientTemplateDocument(template,before,before,current),current);
+  assert.equal(reorientTemplateDocument(template,before,before,current,measure),current);
+});
+test('automatically resolved positions and range anchors do not override the other orientation',()=>{
+  const record=structuredClone(builtInTemplates()[0]);
+  const photo={...before,width:640,height:480,metadata:{iso:'ISO12800',focalLength:'50mm',aperture:'f/2.8',shutter:'1/200s',camera:'Panasonic LUMIX'}};
+  const rotated={...photo,crop:after.crop};
+  const current=resolveDocumentLayout(record.layouts.landscape,photo,measure);
+  const untouched=structuredClone({record,current});
+  const result=resolveDocumentLayout(reorientTemplateDocument(record,photo,rotated,current,measure),rotated,measure);
+  const expected=resolveDocumentLayout(record.layouts.portrait,rotated,measure);
+  assert.deepEqual(result,expected);
+  assert.deepEqual({record,current},untouched);
+});
+test('tiny serialization differences are not treated as local position or rule edits',()=>{
+  const record=structuredClone(builtInTemplates()[0]);
+  const current=resolveDocumentLayout(record.layouts.landscape,before,measure);
+  current.distributions[0].range.anchor+=Number.EPSILON;
+  current.layers[0].x+=Number.EPSILON;
+  const result=resolveDocumentLayout(reorientTemplateDocument(record,before,after,current,measure),after,measure);
+  assert.deepEqual(result,resolveDocumentLayout(record.layouts.portrait,after,measure));
+});
+test('genuine local range, text and appearance edits survive orientation changes',()=>{
+  const record=structuredClone(builtInTemplates()[0]);
+  const current=resolveDocumentLayout(record.layouts.landscape,before,measure);
+  current.distributions[0].range.ratio=.61;
+  current.distributions[0].range.anchor=.57;
+  current.alignments=current.alignments.filter(rule=>!rule.layerIds.includes(current.distributions[0].layerIds[0]));
+  current.layers[0].color='#123456';current.layers[0].fontSize+=3;
+  current.layers[0].source='custom';current.layers[0].customValue='我的签名 abc 123';
+  const result=reorientTemplateDocument(record,before,after,current,measure);
+  assert.equal(result.distributions[0].range.ratio,.61);
+  assert.ok(Math.abs(result.distributions[0].range.anchor-.57)<1e-9);
+  const layer=result.layers.find(layer=>layer.id===current.layers[0].id);
+  for(const key of ['color','fontSize','source','customValue'])assert.equal(layer[key],current.layers[0][key]);
+});
+test('manual positions and intentionally released layout rules survive orientation changes',()=>{
+  const record=structuredClone(builtInTemplates()[0]);
+  const current=resolveDocumentLayout(record.layouts.landscape,before,measure);
+  const id=current.distributions[0].layerIds[0],patch={x:.73};
+  releaseLayoutRules(current,[{id,patch}],calculateGeometry(before,current));
+  Object.assign(current.layers.find(layer=>layer.id===id),patch);
+  const result=reorientTemplateDocument(record,before,after,current,measure);
+  assert.equal(result.layers.find(layer=>layer.id===id).x,.73);
+  assert.ok(!result.distributions?.some(rule=>rule.layerIds.includes(id)));
 });
 for(const axis of ['x','y']) test(`saved ${axis} distribution recomputes actual edge gaps and is idempotent on other photos`,()=>{
   const doc=structuredClone(template.layouts.landscape);

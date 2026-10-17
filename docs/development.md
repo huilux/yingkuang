@@ -62,6 +62,8 @@ xvfb-run -a python3 scripts/check-csp.py
 
 `result-preview-regression.js` 在实际应用中检查成品预览与主画布的干净渲染像素一致，覆盖中英数字、透明文字、旋转、模糊／纯色相框和照片裁切。还验证缩放平移、焦点与 Esc、原编辑状态和导出坐标不变、高清加载失败与过期响应、空批次禁用及原生标题栏避让；纳入 Linux 最小窗口 CI。它使用生成高清图和模拟 IPC，不替代原生文件解码与 Windows 实机验收。
 
+`template-orientation-regression.js` 使用内置模板与真实字体度量，覆盖不同照片尺寸、拍摄参数及横竖方向的 60 组切换，检查自动切换和重新套用一致、源文档不变。实际界面回归覆盖旋转、整步撤销／重做、重启、主画布与成品预览、导出布局一致性，并纳入最小窗口 CI。`template-layout.test.mjs` 另覆盖浮点误差与真正的局部范围、文字、样式、位置和规则删除。
+
 保持开发服务器运行，执行 `python3 scripts/render-parity.py http://127.0.0.1:1422`，对比浏览器预览与 Rust 输出。修改几何、字体、模糊或阴影时，检查中文、字重、文字边界、透明 PNG 和不同成品尺寸。
 
 字体回归包括 `mixed-font-alignment-regression.js`（六种内置字体的中英数字笔画居中）和 `mixed-font-layout-regression.js`（长文字、真实模板卡片与主画布、正反旋转、透明度、模板数据不变，以及 WebKit 中 cmap6 字体导入和恢复）。`render-parity.py` 使用真实 Rust 图片与模板卡片、Konva 绘制结果做三方对照，并检查交替字母数字的累计宽度、长文字和小字号标点；上述检查纳入 Linux CI。每次 WebKit 回归使用临时存储，避免不同运行的字体和会话串扰。像素比较允许不同光栅引擎的小幅抗锯齿差异，不替代 Windows WebView2 实机测试。
