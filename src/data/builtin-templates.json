@@ -1,8 +1,8 @@
 {
   "format": "yingkuang-builtin-templates",
   "version": 1,
-  "contentVersion": "2026.10.2",
-  "revision": 2,
+  "contentVersion": "2026.10.3",
+  "revision": 3,
   "defaultTemplateId": "wide-float",
   "templates": [
     {

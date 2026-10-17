@@ -8,6 +8,11 @@ on:
         required: true
         type: string
 
+      include_macos:
+        description: Also build experimental Apple silicon and Intel DMGs
+        required: false
+        default: false
+        type: boolean
       assemble_only:
         description: Resume materials assembly from already verified private draft packages
         required: false
@@ -102,7 +107,7 @@ jobs:
             curl --fail --silent http://127.0.0.1:1422 > /dev/null && break
             sleep 1
           done
-          WATERMARK_TEST_WIDTH=1100 WATERMARK_TEST_HEIGHT=720 xvfb-run -a -s "-screen 0 1920x1080x24" /usr/bin/python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 interface-controls-regression.js font-library-regression.js native-font-import-regression.js crop-loading-regression.js theme-layout-regression.js template-layout-persistence-regression.js distribution-range-regression.js distribution-direction-regression.js
+          WATERMARK_TEST_WIDTH=1100 WATERMARK_TEST_HEIGHT=720 xvfb-run -a -s "-screen 0 1920x1080x24" /usr/bin/python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 interface-controls-regression.js font-library-regression.js native-font-import-regression.js crop-loading-regression.js theme-layout-regression.js template-layout-persistence-regression.js template-orientation-regression.js distribution-range-regression.js distribution-direction-regression.js mixed-font-alignment-regression.js mixed-font-layout-regression.js line-alignment-regression.js result-preview-regression.js
           /usr/bin/python3 scripts/render-parity.py http://127.0.0.1:1422
       - name: Install deb, observe native window, verify notices and uninstall
         if: runner.os == 'Linux'
@@ -158,9 +163,17 @@ jobs:
         if: runner.os == 'Windows'
         run: node scripts/beta-release.mjs upload-platform windows-x64 "$env:RELEASE_TAG" "$env:GITHUB_SHA"
 
+  macos:
+    if: ${{ inputs.include_macos && !inputs.assemble_only }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/macos-test.yml
+    with:
+      release_tag: ${{ inputs.release_tag }}
+
   assemble:
-    needs: beta
-    if: ${{ always() && (needs.beta.result == 'success' || inputs.assemble_only) }}
+    needs: [beta, macos]
+    if: ${{ always() && (inputs.assemble_only || (needs.beta.result == 'success' && (!inputs.include_macos || needs.macos.result == 'success'))) }}
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     permissions:
@@ -192,9 +205,12 @@ jobs:
       - name: Download verified files from the private draft
         run: |
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*_linux-x64*' --pattern '*_windows-x64*' --pattern '*_linux-appimage-x64*' --dir test-output/beta-staging
+      - name: Download verified macOS archives from the private draft
+        if: inputs.include_macos
+        run: gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*_macos-arm64-test*' --pattern '*_macos-x64-test*' --dir test-output/beta-staging
       - name: Test release assembly guards
         run: python -m unittest discover -s scripts -p 'test_beta_release.py'
-      - name: Assemble three packages, materials and checksums
-        run: python scripts/assemble-beta-release.py test-output/beta-staging test-output/beta-release "$BUILD_COMMIT"
-      - name: Upload five assets only to the existing draft
-        run: node scripts/beta-release.mjs upload "$RELEASE_TAG" "$BUILD_COMMIT"
+      - name: Assemble installers, materials and checksums
+        run: python scripts/assemble-beta-release.py test-output/beta-staging test-output/beta-release "$BUILD_COMMIT" ${{ inputs.include_macos && '--include-macos' || '' }}
+      - name: Upload final assets only to the existing draft
+        run: node scripts/beta-release.mjs upload "$RELEASE_TAG" "$BUILD_COMMIT" ${{ inputs.include_macos && '--include-macos' || '' }}

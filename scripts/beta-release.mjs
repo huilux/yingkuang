@@ -20,6 +20,10 @@ export function validateDraft(release, version, tag, commit) {
   if (!release.isDraft || !release.isPrerelease || release.tagName !== tag) throw new Error('Only an existing prerelease draft can receive test packages');
   if (!/^[a-f0-9]{40}$/.test(commit) || release.targetCommitish !== commit) throw new Error('Draft must target this exact full commit SHA');
 }
+export function releaseAssets(version, includeMacos = false) {
+  return ['SHA256SUMS.txt', `yingkuang_${version}_linux-x64.deb`, `yingkuang_${version}_windows-x64.exe`, `yingkuang_${version}_release-materials.zip`, `yingkuang_${version}_linux-x64.AppImage`,
+    ...(includeMacos ? ['macos-arm64', 'macos-x64'].map(platform => `yingkuang_${version}_${platform}.dmg`) : [])].sort();
+}
 async function validate(tag, commit) {
   const { version } = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
   const release = JSON.parse(run(['release', 'view', tag, '--repo', repo, '--json', 'isDraft,isPrerelease,tagName,targetCommitish']));
@@ -113,10 +117,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const version = await validate(tag, commit);
     const directory = join(root, 'test-output/beta-release');
     const files = (await readdir(directory)).sort().map(name => join(directory, name));
-    const expected = ['SHA256SUMS.txt', `yingkuang_${version}_linux-x64.deb`, `yingkuang_${version}_windows-x64.exe`, `yingkuang_${version}_release-materials.zip`, `yingkuang_${version}_linux-x64.AppImage`].sort();
-    if (JSON.stringify(files.map(file => basename(file))) !== JSON.stringify(expected)) throw new Error('Expected three packages, one materials archive and one checksum file');
+    const includeMacos = args.includes('--include-macos');
+    const expected = releaseAssets(version, includeMacos);
+    if (JSON.stringify(files.map(file => basename(file))) !== JSON.stringify(expected)) throw new Error('Unexpected release assets');
     const sums = new Map((await readFile(join(directory, 'SHA256SUMS.txt'), 'utf8')).trim().split('\n').map(line => line.split('  ')));
-    if (sums.size !== 4) throw new Error('Expected four release checksums');
+    if (sums.size !== expected.length - 1) throw new Error('Incomplete release checksums');
     for (const file of files.filter(file => basename(file) !== 'SHA256SUMS.txt')) {
       const checksum = await fileHash(file);
       if (sums.get(checksum) !== basename(file)) throw new Error('Release checksum mismatch');
@@ -131,8 +136,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         run(['release', 'delete-asset', tag, `yingkuang_${version}_${platform}${suffix}`, '--yes', '--repo', repo]);
       }
     }
+    if (includeMacos) {
+      for (const platform of ['macos-arm64', 'macos-x64']) {
+        for (const suffix of ['-test.zip', '-test_SHA256SUMS.txt']) run(['release', 'delete-asset', tag, `yingkuang_${version}_${platform}${suffix}`, '--yes', '--repo', repo]);
+      }
+    }
     const { assets } = JSON.parse(run(['release', 'view', tag, '--repo', repo, '--json', 'assets']));
     if (JSON.stringify(assets.map(asset => asset.name).sort()) !== JSON.stringify(expected)) throw new Error('Unexpected remaining draft assets');
-    console.log(`Uploaded five Windows/Linux assets to draft ${tag}; draft remains unpublished`);
+    console.log(`Uploaded ${expected.length} assets to draft ${tag}; draft remains unpublished`);
   } else throw new Error('Expected validate, package, stage, upload-platform or upload command');
 }

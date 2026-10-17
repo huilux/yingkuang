@@ -12,6 +12,7 @@ import time
 import tomllib
 import urllib.request
 import zipfile
+from macos_release_review import verify_review
 
 root = Path(__file__).resolve().parent.parent
 platform, target, commit = sys.argv[1:]
@@ -25,6 +26,7 @@ assert len(packages) == 1, 'Expected one version-matching DMG'
 inventory_path = root / 'test-output/licenses' / target / 'inventory.json'
 inventory = json.loads(inventory_path.read_text())
 assert inventory['target'] == target and not inventory['missingTexts']
+review_record, review_notes = verify_review(root, inventory)
 
 def run(*command, input_text=None):
     result = subprocess.run(command, input=input_text, capture_output=True, text=True, timeout=90)
@@ -98,8 +100,10 @@ with tempfile.TemporaryDirectory(prefix='yingkuang-macos-') as temporary:
         shutil.copy2(cached[0], destination)
         sources.append({'name': package['name'], 'version': package['version'], 'license': package['license'], 'sha256': digest, 'archive': 'sources/' + filename, 'url': source_url})
     (staged / 'sources.json').write_text(json.dumps({'projectCommit': commit, 'projectSource': f'https://github.com/huilux/yingkuang/tree/{commit}', 'packages': sources}, indent=2) + '\n')
+    shutil.copy2(review_record, staged / 'macos-review.json')
+    shutil.copy2(review_notes, staged / 'MACOS-REVIEW.md')
     shutil.copy2(packages[0], staged / (prefix + '.dmg'))
-    report = {'version': version, 'commit': commit, 'platform': platform, 'architecture': targets[platform][1], 'dmgMounted': 'passed', 'installedLicenseFilesVerified': len(pairs), 'signature': 'ad-hoc verified', 'notarized': False, 'nativeWindow': 'passed', 'systemLibrariesOnly': 'passed', 'linkedLibraries': linked_libraries, 'dependencyReview': 'pending' if inventory['reviewRequired'] else 'passed', 'upstreamReviewItems': inventory['reviewRequired'], 'originalSourceArchives': len(sources), 'interactiveAcceptance': 'pending', 'scope': 'Automated DMG mounting, architecture, signature, linked libraries, installed notices and native-window checks. Gatekeeper, installation and photo editing/export require a real tester.'}
+    report = {'version': version, 'commit': commit, 'platform': platform, 'architecture': targets[platform][1], 'dmgMounted': 'passed', 'installedLicenseFilesVerified': len(pairs), 'signature': 'ad-hoc verified', 'notarized': False, 'nativeWindow': 'passed', 'systemLibrariesOnly': 'passed', 'linkedLibraries': linked_libraries, 'dependencyReview': 'reviewed', 'upstreamReviewItems': inventory['reviewRequired'], 'reviewRecordSha256': hashlib.sha256(review_record.read_bytes()).hexdigest(), 'originalSourceArchives': len(sources), 'interactiveAcceptance': 'pending', 'scope': 'Automated DMG mounting, architecture, signature, linked libraries, installed notices and native-window checks. Gatekeeper, installation and photo editing/export require a real tester.'}
     (staged / 'checks.json').write_text(json.dumps(report, indent=2) + '\n')
     shutil.copy2(root / 'docs/user-guide.md', staged / 'TESTING.md')
     sums = [f'{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.relative_to(staged).as_posix()}' for file in sorted(staged.rglob('*')) if file.is_file()]

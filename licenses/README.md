@@ -8,6 +8,8 @@ selectors 的 crate 声明 MPL-2.0、源文件保留其版权声明；此处补�
 
 objc2 系列的上游仅提供许可选择说明，此处同时保留该说明并补充标准 MIT 条款。标准条款中的占位符不是本项目新增的版权声明；实际署名以依赖源码和 inventory 中的上游作者信息为准。生成材料显式列出其 Apple SDK 与署名审查事项，不将正文文件齐全等同于许可审计完成。
 
+本轮 macOS 分发的版本、原始声明摘要和核对范围见 [版本化记录](macos-review.json) 与 [macOS 审查说明](MACOS-REVIEW.md)。构建与汇总均校验这些材料，清单继续保留上游审查事项；未知版本、缺少作者或材料变化将阻止发布。
+
 ## AppImage 打包组件
 
 [来源索引](packaging/sources.json) 固定 GTK 打包脚本、项目 MIT 启动脚本与 type2-runtime 源码版本。受控交付流程替换旧的 `AppRun.wrapped` 二进制及生成钩子，从源码构建静态运行时，并记录实际链接组件的原始源码、补丁、Alpine 配方和声明。

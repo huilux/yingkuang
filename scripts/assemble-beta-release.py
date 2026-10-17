@@ -1,4 +1,4 @@
-"""Combine verified Windows/Linux installers and AppImage into five public assets."""
+"""Combine verified installers, supporting records and checksums for a beta release."""
 import argparse
 import hashlib
 import json
@@ -10,6 +10,7 @@ import tempfile
 import tomllib
 import urllib.request
 import zipfile
+from macos_release_materials import staged_names, unpack_macos
 
 PLATFORMS = {
     'linux-x64': ('x86_64-unknown-linux-gnu', '.deb'),
@@ -94,7 +95,7 @@ def unpack_appimage(inputs, materials, version, commit):
     return names
 
 
-def assemble(root, inputs, output, commit, fetch_crate=obtain_crate):
+def assemble(root, inputs, output, commit, fetch_crate=obtain_crate, *, include_macos=False):
     version = json.loads((root / 'package.json').read_text())['version']
     catalog = json.loads((root / 'src/font-catalog.json').read_text())
     expected_license_files = 4 + len({Path(f['path']).parts[0] for font in catalog for f in font['files']})
@@ -133,6 +134,8 @@ def assemble(root, inputs, output, commit, fetch_crate=obtain_crate):
         validated[platform] = (prefix, extension, inventory)
     appimage_prefix = f'yingkuang_{version}_linux-appimage-x64'
     expected_inputs.update(appimage_prefix + suffix for suffix in ['.AppImage', '_materials.zip', '_SHA256SUMS.txt'])
+    if include_macos:
+        expected_inputs.update(staged_names(version))
     if set(p.name for p in inputs.iterdir()) != expected_inputs:
         raise ValueError('Unexpected files in staged platform outputs')
     lock = tomllib.loads((root / 'src-tauri/Cargo.lock').read_text())
@@ -148,6 +151,8 @@ def assemble(root, inputs, output, commit, fetch_crate=obtain_crate):
             destination.mkdir()
             for source, name in [('_checks.json', 'checks.json'), ('_dependency-inventory.json', 'dependency-inventory.json'), ('_LICENSES.txt', 'LICENSES.txt'), ('_SHA256SUMS.txt', 'BUILD-SHA256SUMS.txt')]:
                 shutil.copy2(inputs / (prefix + source), destination / name)
+        if include_macos:
+            unpack_macos(root, inputs, materials, output, version, commit, locked, expected_license_files)
         for name in ['LICENSE', 'THIRD_PARTY_NOTICES.md']:
             shutil.copy2(root / name, materials / name)
         needed = {}
@@ -170,7 +175,7 @@ def assemble(root, inputs, output, commit, fetch_crate=obtain_crate):
                 raise ValueError('Dependency source archive checksum mismatch')
             sources.append({'name': name, 'version': source_version, 'license': license_name, 'sha256': checksum, 'archive': 'sources/' + filename, 'url': f'https://static.crates.io/crates/{name}/{filename}'})
         (materials / 'sources.json').write_text(json.dumps({'version': version, 'projectCommit': commit, 'assemblyCommit': os.environ.get('GITHUB_SHA', commit), 'projectSource': f'https://github.com/huilux/yingkuang/tree/{commit}', 'packages': sources}, indent=2) + '\n')
-        (materials / 'README.txt').write_text('映框发布技术材料 / Yingkuang release materials\n\n普通用户只需下载对应系统的 EXE、DEB 或 AppImage，无需解压本文件。\n安装包内已经包含项目与第三方许可证。\n\n本归档保存两平台的依赖清单、完整许可正文、安装/启动/卸载检查，以及 MPL 依赖的原始源码。AppImage 子目录同时包含系统库原始源码、完整许可、运行时源码和构建配方。\nBUILD-SHA256SUMS.txt 保留构建阶段原文件名的校验记录；归档内重命名文件以根目录 SHA256SUMS.txt 为准。\n程序源码提交与原始依赖下载地址见 sources.json；assemblyCommit 记录材料汇总脚本的提交。\n自动检查不能代替完整照片编辑、导出、升级和干净用户环境验收。\n', encoding='utf-8')
+        (materials / 'README.txt').write_text('映框发布技术材料 / Yingkuang release materials\n\n普通用户只需下载对应系统的 EXE、DEB、AppImage 或 DMG，无需解压本文件。\n安装包内已经包含项目与第三方许可证。\n\n本归档保存所发布平台的依赖清单、完整许可正文、安装/启动/卸载检查，以及 MPL 依赖的原始源码。AppImage 子目录同时包含系统库原始源码、完整许可、运行时源码和构建配方。\nBUILD-SHA256SUMS.txt 保留构建阶段原文件名的校验记录；归档内重命名文件以根目录 SHA256SUMS.txt 为准。\nmacOS 子目录另有 DMG 检查、签名范围、原始依赖源码和上游审查记录；交互验收仍待实机完成。\n程序源码提交与原始依赖下载地址见各级 sources.json；assemblyCommit 记录材料汇总脚本的提交。\n自动检查不能代替完整照片编辑、导出、升级和干净用户环境验收。\n', encoding='utf-8')
         inner = [f'{digest(file)}  {file.relative_to(materials).as_posix()}' for file in sorted(materials.rglob('*')) if file.is_file()]
         (materials / 'SHA256SUMS.txt').write_text('\n'.join(inner) + '\n')
         archive = output / f'yingkuang_{version}_release-materials.zip'
@@ -188,5 +193,6 @@ if __name__ == '__main__':
     parser.add_argument('input_directory', type=Path)
     parser.add_argument('output_directory', type=Path)
     parser.add_argument('commit')
+    parser.add_argument('--include-macos', action='store_true')
     args = parser.parse_args()
-    print(json.dumps(assemble(Path(__file__).resolve().parent.parent, args.input_directory, args.output_directory, args.commit)))
+    print(json.dumps(assemble(Path(__file__).resolve().parent.parent, args.input_directory, args.output_directory, args.commit, include_macos=args.include_macos)))
