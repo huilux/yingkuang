@@ -1,5 +1,7 @@
 import catalog from "./font-catalog.json";
 import retiredFonts from "./retired-fonts.json";
+import { fontGlyphCoverage } from "./font-glyphs";
+import { textKinds } from "./text-segments";
 
 export function resolveFontFamily(value: string) {
   return [...new Set(value.split(",").map(family => {
@@ -27,30 +29,58 @@ export function previewFontFamily(value: string) {
 }
 
 const faces = new Map<string, FontFace[]>();
-let registered = false;
+const coverage = new Map<string, ((character: string) => boolean)[]>();
+const builtinLoads = new Map<string, Promise<void>>();
+let metricsRevision = 0;
+export const fontMetricsRevision = () => metricsRevision;
 
-function registerBuiltins() {
-  if (registered) return;
-  registered = true;
-  for (const font of builtinFonts) {
-    const registeredFaces = font.files.map(file => {
-      const face = new FontFace(`Yingkuang ${font.family}`, `url("${encodeURI(`/fonts/${file.path}`)}")`, { weight: file.weight });
-      document.fonts.add(face);
-      return face;
-    });
-    faces.set(font.family, registeredFaces);
+function loadBuiltin(font: typeof builtinFonts[number]) {
+  let pending = builtinLoads.get(font.family);
+  if (!pending) {
+    pending = Promise.all(font.files.map(async file => {
+      const response = await fetch(encodeURI(`/fonts/${file.path}`));
+      if (!response.ok) throw new Error(`无法加载内置字体 ${font.family}`);
+      const bytes = await response.arrayBuffer();
+      const hasGlyph = fontGlyphCoverage(bytes);
+      const face = new FontFace(`Yingkuang ${font.family}`, bytes, { weight: file.weight });
+      await face.load();
+      return { face, hasGlyph };
+    })).then(loaded => {
+      loaded.forEach(({face}) => document.fonts.add(face));
+      faces.set(font.family, loaded.map(({face}) => face));
+      coverage.set(font.family, loaded.map(({hasGlyph}) => hasGlyph));
+      metricsRevision++;
+    }).catch(error => { builtinLoads.delete(font.family); throw error; });
+    builtinLoads.set(font.family, pending);
   }
+  return pending;
+}
+
+/** Same primary -> Long Cang -> Space Mono glyph fallback as native export. */
+export function previewFontRuns(value: string, text: string) {
+  const families = renderingFamilies(value);
+  const runs: { family: string; text: string; kind: string }[] = [];
+  for (const {character,kind} of textKinds(text)) {
+    const family = /^[\t\n\v\f\r ]$/.test(character) ? families[0]
+      : families.find(family => coverage.get(family)?.some(hasGlyph => hasGlyph(character))) ?? families[0];
+    const previous = runs[runs.length - 1];
+    if (previous?.family === family && previous.kind === kind) previous.text += character;
+    else runs.push({ family, text: character, kind });
+  }
+  return runs;
 }
 
 /** Canvas text must wait for actual font bytes, including fonts in saved templates. */
 export async function ensureFontsLoaded(families: string[]) {
-  registerBuiltins();
   await restoreImportedFonts();
   const requested = new Set(families.flatMap(renderingFamilies));
   for (const family of requested) {
     if (family.startsWith("YingkuangFont") && !faces.has(family)) throw new Error("缺少自定义字体，请在水印面板重新导入原字体文件");
   }
-  await Promise.all([...requested].flatMap(family => faces.get(family) ?? []).map(face => face.load()));
+  await Promise.all([...requested].map(family => {
+    const builtin = builtinFonts.find(font => font.family === family);
+    return builtin ? loadBuiltin(builtin) : Promise.all((faces.get(family) ?? []).map(face => face.load()));
+  }));
 }
 
 export interface ImportedFont { family: string; name: string; data: ArrayBuffer }
@@ -117,9 +147,12 @@ async function prepareFont(font: ImportedFont) {
 }
 
 function addImportedFont(font: ImportedFont, face: FontFace) {
+  const hasGlyph = fontGlyphCoverage(font.data);
   for (const previous of faces.get(font.family) ?? []) document.fonts.delete(previous);
   document.fonts.add(face);
   faces.set(font.family, [face]);
+  coverage.set(font.family, [hasGlyph]);
+  metricsRevision++;
   const option = { family: font.family, value: `${font.family}, Long Cang, sans-serif`, label: `${font.name} · 已导入` };
   const fonts = [...snapshot.fonts.filter(item => item.family !== font.family), option].sort((a, b) => a.label.localeCompare(b.label));
   publish({ ...snapshot, fonts });
@@ -129,7 +162,6 @@ function addImportedFont(font: ImportedFont, face: FontFace) {
 export function restoreImportedFonts(retry = false) {
   if (retry) restore = undefined;
   return restore ??= Promise.resolve().then(async () => {
-    registerBuiltins();
     publish({ ...snapshot, loading: true, errors: [] });
     const errors: string[] = [];
     try {

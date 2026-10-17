@@ -1,9 +1,10 @@
 import { ensureFontsLoaded, fontsChangedEvent, previewFontFamily } from "./font-library";
+import { layoutWatermarkText, paintWatermarkText } from "./watermark-text";
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useId, useMemo, useRef, useState } from "react";
 import Konva from "konva";
 import { Group, Image as CanvasImage, Layer, Line, Rect, Stage, Text } from "react-konva";
 import { calculateGeometry, layerPosition, resolveLayerText } from "./editor-model";
-import { baseScale, clampZoom, fitCamera, isVisible, regionNames, safeRect, snapSelection, zoomAt, type Camera, type Guide, type Point } from "./canvas-camera";
+import { baseScale, clampZoom, fitCamera, isVisible, previewMaximumZoom, regionNames, safeRect, snapSelection, zoomAt, type Camera, type Guide, type Point } from "./canvas-camera";
 import { usePreviewBackdrop } from "./use-preview-backdrop";
 import { useEditorPhoto } from "./use-editor-photo";
 import { bitmapCrop } from "./photo-crop";
@@ -26,13 +27,17 @@ export interface EditorCanvasProps {
   onSelectionChange: (ids: string[]) => void;
   onLayersCommit: (patches: LayerPatch[]) => void;
   onArrangeCommit?: (patches: LayerPatch[], action: ArrangeAction, reference: AlignReference) => void;
+  readOnly?: boolean;
+  imageOnly?: boolean;
 }
 
 // React owns document changes. Konva owns transient camera/drag positions.
 // These must not be sent through the document store on each input event.
 export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProps>(function EditorCanvas({
-  photo, document: design, selectedLayerIds, snapEnabled, onZoomChange, onSelectionChange, onLayersCommit, onArrangeCommit,
+  photo, document: design, selectedLayerIds, snapEnabled, onZoomChange, onSelectionChange, onLayersCommit, onArrangeCommit, readOnly = false, imageOnly = false,
 }, ref) {
+  const maximumZoom = readOnly ? previewMaximumZoom : 300;
+  const fitPadding = readOnly && imageOnly ? 0 : 80;
   const helpId = useId();
   const viewportRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
@@ -62,7 +67,7 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
       Math.min(design.frame.radius * 2, geometry.photo.width / 2, geometry.photo.height / 2));
     context.closePath();
   }, [geometry.photo.width, geometry.photo.height, design.frame.radius]);
-  const selectedLayers = design.layers.filter(layer => selectedLayerIds.includes(layer.id) && isVisible(layer, design.regions));
+  const selectedLayers = readOnly ? [] : design.layers.filter(layer => selectedLayerIds.includes(layer.id) && isVisible(layer, design.regions));
   const selectedRegions = [...new Set(selectedLayers.map(layer => layer.region))].filter(region => region !== "canvas");
   const visibleLayers = design.layers.filter(layer => isVisible(layer, design.regions));
   // Font readiness changes text measurement even if the document is unchanged.
@@ -103,15 +108,15 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
   function fit() {
     if (drag.current || pan.current || !size.width) return;
     fitted.current = true;
-    applyCamera(fitCamera(size, geometry));
+    applyCamera(fitCamera(size, geometry, maximumZoom, fitPadding));
   }
   function setZoom(percent: number, anchor = { x: size.width / 2, y: size.height / 2 }) {
     if (drag.current || pan.current) return;
     fitted.current = false;
-    applyCamera(zoomAt(camera.current, baseScale(geometry.width) * clampZoom(percent) / 100, anchor));
+    applyCamera(zoomAt(camera.current, baseScale(geometry.width) * clampZoom(percent, maximumZoom) / 100, anchor));
   }
   useImperativeHandle(ref, () => ({ setZoom, fit, isInteracting: () => !!drag.current || !!pan.current, arrange(action, reference) {
-    if (drag.current || pan.current) return;
+    if (readOnly || drag.current || pan.current) return;
     const patches = arrangeSelection(action, reference, measureSelection(), design.layers, geometry, design.regions);
     if (patches.length) {
       if (onArrangeCommit) onArrangeCommit(patches, action, reference); else onLayersCommit(patches);
@@ -128,18 +133,21 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
     return () => observer.disconnect();
   }, []);
   useLayoutEffect(() => {
+    if (readOnly && imageOnly) viewportRef.current?.focus({ preventScroll: true });
+  }, [readOnly, imageOnly]);
+  useLayoutEffect(() => {
     if (!size.width || !size.height) return;
-    if (fitted.current) applyCamera(fitCamera(size, geometry));
+    if (fitted.current) applyCamera(fitCamera(size, geometry, maximumZoom, fitPadding));
     else applyCamera({ ...camera.current,
       x: camera.current.x + (size.width - previousSize.current.width) / 2,
       y: camera.current.y + (size.height - previousSize.current.height) / 2,
     });
     previousSize.current = size;
-  }, [size.width, size.height, geometry.width, geometry.height]);
+  }, [size.width, size.height, geometry.width, geometry.height, fitPadding]);
   useLayoutEffect(() => {
     // A new composition should be visible even after zooming into the old one.
     fitted.current = true;
-    if (size.width && size.height) applyCamera(fitCamera(size, geometry));
+    if (size.width && size.height) applyCamera(fitCamera(size, geometry, maximumZoom, fitPadding));
   }, [cropKey]);
 
   function selectedNodes(ids = selectionIds.current) {
@@ -196,7 +204,7 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
     pan.current = null;
     if (cancel) applyCamera(active.origin);
     if (viewportRef.current?.hasPointerCapture(active.pointerId)) viewportRef.current.releasePointerCapture(active.pointerId);
-    if (viewportRef.current) viewportRef.current.style.cursor = spacePressed.current ? "grab" : "";
+    if (viewportRef.current) viewportRef.current.style.cursor = readOnly || spacePressed.current ? "grab" : "";
   }
 
   // Non-passive wheel handling suppresses browser zoom. Ordinary wheel pans the
@@ -208,7 +216,7 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
       event.preventDefault();
       if (drag.current || pan.current) return;
       const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? size.height : 1;
-      if (event.ctrlKey || event.metaKey) {
+      if (readOnly || event.ctrlKey || event.metaKey) {
         if (!event.deltaY) return;
         const bounds = viewport.getBoundingClientRect();
         const zoom = camera.current.scale / baseScale(geometry.width) * 100;
@@ -222,7 +230,7 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
     };
     viewport.addEventListener("wheel", wheel, { passive: false });
     return () => viewport.removeEventListener("wheel", wheel);
-  }, [size.height, geometry.width, onZoomChange]);
+  }, [size.height, geometry.width, onZoomChange, readOnly]);
 
   useEffect(() => {
     const blur = () => { cancelDrag(); stopPan(); spacePressed.current = false; if (viewportRef.current) viewportRef.current.style.cursor = ""; };
@@ -235,6 +243,7 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
   }, []);
 
   function select(id: string, extend: boolean) {
+    if (readOnly) return;
     viewportRef.current?.focus({ preventScroll: true });
     const next = selectLayer(selectionIds.current, id, extend, true);
     selectionIds.current = next;
@@ -270,8 +279,8 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
     if (patches.length) onLayersCommit(patches);
   }
 
-  return <div className="canvas-viewport design-canvas" ref={viewportRef} tabIndex={0} role="group"
-    aria-label={`${photo.fileName} 的相框设计画布`} aria-describedby={helpId} title="Ctrl/⌘ + 滚轮缩放 · 滚轮平移 · 空格或中键拖动平移"
+  return <div className={`canvas-viewport design-canvas${readOnly ? " result-preview-canvas" : ""}`} ref={viewportRef} tabIndex={0} role="group"
+    aria-label={`${photo.fileName} 的${readOnly ? "成品预览" : "相框设计画布"}`} aria-describedby={helpId} title={readOnly && imageOnly ? undefined : readOnly ? "滚轮缩放 · 拖动或方向键平移" : "Ctrl/⌘ + 滚轮缩放 · 滚轮平移 · 空格或中键拖动平移"}
     onBlur={event => { spacePressed.current = false; if (!pan.current) event.currentTarget.style.cursor = ""; }}
     onContextMenu={event => event.preventDefault()}
     onPointerDownCapture={event => {
@@ -280,10 +289,10 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
       const bounds = event.currentTarget.getBoundingClientRect();
       const point = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
       const hit = stageRef.current?.getIntersection(point);
-      if (event.button === 1 || spacePressed.current || !hit) {
+      if (readOnly || event.button === 1 || spacePressed.current || !hit) {
         event.preventDefault(); event.stopPropagation();
         event.currentTarget.focus({ preventScroll: true });
-        if (event.button === 0 && !spacePressed.current) onSelectionChange([]);
+        if (!readOnly && event.button === 0 && !spacePressed.current) onSelectionChange([]);
         fitted.current = false;
         pan.current = { pointerId: event.pointerId, start: { x: event.clientX, y: event.clientY }, origin: { ...camera.current } };
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -299,6 +308,17 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
     onPointerCancel={() => { stopPan(true); cancelDrag(); }}
     onLostPointerCapture={() => stopPan()}
     onKeyDown={event => {
+      if (readOnly) {
+        if (event.ctrlKey || event.metaKey || event.altKey) return;
+        const directions: Record<string, Point> = { ArrowLeft: { x: 1, y: 0 }, ArrowRight: { x: -1, y: 0 }, ArrowUp: { x: 0, y: 1 }, ArrowDown: { x: 0, y: -1 } };
+        const direction = directions[event.key];
+        if (direction && !pan.current) {
+          event.preventDefault(); event.stopPropagation(); fitted.current = false;
+          const step = event.shiftKey ? 100 : 40;
+          applyCamera({ ...camera.current, x: camera.current.x + direction.x * step, y: camera.current.y + direction.y * step });
+        }
+        return;
+      }
       if (event.code === "Space") { event.preventDefault(); spacePressed.current = true; event.currentTarget.style.cursor = "grab"; return; }
       if (event.key === "Escape") { const moving = !!drag.current || !!pan.current; cancelDrag(); stopPan(true); if (!moving) onSelectionChange([]); event.stopPropagation(); return; }
       if (drag.current || pan.current || !selectedLayers.length || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -320,10 +340,10 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
           {editorPhoto && <Group x={geometry.photo.x} y={geometry.photo.y} clipFunc={clipPhoto}><CanvasImage name="preview-photo" image={editorPhoto} crop={bitmapCrop(photo, editorPhoto.width, editorPhoto.height)} width={geometry.photo.width} height={geometry.photo.height} /></Group>}
         </Group>
       </Layer>
-      <Layer>
+      <Layer listening={!readOnly}>
         <Group ref={objectsRef} name="objects-world" clipX={0} clipY={0} clipWidth={geometry.width} clipHeight={geometry.height}>
           {visibleLayers.map(layer => <Watermark key={layer.id} layer={layer} text={resolveLayerText(layer, photo)}
-            position={layerPosition(layer, geometry)} fontRevision={fontRevision}
+            position={layerPosition(layer, geometry)} fontRevision={fontRevision} readOnly={readOnly}
             onSelect={extend => select(layer.id, extend)}
             onDragStart={startDrag}
             onDragMove={moveDrag}
@@ -331,7 +351,7 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
         </Group>
       </Layer>
       <Layer listening={false}>
-        <Group ref={overlayRef} name="overlay-world" clipX={0} clipY={0} clipWidth={geometry.width} clipHeight={geometry.height}>
+        <Group ref={overlayRef} name="overlay-world" visible={!readOnly} clipX={0} clipY={0} clipWidth={geometry.width} clipHeight={geometry.height}>
           {selectedRegions.map(region => <Group key={region}>
             <Rect {...geometry.regions[region]} fill="rgba(185,207,138,0.035)" stroke="rgba(185,207,138,0.72)" strokeWidth={1} strokeScaleEnabled={false} dash={[7, 7]} />
             <Text x={geometry.regions[region].x + 12} y={geometry.regions[region].y + 8} text={regionNames[region]} fontSize={17} fill="#b9cf8a" />
@@ -353,17 +373,21 @@ export const EditorCanvas = memo(forwardRef<EditorCanvasHandle, EditorCanvasProp
     {!image && <div className="canvas-preview-status" role="status">{error ? "相框预览生成失败，请重新选择照片" : "正在生成相框预览…"}</div>}
     {image && error && <div className="canvas-preview-status" role="status">相框预览更新失败，请重新选择照片</div>}
     {image && (photoError || photoLoading) && <div className="canvas-photo-status" role="status">{photoError ? "高清照片读取失败，当前显示缩略图；请确认原文件仍可访问" : "正在加载高清照片…"}</div>}
-    <span id={helpId} className="sr-only">Ctrl 或 Command 加滚轮缩放，滚轮平移，空格加拖动或鼠标中键平移。Shift 点选可多选，Ctrl 或 Command 拖动临时关闭吸附。可在右侧图层列表选择水印，聚焦画布后用方向键微调，Shift 加方向键移动十个单位，Escape 取消拖动。</span>
+    <span id={helpId} className="sr-only">{readOnly ? `只读成品预览。滚轮缩放，鼠标拖动或方向键平移，Shift 加方向键加速平移。${imageOnly ? "Escape 或 F11 返回编辑。" : "使用上方按钮调整缩放或适应窗口，F11 进入全屏，Escape 返回编辑。"}` : "Ctrl 或 Command 加滚轮缩放，滚轮平移，空格加拖动或鼠标中键平移。Shift 点选可多选，Ctrl 或 Command 拖动临时关闭吸附。可在右侧图层列表选择水印，聚焦画布后用方向键微调，Shift 加方向键移动十个单位，Escape 取消拖动。"}</span>
   </div>;
 }));
 
-function Watermark({ layer, text, position, fontRevision, onSelect, onDragStart, onDragMove, onDragEnd }: {
-  layer: WatermarkLayer; text: string; position: Point; fontRevision: number; onSelect: (extend: boolean) => void;
+function Watermark({ layer, text, position, fontRevision, readOnly, onSelect, onDragStart, onDragMove, onDragEnd }: {
+  layer: WatermarkLayer; text: string; position: Point; fontRevision: number; readOnly: boolean; onSelect: (extend: boolean) => void;
   onDragStart: (node: Konva.Group) => void; onDragMove: (node: Konva.Group, event: MouseEvent | TouchEvent) => void; onDragEnd: (node: Konva.Group) => void;
 }) {
   const textRef = useRef<Konva.Text>(null);
   const groupRef = useRef<Konva.Group>(null);
   const hitRef = useRef<Konva.Rect>(null);
+  const layout = useMemo(() => layoutWatermarkText(layer, text), [text, layer.fontSize, layer.fontFamily, layer.fontWeight, fontRevision]);
+  const drawText = useCallback((context: Konva.Context) => {
+    paintWatermarkText(context, layout, layer.color);
+  }, [layout, layer.color]);
   useLayoutEffect(() => {
     const node = textRef.current;
     if (!node) return;
@@ -372,7 +396,7 @@ function Watermark({ layer, text, position, fontRevision, onSelect, onDragStart,
     node.offset({ x: node.width() / 2, y: node.height() / 2 });
     hitRef.current?.setAttrs({ x: -node.width() / 2 - 8, y: -node.height() / 2 - 6, width: node.width() + 16, height: node.height() + 12 });
   }, [text, layer.fontSize, layer.fontFamily, layer.fontWeight, fontRevision]);
-  return <Group ref={groupRef} id={layer.id} name="watermark-layer" {...position} rotation={layer.rotation} draggable dragDistance={4}
+  return <Group ref={groupRef} id={layer.id} name="watermark-layer" {...position} rotation={layer.rotation} draggable={!readOnly} listening={!readOnly} dragDistance={4}
     onMouseDown={event => { if (event.evt.button === 0) { onSelect(event.evt.shiftKey); if (event.evt.shiftKey) groupRef.current?.stopDrag(); } }} onTouchStart={() => onSelect(false)}
     onMouseEnter={event => { event.target.getStage()!.container().style.cursor = "grab"; }}
     onMouseLeave={event => { event.target.getStage()!.container().style.cursor = ""; }}
@@ -381,6 +405,7 @@ function Watermark({ layer, text, position, fontRevision, onSelect, onDragStart,
     onDragEnd={event => onDragEnd(event.target as Konva.Group)}>
     <Rect ref={hitRef} fill="rgba(0,0,0,0)" />
     <Text key={fontRevision} ref={textRef} text={text} fontFamily={previewFontFamily(layer.fontFamily)} fontSize={layer.fontSize} fontStyle={String(layer.fontWeight)}
+      width={layout.width} height={layout.height} sceneFunc={drawText}
       fill={layer.color} opacity={layer.opacity * (text.startsWith("未读取到") ? 0.55 : 1)} listening={false} />
   </Group>;
 }

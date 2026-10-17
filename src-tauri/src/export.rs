@@ -8,7 +8,7 @@ use image::{
     },
     imageops::{self, FilterType},
 };
-use imageproc::drawing::{draw_text_mut, text_size};
+use imageproc::drawing::draw_text_mut;
 use lcms2::{Intent, PixelFormat, Profile, Transform};
 use little_exif::{exif_tag::ExifTag, ifd::ExifTagGroup, metadata::Metadata};
 use serde::{Deserialize, Serialize};
@@ -1108,6 +1108,21 @@ fn load_font(
 
 type FontRuns = (Vec<FontArc>, Vec<(String, usize)>);
 
+// Match text-segments.ts: preserve connected words and numeric punctuation,
+// while centering Chinese, English and numeric segments independently.
+fn text_kind(character: char) -> Option<u8> {
+    if matches!(character as u32, 0x3400..=0x4dbf | 0x4e00..=0x9fff | 0xf900..=0xfaff | 0x20000..=0x323af)
+    {
+        Some(0)
+    } else if character.is_numeric() {
+        Some(2)
+    } else if character.is_alphabetic() {
+        Some(1)
+    } else {
+        None
+    }
+}
+
 fn font_runs(
     text: &str,
     primary: FontArc,
@@ -1127,18 +1142,25 @@ fn font_runs(
         faces.push(load_font(family, weight, cache)?);
     }
     let mut runs: Vec<(String, usize)> = Vec::new();
+    let mut kind = text.chars().find_map(text_kind).unwrap_or(1);
+    let mut previous_kind = kind;
     for c in text.chars() {
+        kind = text_kind(c).unwrap_or(kind);
         let index = if c.is_ascii_whitespace() {
             Some(0)
         } else {
             faces.iter().position(|font| font.glyph_id(c).0 != 0)
         }
         .ok_or_else(|| format!("当前字体不支持字符“{c}”，请离线导入包含该字形的 TTF/OTF 字体"))?;
-        if let Some((run, _)) = runs.last_mut().filter(|(_, previous)| *previous == index) {
+        if let Some((run, _)) = runs
+            .last_mut()
+            .filter(|(_, previous)| *previous == index && kind == previous_kind)
+        {
             run.push(c);
         } else {
             runs.push((c.to_string(), index));
         }
+        previous_kind = kind;
     }
     Ok((faces, runs))
 }
@@ -1180,16 +1202,16 @@ fn draw_layers(
             .map(|(text, index)| {
                 let face = &faces[*index];
                 let scale = css_font_scale(face, (layer.font_size * scale).max(1.0));
-                let (width, _) = text_size(scale, face, text);
-                (scale, width.saturating_sub(1))
+                (scale, text_advance(face, scale, text))
             })
             .collect();
-        let text_width = run_sizes
+        let text_width = (run_sizes
             .iter()
             .map(|(_, width)| *width)
-            .sum::<u32>()
+            .sum::<f32>()
+            .ceil() as u32)
             .saturating_add(1);
-        let text_height = font_scale.y.ceil() as u32;
+        let text_height = (layer.font_size * scale).max(1.0).ceil() as u32;
         let padding = (font_scale.y * 0.35).ceil() as u32 + 4;
         let width = text_width.checked_add(padding.saturating_mul(2));
         let height = text_height.checked_add(padding.saturating_mul(2));
@@ -1206,15 +1228,36 @@ fn draw_layers(
             ));
         }
         let mut text_image = RgbaImage::new(width, height);
-        let color = parse_color(&layer.color, (layer.opacity.clamp(0.0, 1.0) * 255.0) as u8);
-        let mut cursor = padding as i32;
-        let baseline = font.as_scaled(font_scale).ascent();
+        let color = parse_color(&layer.color, 255);
+        let mut cursor = padding as f32;
         for ((text, index), (run_scale, width)) in runs.iter().zip(run_sizes) {
             let face = &faces[*index];
-            let top =
-                padding as i32 + (baseline - face.as_scaled(run_scale).ascent()).round() as i32;
-            draw_text_mut(&mut text_image, color, cursor, top, run_scale, face, text);
-            cursor += width as i32;
+            let mut run_image = RgbaImage::new(width.ceil() as u32 + 1 + padding * 2, height);
+            draw_text_mut(
+                &mut run_image,
+                color,
+                padding as i32,
+                padding as i32,
+                run_scale,
+                face,
+                text,
+            );
+            if let Some(middle) = text_ink_middle(&run_image) {
+                let top = (padding as f32 + text_height as f32 / 2.0 - middle).round() as i64;
+                let opacity = layer.opacity.clamp(0.0, 1.0);
+                if opacity < 1.0 {
+                    for pixel in run_image.pixels_mut() {
+                        pixel[3] = (pixel[3] as f32 * opacity).round() as u8;
+                    }
+                }
+                imageops::overlay(
+                    &mut text_image,
+                    &run_image,
+                    cursor.round() as i64 - padding as i64,
+                    top,
+                );
+            }
+            cursor += width;
         }
         let text_image = match layer.rotation {
             90 => imageops::rotate90(&text_image),
@@ -1226,6 +1269,44 @@ fn draw_layers(
         imageops::overlay(canvas, &text_image, x, y);
     }
     Ok(())
+}
+
+// Keep imageproc's glyph advances and kerning, but round only raster bounds
+// and final placement. Rounding every Han/Latin/number run expands captions.
+fn text_advance(font: &FontArc, scale: PxScale, text: &str) -> f32 {
+    let scaled = font.as_scaled(scale);
+    let mut width = 0.0;
+    let mut previous = None;
+    for character in text.chars() {
+        let id = font.glyph_id(character);
+        width += scaled.h_advance(id);
+        if font.outline_glyph(id.with_scale(scale)).is_some() {
+            if let Some(previous) = previous {
+                width += scaled.kern(id, previous);
+            }
+            previous = Some(id);
+        }
+    }
+    width.max(0.0)
+}
+
+fn text_ink_middle(image: &RgbaImage) -> Option<f32> {
+    // Strong ink avoids antialias fringes when centering. Small punctuation
+    // may contain only faint pixels; those still belong in the final image.
+    for threshold in [32, 0] {
+        let mut first = None;
+        let mut last = 0;
+        for (y, mut row) in image.rows().enumerate() {
+            if row.any(|pixel| pixel[3] > threshold) {
+                first.get_or_insert(y);
+                last = y;
+            }
+        }
+        if let Some(top) = first {
+            return Some((top + last + 1) as f32 / 2.0);
+        }
+    }
+    None
 }
 
 fn css_font_scale(font: &impl Font, css_pixels: f32) -> PxScale {
@@ -2312,6 +2393,77 @@ mod tests {
             .unwrap();
             canvas.save(root.join(format!("{name}.png"))).unwrap();
         }
+        for (name, family, rotation, opacity) in [
+            ("allura_signature", "Allura", 0, 1.0),
+            ("cinzel_signature", "Cinzel", 0, 1.0),
+            ("sacramento_signature", "Sacramento", 0, 1.0),
+            ("cormorant_signature", "Cormorant Garamond", 0, 1.0),
+            ("longcang_signature", "Long Cang", 0, 1.0),
+            ("spacemono_signature", "Space Mono", 0, 1.0),
+            ("allura_signature_rotated", "Allura", 90, 1.0),
+            ("allura_signature_rotated_back", "Allura", -90, 1.0),
+            ("allura_signature_translucent", "Allura", 0, 0.3),
+        ] {
+            let mut item = text_item.clone();
+            let layer = &mut item.document.layers[0];
+            layer.font_family = family.into();
+            layer.custom_value = "名字 ming 123".into();
+            layer.font_size = 48.0;
+            layer.rotation = rotation;
+            layer.opacity = opacity;
+            let mut canvas = RgbaImage::new(600, 400);
+            draw_layers(
+                &mut canvas,
+                &item,
+                &ExifSnapshot::default(),
+                &text_geometry,
+                1.0,
+                &mut HashMap::new(),
+            )
+            .unwrap();
+            canvas.save(root.join(format!("{name}.png"))).unwrap();
+        }
+
+        for (name, family, value, size, canvas_width) in [
+            ("cinzel_alternating", "Cinzel", "A1".repeat(12), 32.0, 600),
+            ("allura_alternating", "Allura", "A1".repeat(12), 32.0, 600),
+            (
+                "spacemono_alternating",
+                "Space Mono",
+                "A1".repeat(12),
+                32.0,
+                600,
+            ),
+            ("allura_faint", "Allura", ".".into(), 8.0, 600),
+            (
+                "longcang_long",
+                "Long Cang",
+                format!("名字{}", "123".repeat(100)),
+                80.0,
+                9000,
+            ),
+        ] {
+            let mut item = text_item.clone();
+            let layer = &mut item.document.layers[0];
+            layer.font_family = family.into();
+            layer.custom_value = value;
+            layer.font_size = size;
+            let mut geometry = text_geometry.clone();
+            geometry.width = canvas_width as f32;
+            geometry.regions.get_mut("canvas").unwrap().width = canvas_width as f32;
+            let mut canvas = RgbaImage::new(canvas_width, 400);
+            draw_layers(
+                &mut canvas,
+                &item,
+                &ExifSnapshot::default(),
+                &geometry,
+                1.0,
+                &mut HashMap::new(),
+            )
+            .unwrap();
+            canvas.save(root.join(format!("{name}.png"))).unwrap();
+        }
+
         let custom_directory = root.join("fonts");
         crate::fonts::initialize(custom_directory.clone());
         let custom = crate::fonts::import_at(
@@ -2393,6 +2545,154 @@ mod tests {
                 .0
                 .save(root.join("real_export.png"))
                 .unwrap();
+        }
+    }
+
+    #[test]
+    fn mixed_run_width_does_not_accumulate_rounding() {
+        for family in ["Cinzel", "Allura", "Space Mono"] {
+            let text = "A1".repeat(20);
+            let canvas = render_text_test(family, &text, 32.0, 1.0);
+            let mut reference = RgbaImage::new(canvas.width(), canvas.height());
+            let font = load_font(family, 400, &mut HashMap::new()).unwrap();
+            draw_text_mut(
+                &mut reference,
+                Rgba([0, 0, 0, 255]),
+                20,
+                20,
+                css_font_scale(&font, 32.0),
+                &font,
+                &text,
+            );
+            let ink_width = |image: &RgbaImage| {
+                let xs: Vec<_> = image
+                    .enumerate_pixels()
+                    .filter(|(_, _, p)| p[3] > 32)
+                    .map(|(x, _, _)| x)
+                    .collect();
+                xs.iter().max().unwrap() - xs.iter().min().unwrap() + 1
+            };
+            assert!(
+                ink_width(&canvas).abs_diff(ink_width(&reference)) <= 2,
+                "{family}: exported width {}, unsegmented width {}",
+                ink_width(&canvas),
+                ink_width(&reference)
+            );
+        }
+    }
+
+    #[test]
+    fn faint_runs_remain_visible_in_small_exports() {
+        for (text, size) in [(".", 8.0), ("i", 3.0)] {
+            for scale in [1.0, 0.5] {
+                let canvas = render_text_test("Allura", text, size / scale, scale);
+                assert!(
+                    canvas.pixels().any(|p| p[3] > 0),
+                    "{text:?} at {size}px / scale {scale} disappeared"
+                );
+            }
+        }
+    }
+
+    fn render_text_test(family: &str, text: &str, size: f32, scale: f32) -> RgbaImage {
+        let mut document = test_document();
+        document.frame.padding_x = 0.0;
+        document.frame.padding_y = 0.0;
+        document.regions.bottom.extra = 0.0;
+        let mut layer = test_layer("custom");
+        layer.custom_value = text.into();
+        layer.region = "canvas".into();
+        layer.font_family = family.into();
+        layer.font_size = size;
+        layer.font_weight = 400;
+        document.layers.push(layer);
+        let geometry = calculate_geometry(1200, 400, &document);
+        let item = ExportItem {
+            path: String::new(),
+            document,
+            overrides: HashMap::new(),
+            output_suffix: None,
+            crop: None,
+        };
+        let mut canvas = RgbaImage::new(
+            (geometry.width * scale) as u32,
+            (geometry.height * scale) as u32,
+        );
+        draw_layers(
+            &mut canvas,
+            &item,
+            &ExifSnapshot::default(),
+            &geometry,
+            scale,
+            &mut HashMap::new(),
+        )
+        .unwrap();
+        canvas
+    }
+
+    #[test]
+    fn chinese_fallback_ink_stays_centered_when_the_primary_font_changes() {
+        let mut cache = HashMap::new();
+        for family in [
+            "Allura",
+            "Cinzel",
+            "Sacramento",
+            "Cormorant Garamond",
+            "Long Cang",
+            "Space Mono",
+        ] {
+            for rotation in [0, 90, -90] {
+                let mut document = test_document();
+                document.frame.padding_x = 0.0;
+                document.frame.padding_y = 0.0;
+                document.regions.bottom.extra = 0.0;
+                let mut layer = test_layer("custom");
+                layer.custom_value = "名字".into();
+                layer.region = "canvas".into();
+                layer.font_family = family.into();
+                layer.font_size = 80.0;
+                layer.font_weight = 400;
+                layer.rotation = rotation;
+                document.layers.push(layer);
+                let geometry = calculate_geometry(600, 400, &document);
+                let item = ExportItem {
+                    path: String::new(),
+                    document,
+                    overrides: HashMap::new(),
+                    output_suffix: None,
+                    crop: None,
+                };
+                let mut canvas = RgbaImage::new(geometry.width as u32, geometry.height as u32);
+                draw_layers(
+                    &mut canvas,
+                    &item,
+                    &ExifSnapshot::default(),
+                    &geometry,
+                    1.0,
+                    &mut cache,
+                )
+                .unwrap();
+                let (mut low, mut high) = (u32::MAX, 0);
+                for (x, y, _) in canvas
+                    .enumerate_pixels()
+                    .filter(|(_, _, pixel)| pixel[3] > 32)
+                {
+                    let coordinate = if rotation == 0 { y } else { x };
+                    low = low.min(coordinate);
+                    high = high.max(coordinate);
+                }
+                assert_ne!(low, u32::MAX);
+                let expected = if rotation == 0 {
+                    geometry.height / 2.0
+                } else {
+                    geometry.width / 2.0
+                };
+                let center = (low + high + 1) as f32 / 2.0;
+                assert!(
+                    (center - expected).abs() <= 1.0,
+                    "{family} rotation {rotation}: ink center {center}, expected {expected}"
+                );
+            }
         }
     }
 

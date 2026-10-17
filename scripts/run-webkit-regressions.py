@@ -2,7 +2,7 @@
 """Run browser regression scripts in Tauri's Linux rendering engine.
 
 Requires system PyGObject, WebKitGTK 4.1 and a running Vite dev server:
-    xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422
+    GDK_BACKEND=x11 xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422
 """
 import json
 import os
@@ -16,15 +16,21 @@ gi.require_version("WebKit2", "4.1")
 from gi.repository import GLib, Gtk, WebKit2  # noqa: E402
 
 scripts = Path(__file__).resolve().parent
-checks = ["konva-canvas-regression.js", "multi-selection-regression.js", "precision-regression.js", "drag-persistence-regression.js", "current-canvas-batch-regression.js", "export-document-regression.js", "export-workflow-regression.js", "export-retry-regression.js", "photo-detail-regression.js", "browser-import-regression.js", "editor-photo-loading-regression.js", "import-regression.js", "restore-regression.js", "session-failure-regression.js", "modal-regression.js", "metadata-undo-regression.js", "template-save-regression.js", "export-improvements-regression.js", "photo-relink-regression.js", "missing-photo-removal-regression.js", "storage-recovery-regression.js", "template-import-regression.js", "editing-guards-regression.js", "batch-filter-regression.js", "export-filename-regression.js", "parameter-picker-regression.js", "export-feedback-regression.js", "slider-undo-regression.js", "interface-controls-regression.js", "control-content-alignment-regression.js", "template-suffix-regression.js", "import-location-regression.js", "native-photo-drop-regression.js", "browser-photo-drop-regression.js", "font-library-regression.js", "native-font-import-regression.js"]
+checks = ["konva-canvas-regression.js", "multi-selection-regression.js", "precision-regression.js", "drag-persistence-regression.js", "current-canvas-batch-regression.js", "export-document-regression.js", "export-workflow-regression.js", "export-retry-regression.js", "photo-detail-regression.js", "browser-import-regression.js", "editor-photo-loading-regression.js", "import-regression.js", "restore-regression.js", "session-failure-regression.js", "modal-regression.js", "metadata-undo-regression.js", "template-save-regression.js", "export-improvements-regression.js", "photo-relink-regression.js", "missing-photo-removal-regression.js", "storage-recovery-regression.js", "template-import-regression.js", "editing-guards-regression.js", "batch-filter-regression.js", "export-filename-regression.js", "parameter-picker-regression.js", "export-feedback-regression.js", "slider-undo-regression.js", "interface-controls-regression.js", "control-content-alignment-regression.js", "template-suffix-regression.js", "import-location-regression.js", "native-photo-drop-regression.js", "browser-photo-drop-regression.js", "font-library-regression.js", "native-font-import-regression.js", "mixed-font-alignment-regression.js"]
 if len(sys.argv) > 2:
     checks = sys.argv[2:]
 else:
+    checks.append("font-metrics-precision-regression.js")
+    checks.append("mixed-font-layout-regression.js")
+    checks.append("line-alignment-regression.js")
+    checks.append("result-preview-regression.js")
+    checks.append("template-orientation-regression.js")
     checks.extend(["template-layout-regression.js", "template-layout-persistence-regression.js", "distribution-range-regression.js", "distribution-direction-regression.js", "template-update-regression.js", "crop-loading-regression.js", "photo-crop-regression.js", "photo-rotation-regression.js", "photo-rotation-interaction-regression.js", "theme-layout-regression.js"])
 
 result = 1
 current_check = "page load"
 timeout_id = None
+execution_started = False
 manager = WebKit2.UserContentManager()
 manager.register_script_message_handler("regression")
 
@@ -55,7 +61,9 @@ def received(_manager, message):
 
 
 manager.connect("script-message-received::regression", received)
-view = WebKit2.WebView(user_content_manager=manager)
+# Each invocation owns its storage. Import/restore tests retain IndexedDB
+# within this context, without inheriting fonts or sessions from older runs.
+view = WebKit2.WebView(web_context=WebKit2.WebContext.new_ephemeral(), user_content_manager=manager)
 window = Gtk.Window()
 window.set_default_size(int(os.environ.get("WATERMARK_TEST_WIDTH", "1440")), int(os.environ.get("WATERMARK_TEST_HEIGHT", "920")))
 window.add(view)
@@ -63,8 +71,16 @@ window.show_all()
 
 
 def loaded(_view, event):
+    global execution_started
     if event != WebKit2.LoadEvent.FINISHED:
         return
+    if _view.get_uri() in (None, "about:blank"):
+        return
+    if execution_started:
+        print(f"Page reloaded during {current_check}; keep sources unchanged while regressions run", file=sys.stderr, flush=True)
+        Gtk.main_quit()
+        return
+    execution_started = True
     sources = json.dumps([{ "name": name, "source": (scripts / name).read_text() } for name in checks])
     javascript = """
     (async () => {

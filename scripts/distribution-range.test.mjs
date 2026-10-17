@@ -119,7 +119,7 @@ test('local range edits survive an orientation switch with valid members',()=>{
   const base=fixture(),record={...structuredClone(template),layouts:{landscape:base,portrait:structuredClone(base)}};
   const edited=structuredClone(base);setDistributionRange(edited,a,ids(edited),'x',{reference:'canvas',ratio:.6},size);
   const rotated={...a,crop:{x:0,y:0,width:1,height:1,rotation:90}};
-  const next=resolveDocumentLayout(reorientTemplateDocument(record,a,rotated,edited),rotated,size);
+  const next=resolveDocumentLayout(reorientTemplateDocument(record,a,rotated,edited,size),rotated,size);
   assert.equal(next.distributions[0].range.ratio,.6);assert.ok(isValidEditorDocument(next));near(metrics(next,rotated,'x').ratio,.6);
 });
 test('invalid ranges are rejected without changing legacy rule validation',()=>{

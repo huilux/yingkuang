@@ -1,10 +1,11 @@
-import { ensureFontsLoaded, fontsChangedEvent, previewFontFamily } from "./font-library";
+import { ensureFontsLoaded, fontsChangedEvent } from "./font-library";
 import { useEffect, useState } from "react";
 import { calculateGeometry, layerPosition, photoOrientation, resolveLayerText } from "./editor-model";
 import { isVisible } from "./canvas-camera";
 import { rasterize } from "./use-preview-backdrop";
 import type { PhotoAsset, TemplateRecord } from "./types";
 import { resolveBrowserLayout } from "./browser-layout";
+import { layoutWatermarkText, paintWatermarkText } from "./watermark-text";
 
 const sampleMetadata = {
   make: "CAMERA", model: "X", camera: "CAMERA X", lens: "50mm F1.8", focalLength: "50mm", aperture: "f/2.8",
@@ -48,12 +49,10 @@ async function previewImage(template: TemplateRecord, activePhoto: PhotoAsset | 
     context.save();
     context.translate(position.x, position.y);
     context.rotate(layer.rotation * Math.PI / 180);
-    context.font = `${layer.fontWeight} ${layer.fontSize}px ${previewFontFamily(layer.fontFamily)}`;
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.fillStyle = layer.color;
+    const layout = layoutWatermarkText(layer, label);
+    context.translate(-layout.width / 2, -layout.height / 2);
     context.globalAlpha = layer.opacity * (label.startsWith("未读取到") ? 0.55 : 1);
-    context.fillText(label, 0, 0);
+    paintWatermarkText(context, layout, layer.color);
     context.restore();
   }
   context.restore();

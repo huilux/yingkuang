@@ -8,7 +8,8 @@ export type Guide = { axis: "x" | "y"; value: number; label: string; color: stri
 export const regionNames: Record<RegionId, string> = {
   canvas: "整个画布", top: "上参数区", bottom: "下参数区", left: "左参数区", right: "右参数区",
 };
-export const clampZoom = (zoom: number) => Math.max(10, Math.min(300, zoom));
+export const clampZoom = (zoom: number, maximum = 300) => Math.max(10, Math.min(maximum, zoom));
+export const previewMaximumZoom = 1600;
 export const baseScale = (width: number) => Math.max(420, Math.min(860, width * 0.48)) / width;
 export const screenToWorld = (point: Point, camera: Camera): Point => ({
   x: (point.x - camera.x) / camera.scale, y: (point.y - camera.y) / camera.scale,
@@ -21,12 +22,12 @@ export function zoomAt(camera: Camera, scale: number, anchor: Point): Camera {
   return { x: anchor.x - world.x * scale, y: anchor.y - world.y * scale, scale };
 }
 
-export function fitCamera(viewport: Size, scene: Size): Camera {
+export function fitCamera(viewport: Size, scene: Size, maximum = 300, padding = 80): Camera {
   const base = baseScale(scene.width);
   const scale = base * clampZoom(Math.min(
-    Math.max(1, viewport.width - 80) / scene.width,
-    Math.max(1, viewport.height - 80) / scene.height,
-  ) / base * 100) / 100;
+    Math.max(1, viewport.width - padding) / scene.width,
+    Math.max(1, viewport.height - padding) / scene.height,
+  ) / base * 100, maximum) / 100;
   return { x: (viewport.width - scene.width * scale) / 2, y: (viewport.height - scene.height * scale) / 2, scale };
 }
 

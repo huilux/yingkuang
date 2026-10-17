@@ -124,6 +124,14 @@ export async function zoomCheck() {
 export async function dragCheck(root = document) {
   const ctx = await context(root);
   await disableSnap(ctx);
+  // Selecting a watermark opens this panel. At narrow widths that navigation
+  // can resize the viewport; settle it before measuring screen drag distances.
+  ctx.root.querySelector('#tab-watermark')?.click(); await frame();
+  const libraryUrl = performance.getEntriesByType('resource').find(entry => new URL(entry.name).pathname === '/src/font-library.ts').name;
+  const library = await import(libraryUrl);
+  await library.ensureFontsLoaded(library.builtinFonts.map(font => font.value));
+  await document.fonts.ready; await frame();
+  await waitFor(() => ctx.stage.width() === ctx.viewport.clientWidth, 'Canvas resize did not settle before drag');
   await waitFor(() => ctx.stage.findOne('.preview-backdrop'), 'Background not ready');
   const node = ctx.world.findOne('.watermark-layer');
   let maxDragError = 0;

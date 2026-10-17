@@ -1,14 +1,14 @@
 import { FontPicker } from "./FontPicker";
 import { SelectControl } from "./SelectControl";
-import { useState } from "react";
-import { Eye, EyeSlash, TextT, Trash } from "@phosphor-icons/react";
+import { useId, useState } from "react";
+import { AlignCenterHorizontal, AlignCenterVertical, Eye, EyeSlash, TextT, Trash } from "@phosphor-icons/react";
 import { calculateGeometry, metadataOptionForSource, metadataValue, resolveLayerText } from "./editor-model";
 import { isVisible, regionNames } from "./canvas-camera";
 import { SliderRow, Segmented } from "./EditorControls";
 import { NumericInput } from "./NumericInput";
 import { ParameterPicker } from "./ParameterPicker";
 import { DistributionControls } from "./DistributionControls";
-import { positionPatch, type AlignReference, type ArrangeAction, type LayerPatch } from "./selection-model";
+import { canPositionAlongAxis, positionPatch, type AlignReference, type ArrangeAction, type LayerPatch } from "./selection-model";
 import type { EditorDocument, LayerSource, PhotoAsset, RegionId, WatermarkLayer } from "./types";
 
 // Coordinate percentages become f32 normalized positions in the native renderer.
@@ -33,6 +33,7 @@ type Props = {
 
 export function LayerInspector({ document: design, photo, selectedIds, onSelect, onSelectionChange, onPatch, onAdd, onDelete, onStart, onEnd, onOverride, onArrange, onRange, onClearRange }: Props) {
   const [reference, setReference] = useState<AlignReference | "region">("region");
+  const lineHelpId = useId();
   const layers = design.layers.filter(layer => selectedIds.includes(layer.id));
   const first = layers[0];
   const single = layers.length === 1;
@@ -42,6 +43,10 @@ export function LayerInspector({ document: design, photo, selectedIds, onSelect,
   const available = (id: RegionId) => id === "canvas" || (design.regions[id].enabled && !!geometry && geometry.regions[id].width >= 1 && geometry.regions[id].height >= 1);
   const actualReference = reference === "region" ? (mixed("region") ? "canvas" : first?.region ?? "canvas") : reference;
   const canArrange = layers.length > 0 && layers.every(layer => isVisible(layer, design.regions)) && (actualReference === "photo" || actualReference === "selection" || available(actualReference));
+  const visibleSelection = layers.length >= 2 && layers.every(layer => isVisible(layer, design.regions));
+  const canAlignRow = visibleSelection && !!geometry && canPositionAlongAxis("y", layers, geometry);
+  const canAlignColumn = visibleSelection && !!geometry && canPositionAlongAxis("x", layers, geometry);
+  const lineNotice = !visibleSelection ? "隐藏元素或关闭区域中的元素无法参与对齐。" : !canAlignRow || !canAlignColumn ? "部分元素的所属区域没有可用空间，请增加该方向的留白或区域额外空间。" : "以选区中心线对齐；一行保留横向位置，一列保留纵向位置。不改字号，不自动均分间距。";
   const verticalThirds = actualReference === "left" || actualReference === "right";
   const arrange = (action: ArrangeAction) => onArrange(action, actualReference);
   const selectedSource = single && first.source !== "custom" ? metadataOptionForSource(first.source) : null;
@@ -80,6 +85,14 @@ export function LayerInspector({ document: design, photo, selectedIds, onSelect,
         {mixed("region") && <option value="" disabled>多个区域</option>}
         {(Object.keys(regionNames) as RegionId[]).map(id => <option key={id} value={id} disabled={!available(id)}>{regionNames[id]}{id !== "canvas" && !design.regions[id].enabled ? "（未启用）" : ""}</option>)}
       </SelectControl></label>
+      {!single && <fieldset className="line-alignment-controls" aria-describedby={lineHelpId}>
+        <legend>元素互相对齐</legend>
+        <div className="align-grid line-alignment-actions">
+          <button type="button" disabled={!canAlignRow} title={canAlignRow ? "统一纵向中心，保留每个元素的横向位置和样式" : "请选择至少两个可见元素，并确保所属区域有可用高度"} onClick={() => onArrange("center-y", "selection")}><AlignCenterVertical aria-hidden="true" />对齐成一行</button>
+          <button type="button" disabled={!canAlignColumn} title={canAlignColumn ? "统一横向中心，保留每个元素的纵向位置和样式" : "请选择至少两个可见元素，并确保所属区域有可用宽度"} onClick={() => onArrange("center-x", "selection")}><AlignCenterHorizontal aria-hidden="true" />对齐成一列</button>
+        </div>
+        <p className="selection-note" id={lineHelpId}>{lineNotice}</p>
+      </fieldset>}
       <label className="field"><span>对齐参照</span><SelectControl aria-label="对齐参照" value={reference} onChange={event => setReference(event.currentTarget.value as AlignReference | "region")}>
         <option value="region">所属区域（混选时为画布）</option><option value="selection">所选元素</option><option value="canvas">整个画布</option><option value="photo">照片</option>
         {(["top", "bottom", "left", "right"] as const).map(id => <option key={id} value={id} disabled={!available(id)}>{regionNames[id]}</option>)}

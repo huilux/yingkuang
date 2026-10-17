@@ -2,6 +2,8 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+from macos_release_materials import MACOS_TARGETS
+from macos_release_review import verify_review
 import tempfile
 import unittest
 import zipfile
@@ -142,6 +144,150 @@ class ReleaseAssemblyTests(unittest.TestCase):
     def test_source_archive_must_match_lock_file(self):
         with self.assertRaisesRegex(ValueError, 'source archive checksum'):
             self.build(lambda name, version, checksum, destination: destination.write_bytes(b'wrong source'))
+
+
+class MacReleaseAssemblyTests(ReleaseAssemblyTests):
+    def setUp(self):
+        super().setUp()
+        notice = 'licenses/upstream/test-objc/1.0.0/LICENSE.md'
+        path = self.root / notice; path.parent.mkdir(parents=True); path.write_text('Original upstream SDK/author notice')
+        record = {'schemaVersion': 1, 'notesFile': 'licenses/MACOS-REVIEW.md', 'packages': [
+            {'ecosystem': 'cargo', 'name': 'test-objc', 'version': '1.0.0', 'authors': ['Original Author'], 'notices': [{'path': notice, 'sha256': assembly.digest(path)}]}]}
+        (self.root / 'licenses/macos-review.json').write_text(json.dumps(record))
+        (self.root / 'licenses/MACOS-REVIEW.md').write_text('Scoped review; ad-hoc; manual acceptance pending')
+        with (self.root / 'src-tauri/Cargo.lock').open('a') as lock:
+            lock.write('[[package]]\nname = "test-objc"\nversion = "1.0.0"\nchecksum = "' + self.source_hash + '"\n')
+        for platform, (target, architecture) in MACOS_TARGETS.items():
+            prefix = f'yingkuang_{self.version}_{platform}'
+            review = {'ecosystem': 'cargo', 'name': 'test-objc', 'version': '1.0.0', 'reason': 'SDK notice'}
+            inventory = {'target': target, 'missingTexts': [], 'reviewRequired': [review], 'packages': [
+                {'ecosystem': 'cargo', 'name': 'test-mpl', 'version': '1.0.0', 'license': 'MPL-2.0'},
+                {'ecosystem': 'cargo', 'name': 'test-objc', 'version': '1.0.0', 'license': 'MIT', 'reviewRequired': 'SDK notice', 'authors': ['Original Author'], 'files': [notice]}]}
+            checks = {'version': self.version, 'commit': self.commit, 'platform': platform, 'architecture': architecture,
+                      'dmgMounted': 'passed', 'nativeWindow': 'passed', 'systemLibrariesOnly': 'passed',
+                      'signature': 'ad-hoc verified', 'notarized': False, 'interactiveAcceptance': 'pending',
+                      'installedLicenseFilesVerified': 10, 'dependencyReview': 'reviewed', 'upstreamReviewItems': [review],
+                      'reviewRecordSha256': assembly.digest(self.root / 'licenses/macos-review.json'),
+                      'linkedLibraries': ['/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit'], 'originalSourceArchives': 2}
+            sources = {'projectCommit': self.commit, 'packages': [
+                {'name': name, 'version': '1.0.0', 'archive': f'sources/{name}-1.0.0.crate', 'sha256': self.source_hash} for name in ['test-mpl', 'test-objc']]}
+            files = {
+                prefix + '.dmg': (platform + ' DMG').encode(),
+                'checks.json': json.dumps(checks).encode(),
+                f'licenses/dependencies/{target}/inventory.json': json.dumps(inventory).encode(),
+                'licenses/MIT.txt': (self.root / 'LICENSE').read_bytes(),
+                'licenses/THIRD_PARTY_NOTICES.md': (self.root / 'THIRD_PARTY_NOTICES.md').read_bytes(),
+                'macos-review.json': (self.root / 'licenses/macos-review.json').read_bytes(),
+                'MACOS-REVIEW.md': (self.root / 'licenses/MACOS-REVIEW.md').read_bytes(),
+                'sources.json': json.dumps(sources).encode(),
+                'sources/test-mpl-1.0.0.crate': self.source,
+                'sources/test-objc-1.0.0.crate': self.source,
+            }
+            self.write_mac_archive(platform, files)
+
+    def write_mac_archive(self, platform, files):
+        prefix = f'yingkuang_{self.version}_{platform}'
+        sums = '\n'.join(f'{hashlib.sha256(data).hexdigest()}  {name}' for name, data in files.items()) + '\n'
+        with zipfile.ZipFile(self.inputs / (prefix + '-test.zip'), 'w') as bundle:
+            for name, data in files.items(): bundle.writestr(name, data)
+            bundle.writestr('SHA256SUMS.txt', sums)
+        archive = self.inputs / (prefix + '-test.zip')
+        (self.inputs / (prefix + '-test_SHA256SUMS.txt')).write_text(f'{assembly.digest(archive)}  {archive.name}\n')
+
+    def change_mac(self, change):
+        platform = 'macos-arm64'
+        with zipfile.ZipFile(self.inputs / f'yingkuang_{self.version}_{platform}-test.zip') as bundle:
+            files = {n: bundle.read(n) for n in bundle.namelist() if n != 'SHA256SUMS.txt'}
+        change(files)
+        self.write_mac_archive(platform, files)
+
+    def build(self, fetch=None):
+        return assembly.assemble(self.root, self.inputs, self.output, self.commit, fetch or self.fetch, include_macos=True)
+
+    # The inherited checks also exercise the same guards with macOS enabled.
+    def test_five_assets_preserve_installers_licenses_reports_and_original_sources(self):
+        result = self.build()
+        self.assertEqual(len(result['assets']), 7)
+        with zipfile.ZipFile(self.output / f'yingkuang_{self.version}_release-materials.zip') as bundle:
+            for platform in ['macos-arm64', 'macos-x64']:
+                dmg = f'yingkuang_{self.version}_{platform}.dmg'
+                self.assertEqual((self.output / dmg).read_bytes(), (platform + ' DMG').encode())
+                self.assertNotIn(f'{platform}/{dmg}', bundle.namelist())
+                self.assertEqual(json.loads(bundle.read(platform + '/checks.json'))['interactiveAcceptance'], 'pending')
+                self.assertEqual(bundle.read(platform + '/sources/test-objc-1.0.0.crate'), self.source)
+            for line in bundle.read('SHA256SUMS.txt').decode().splitlines():
+                checksum, name = line.split('  ', 1)
+                self.assertEqual(checksum, hashlib.sha256(bundle.read(name)).hexdigest())
+        self.assertEqual(len((self.output / 'SHA256SUMS.txt').read_text().splitlines()), 6)
+
+    def test_mac_archive_tampering_is_rejected(self):
+        path = self.inputs / f'yingkuang_{self.version}_macos-arm64-test.zip'
+        path.write_bytes(path.read_bytes() + b'tampered')
+        with self.assertRaisesRegex(ValueError, 'macOS staged checksum'):
+            self.build()
+
+    def test_mac_wrong_architecture_is_rejected(self):
+        def change(files):
+            checks = json.loads(files['checks.json']); checks['architecture'] = 'x86_64'
+            files['checks.json'] = json.dumps(checks).encode()
+        self.change_mac(change)
+        with self.assertRaisesRegex(ValueError, 'source/architecture'):
+            self.build()
+
+    def test_mac_unknown_review_version_is_rejected(self):
+        def change(files):
+            name = 'licenses/dependencies/aarch64-apple-darwin/inventory.json'
+            inventory = json.loads(files[name]); inventory['reviewRequired'][0]['version'] = '2.0.0'
+            inventory['packages'][1]['version'] = '2.0.0'
+            checks = json.loads(files['checks.json']); checks['upstreamReviewItems'] = inventory['reviewRequired']
+            files[name] = json.dumps(inventory).encode(); files['checks.json'] = json.dumps(checks).encode()
+        self.change_mac(change)
+        with self.assertRaisesRegex(ValueError, 'Unresolved macOS dependency review'):
+            self.build()
+
+    def test_mac_source_archive_must_match_lock(self):
+        self.change_mac(lambda files: files.update({'sources/test-objc-1.0.0.crate': b'wrong original source'}))
+        with self.assertRaisesRegex(ValueError, 'macOS original source checksum'):
+            self.build()
+
+    def test_mac_unsafe_archive_path_is_rejected(self):
+        self.change_mac(lambda files: files.update({'../escaped.txt': b'unsafe'}))
+        with self.assertRaisesRegex(ValueError, 'Unsafe macOS archive path'):
+            self.build()
+        self.assertFalse((self.root / 'escaped.txt').exists())
+
+    def test_mac_modified_review_evidence_is_rejected(self):
+        self.change_mac(lambda files: files.update({'MACOS-REVIEW.md': b'changed scope'}))
+        with self.assertRaisesRegex(ValueError, 'review evidence differs'):
+            self.build()
+
+    def test_mac_missing_review_item_is_rejected(self):
+        def change(files):
+            name = 'licenses/dependencies/aarch64-apple-darwin/inventory.json'
+            inventory = json.loads(files[name]); inventory['reviewRequired'] = []
+            checks = json.loads(files['checks.json']); checks['upstreamReviewItems'] = []
+            files[name] = json.dumps(inventory).encode(); files['checks.json'] = json.dumps(checks).encode()
+        self.change_mac(change)
+        with self.assertRaisesRegex(ValueError, 'Incomplete macOS dependency review inventory'):
+            self.build()
+
+    def test_mac_changed_author_metadata_is_rejected(self):
+        def change(files):
+            name = 'licenses/dependencies/aarch64-apple-darwin/inventory.json'
+            inventory = json.loads(files[name]); inventory['packages'][1]['authors'] = ['Invented author']
+            files[name] = json.dumps(inventory).encode()
+        self.change_mac(change)
+        with self.assertRaisesRegex(ValueError, 'Unresolved macOS dependency review'):
+            self.build()
+
+    def test_mac_preserves_explicitly_undeclared_upstream_authors(self):
+        record = self.root / 'licenses/macos-review.json'
+        data = json.loads(record.read_text()); data['packages'][0]['authors'] = []
+        record.write_text(json.dumps(data))
+        with zipfile.ZipFile(self.inputs / f'yingkuang_{self.version}_macos-arm64-test.zip') as bundle:
+            inventory = json.loads(bundle.read('licenses/dependencies/aarch64-apple-darwin/inventory.json'))
+        inventory['packages'][1]['authors'] = []
+        self.assertEqual(verify_review(self.root, inventory)[0], record)
 
 
 if __name__ == '__main__':
