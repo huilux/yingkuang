@@ -18,6 +18,7 @@
 | `src/document-layout.ts`、`src/browser-layout.ts`、`src/template-layout.ts` | 等间距与对齐规则、字体测量和保留局部修改的横竖布局切换 |
 | `src/session-storage.ts` | 会话校验、迁移和恢复 |
 | `src/font-library.ts`、`src/font-catalog.json` | 字体加载、导入与旧字体映射 |
+| `src/font-glyphs.ts`、`src/text-segments.ts`、`src/watermark-text.ts` | 字形覆盖、中英数字分段、带缓存的分块笔画测量，以及模板卡片与主画布共用的文字绘制 |
 | `src/export-workflow.ts` | 导出设置、任务快照、进度及重试范围 |
 | `src-tauri/src/lib.rs` | Tauri 命令、原图检查、EXIF、预览和路径解析 |
 | `src-tauri/src/export.rs` | 导出预检、图像变换、渲染、编码和队列 |

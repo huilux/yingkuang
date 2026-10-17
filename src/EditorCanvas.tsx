@@ -1,4 +1,5 @@
 import { ensureFontsLoaded, fontsChangedEvent, previewFontFamily } from "./font-library";
+import { layoutWatermarkText, paintWatermarkText } from "./watermark-text";
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useId, useMemo, useRef, useState } from "react";
 import Konva from "konva";
 import { Group, Image as CanvasImage, Layer, Line, Rect, Stage, Text } from "react-konva";
@@ -364,6 +365,10 @@ function Watermark({ layer, text, position, fontRevision, onSelect, onDragStart,
   const textRef = useRef<Konva.Text>(null);
   const groupRef = useRef<Konva.Group>(null);
   const hitRef = useRef<Konva.Rect>(null);
+  const layout = useMemo(() => layoutWatermarkText(layer, text), [text, layer.fontSize, layer.fontFamily, layer.fontWeight, fontRevision]);
+  const drawText = useCallback((context: Konva.Context) => {
+    paintWatermarkText(context, layout, layer.color);
+  }, [layout, layer.color]);
   useLayoutEffect(() => {
     const node = textRef.current;
     if (!node) return;
@@ -381,6 +386,7 @@ function Watermark({ layer, text, position, fontRevision, onSelect, onDragStart,
     onDragEnd={event => onDragEnd(event.target as Konva.Group)}>
     <Rect ref={hitRef} fill="rgba(0,0,0,0)" />
     <Text key={fontRevision} ref={textRef} text={text} fontFamily={previewFontFamily(layer.fontFamily)} fontSize={layer.fontSize} fontStyle={String(layer.fontWeight)}
+      width={layout.width} height={layout.height} sceneFunc={drawText}
       fill={layer.color} opacity={layer.opacity * (text.startsWith("未读取到") ? 0.55 : 1)} listening={false} />
   </Group>;
 }
