@@ -401,7 +401,13 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .text-input { width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--control-radius); background: var(--bg-input); color: var(--text); font-size: 10px; }
 .align-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 0 16px; }
 .align-grid button { min-height: 31px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-input); color: var(--text-secondary); font-size: 9px; cursor: pointer; }
-.align-grid button:hover { border-color: var(--accent); color: var(--text); }
+.align-grid button:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+.line-alignment-controls { min-width: 0; margin: 0 0 16px; padding: 0; border: 0; }
+.line-alignment-controls legend { margin-bottom: 8px; color: var(--text-secondary); font-size: 12px; }
+.line-alignment-actions { margin-bottom: 8px; }
+.line-alignment-actions button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 6px; font-size: 12px; }
+.line-alignment-actions svg { flex-shrink: 0; width: 16px; height: 16px; }
+.line-alignment-controls .selection-note { margin-bottom: 0; }
 .coordinate-readout { display: flex; gap: 6px; }
 .coordinate-readout span { flex: 1; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-input); color: var(--text-secondary); font: 9px ui-monospace, monospace; text-align: center; }
 .inspector-empty { display: grid; height: calc(100% - 50px); place-items: center; color: var(--text-tertiary); font-size: 11px; }

@@ -21,6 +21,7 @@ if len(sys.argv) > 2:
     checks = sys.argv[2:]
 else:
     checks.append("mixed-font-layout-regression.js")
+    checks.append("line-alignment-regression.js")
     checks.extend(["template-layout-regression.js", "template-layout-persistence-regression.js", "distribution-range-regression.js", "distribution-direction-regression.js", "template-update-regression.js", "crop-loading-regression.js", "photo-crop-regression.js", "photo-rotation-regression.js", "photo-rotation-interaction-regression.js", "theme-layout-regression.js"])
 
 result = 1

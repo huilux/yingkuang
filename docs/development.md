@@ -60,6 +60,8 @@ xvfb-run -a python3 scripts/check-csp.py
 
 字体回归包括 `mixed-font-alignment-regression.js`（六种内置字体的中英数字笔画居中）和 `mixed-font-layout-regression.js`（长文字、真实模板卡片与主画布、正反旋转、透明度、模板数据不变，以及 WebKit 中 cmap6 字体导入和恢复）。`render-parity.py` 使用真实 Rust 图片与模板卡片、Konva 绘制结果做三方对照，并检查交替字母数字的累计宽度、长文字和小字号标点；上述检查纳入 Linux CI。每次 WebKit 回归使用临时存储，避免不同运行的字体和会话串扰。像素比较允许不同光栅引擎的小幅抗锯齿差异，不替代 Windows WebView2 实机测试。
 
+`line-alignment.test.mjs` 验证一行／一列对齐只修改垂直／水平坐标，覆盖不同字号、旋转、跨区域、固定范围和模板备份往返。`line-alignment-regression.js` 通过实际按钮验证选区参照、撤销重做、范围保留、横竖照片切换、重启恢复和导出坐标，并检查两元素、隐藏元素、关闭区域、零高度区域及窄面板；它也纳入 Linux CI。行列对齐复用现有 `selection` 居中规则，不新增模板字段。
+
 原生导出基准工具为 `scripts/benchmark-export.py`，用 `--help` 查看所需的 release 测试程序与输入参数。画布性能脚本为 `scripts/zoom-performance.js`，可通过上述 WebKit 回归入口单独运行。测量时记录系统、CPU、构建模式、输入像素、模板、格式和重复次数，分别报告预览与导出耗时。
 
 生成输出放在 `test-output/`；含本机路径、真实照片或任务记录的材料不提交。演示图必须保留合法来源、限制尺寸与体积，并移除附加元数据，`npm test` 会检查。
