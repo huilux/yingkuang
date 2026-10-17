@@ -41,8 +41,10 @@ npm run dev -- --host 127.0.0.1 --port 1422 --strictPort
 另一个终端执行全部界面回归，或在 URL 后指定相关脚本名：
 
 ```sh
-xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422
+GDK_BACKEND=x11 xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422
 ```
+
+`GDK_BACKEND=x11` 保证 GTK 使用 Xvfb 的虚拟显示；若继承桌面的 Wayland 设置，测试窗口可能出现在真实桌面上，遮挡时绘制帧会暂停并导致超时。
 
 界面回归覆盖标题栏事件、主题、画布与裁切加载等交互。使用 IPC 模拟的测试只验证界面请求和状态；Windows 发布流程另外在真实安装后的 WebView2 中验证主题交互，调试端口仅由测试进程临时开启。
 
@@ -55,6 +57,10 @@ xvfb-run -a python3 scripts/check-csp.py
 该检查验证本地图像、字体与编辑器资源可加载，并拒绝内联脚本、动态代码和外部连接。它不替代原生 IPC 或其他平台 WebView 验收。
 
 ## 渲染与性能
+
+`preview-fullscreen.test.mjs` 验证首次成功读取时保存原窗口状态、全屏请求串行处理、持续拒绝后关闭、失败重试、系统状态延迟、外部窗口管理器切换、关闭竞态及 StrictMode 清理隔离。预览浏览器回归通过 Tauri IPC 与窗口事件模拟验证持续拒绝时「返回编辑」和 Esc 均可关闭、外部全屏后的 Esc／F11 退出和系统退出、编辑状态和多选不变，以及恢复后的编辑、撤销与导出坐标、分布和对齐规则。还覆盖从编辑界面 F11 直接进入、长按防重复、输入框／其他对话框／空批次快捷键保护、纯图片视口不留编辑边距、鼠标移动和 Tab 不显示任何控件、光标／焦点框／悬停提示隐藏、Esc／F11 直接返回编辑、预先全屏的窗口恢复及切换未完成时关闭。真实浏览器还需用可信按键验证首次打开时的 Fullscreen API 用户激活及系统 Esc 退出。新增原生窗口权限需要重新启动 Tauri 开发程序；真实系统全屏须在 Linux／Windows 本机确认。
+
+`result-preview-regression.js` 在实际应用中检查成品预览与主画布的干净渲染像素一致，覆盖中英数字、透明文字、旋转、模糊／纯色相框和照片裁切。还验证缩放平移、焦点与 Esc、原编辑状态和导出坐标不变、高清加载失败与过期响应、空批次禁用及原生标题栏避让；纳入 Linux 最小窗口 CI。它使用生成高清图和模拟 IPC，不替代原生文件解码与 Windows 实机验收。
 
 保持开发服务器运行，执行 `python3 scripts/render-parity.py http://127.0.0.1:1422`，对比浏览器预览与 Rust 输出。修改几何、字体、模糊或阴影时，检查中文、字重、文字边界、透明 PNG 和不同成品尺寸。
 

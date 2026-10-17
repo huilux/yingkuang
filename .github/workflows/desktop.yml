@@ -84,7 +84,7 @@ jobs:
             if curl -fsS http://127.0.0.1:1422/ > /dev/null; then break; fi
             sleep 0.2
           done
-          WATERMARK_TEST_WIDTH=1100 WATERMARK_TEST_HEIGHT=720 xvfb-run -a /usr/bin/python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 template-layout-regression.js template-layout-persistence-regression.js distribution-range-regression.js distribution-direction-regression.js template-update-regression.js mixed-font-alignment-regression.js mixed-font-layout-regression.js line-alignment-regression.js
+          WATERMARK_TEST_WIDTH=1100 WATERMARK_TEST_HEIGHT=720 xvfb-run -a /usr/bin/python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 template-layout-regression.js template-layout-persistence-regression.js distribution-range-regression.js distribution-direction-regression.js template-update-regression.js mixed-font-alignment-regression.js mixed-font-layout-regression.js line-alignment-regression.js result-preview-regression.js
           /usr/bin/python3 scripts/render-parity.py http://127.0.0.1:1422
       - name: Verify production CSP in WebKit
         if: runner.os == 'Linux'

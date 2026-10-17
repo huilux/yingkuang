@@ -2,7 +2,7 @@
 """Run browser regression scripts in Tauri's Linux rendering engine.
 
 Requires system PyGObject, WebKitGTK 4.1 and a running Vite dev server:
-    xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422
+    GDK_BACKEND=x11 xvfb-run -a python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422
 """
 import json
 import os
@@ -22,6 +22,7 @@ if len(sys.argv) > 2:
 else:
     checks.append("mixed-font-layout-regression.js")
     checks.append("line-alignment-regression.js")
+    checks.append("result-preview-regression.js")
     checks.extend(["template-layout-regression.js", "template-layout-persistence-regression.js", "distribution-range-regression.js", "distribution-direction-regression.js", "template-update-regression.js", "crop-loading-regression.js", "photo-crop-regression.js", "photo-rotation-regression.js", "photo-rotation-interaction-regression.js", "theme-layout-regression.js"])
 
 result = 1

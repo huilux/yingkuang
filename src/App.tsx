@@ -15,6 +15,7 @@ import {
   Check,
   Copy,
   DownloadSimple,
+  Eye,
   FloppyDisk,
   FolderSimple,
   FolderOpen,
@@ -31,6 +32,7 @@ import { EditorWorkspace } from "./EditorWorkspace";
 import { migrateSessionTemplateReferences, parseSession, relocateSessionPath, type SessionSnapshot } from "./session-storage";
 import {appendTemplateReferenceMigration,templateReferenceEpoch} from "./template-references";
 import { Modal } from "./Modal";
+import { ResultPreview } from "./ResultPreview";
 import { emptyPhotoFilter, filterPhotos, selectVisiblePhotos, type PhotoDirection, type PhotoFilter } from "./photo-filter";
 import { ExportElapsed } from "./ExportElapsed";
 import { StorageRecoveryDialog, type StorageRecovery } from "./StorageRecoveryDialog";
@@ -198,6 +200,10 @@ function App() {
   const [templateName, setTemplateName] = useState("");
   const [showExport, setShowExport] = useState(false);
   const [showCrop, setShowCrop] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [startPreviewFullscreen, setStartPreviewFullscreen] = useState(false);
+  const [previewFullscreen, setPreviewFullscreen] = useState(false);
+  const appShell = useRef<HTMLDivElement>(null);
   const [pendingRemoval, setPendingRemoval] = useState<{ ids: string[]; missingPaths: string[] } | null>(null);
   const [exportSettings, setExportSettings] = useState(defaultExport);
   const [exportRunning, setExportRunning] = useState(false);
@@ -775,7 +781,7 @@ function App() {
 
   const dropBlockedReason = !sessionReady || loadState === "loading" ? "正在读取照片，请稍后再拖入"
     : exportRunning || exportChecking ? "正在导出，请完成后再拖入"
-    : showCrop || showExport || exportResult || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery ? "请先关闭弹窗，再拖入照片" : "";
+    : showPreview || showCrop || showExport || exportResult || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery ? "请先关闭弹窗，再拖入照片" : "";
   const photoDragging = usePhotoDrop({ native: isNative, blockedReason: dropBlockedReason,
     onPaths: paths => { void importNativePhotos(paths); },
     onFiles: files => { void importBrowserPhotos(files); }, onMessage: setMessage });
@@ -1078,11 +1084,30 @@ function App() {
 
   const activeTemplateRecord = templates.find((item) => item.id === activeTemplate);
 
+  useEffect(() => {
+    const previewKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key !== "F11" || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const owner = target.closest(".app-shell");
+        if (owner && owner !== appShell.current) return;
+        if (target.closest("input, textarea, select, [role=combobox], [contenteditable=true]")) return;
+      }
+      if (showPreview || showCrop || showExport || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery || exportRunning || exportResult || editorRef.current?.isInteracting()) return;
+      event.preventDefault();
+      if (!event.repeat && activePhoto && activeDocument) {
+        commitTransaction(); setStartPreviewFullscreen(true); setShowPreview(true);
+      }
+    };
+    window.addEventListener("keydown", previewKey);
+    return () => window.removeEventListener("keydown", previewKey);
+  }, [showPreview, showCrop, showExport, showTemplateDialog, showTemplateManager, pendingRemoval, pendingRelink, pendingStorageRecovery, exportRunning, exportResult, activePhoto, activeDocument, commitTransaction]);
+
   return (
-    <div className={`app-shell ${isNative ? "native-window" : ""}`} onKeyDown={event => {
+    <div ref={appShell} className={`app-shell ${isNative ? "native-window" : ""}${previewFullscreen ? " preview-fullscreen" : ""}`} onKeyDown={event => {
       if (event.defaultPrevented) return;
       const target = event.target as HTMLElement;
-      if (showCrop || showExport || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery || exportRunning || exportResult) return;
+      if (showPreview || showCrop || showExport || showTemplateDialog || showTemplateManager || pendingRemoval || pendingRelink || pendingStorageRecovery || exportRunning || exportResult) return;
       if (editorRef.current?.isInteracting()) return;
       const command = event.ctrlKey || event.metaKey;
       const rangeUndo = target.closest('input[type="range"]') && command && ["z", "y"].includes(event.key.toLowerCase());
@@ -1116,6 +1141,7 @@ function App() {
           <button className="icon-button" type="button" aria-label="重做" disabled={!canRedo} onClick={redo}><ArrowClockwise /></button>
           <span className="header-divider" />
           <button className="button secondary" type="button" onClick={() => setShowTemplateManager(true)}><Stack /> 模板库</button>
+          <button className="button secondary" type="button" aria-label="打开成品预览" title="成品预览（F11 直接全屏预览）" disabled={!activePhoto || !activeDocument} onClick={() => { if (editorRef.current?.isInteracting()) return; commitTransaction(); setStartPreviewFullscreen(false); setShowPreview(true); }}><Eye aria-hidden="true" /> 预览</button>
           <button className="button secondary" type="button" onClick={() => openExport("current")} disabled={!activePhoto}><ImageSquare /> 导出当前</button>
           <button className="button primary" type="button" onClick={() => openExport(exportSettings.range === "current" ? "selected" : exportSettings.range)} disabled={!photos.length}><DownloadSimple /> 批量导出</button>
         </div>
@@ -1311,6 +1337,7 @@ function App() {
         </Modal>
       )}
 
+      {showPreview && activePhoto && activeDocument && <ResultPreview photo={activePhoto} document={activeDocument} startFullscreen={startPreviewFullscreen} onClose={() => setShowPreview(false)} onFullscreenChange={setPreviewFullscreen} />}
       {showCrop && activePhoto && <Suspense fallback={<CropLoading photo={activePhoto} onCancel={() => setShowCrop(false)} />}><CropEditor photo={activePhoto} onApply={applyCrop} onCancel={() => setShowCrop(false)} /></Suspense>}
 
       {!exportRunning && exportResult && (
