@@ -24,7 +24,7 @@ def verify_review(root, inventory):
         identity = (item['ecosystem'], item['name'], item['version'])
         evidence = reviewed.get(identity)
         package = packages.get(identity)
-        if not evidence or not package or not evidence.get('notices') or not package.get('authors'):
+        if not evidence or not package or not evidence.get('notices') or 'authors' not in package or package['authors'] != evidence.get('authors'):
             raise ValueError(f'Unresolved macOS dependency review: {identity}')
         for notice in evidence['notices']:
             if notice['path'] not in package['files'] or not notice['path'].startswith('licenses/upstream/'):

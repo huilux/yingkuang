@@ -21,6 +21,9 @@
           "path": "licenses/upstream/block2/0.6.2/LICENSE-MIT-STANDARD.txt",
           "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
         }
+      ],
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>"
       ]
     },
     {
@@ -36,6 +39,10 @@
           "path": "licenses/upstream/dispatch2/0.3.1/LICENSE-MIT-STANDARD.txt",
           "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
         }
+      ],
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>",
+        "Mary <mary@mary.zone>"
       ]
     },
     {
@@ -51,6 +58,9 @@
           "path": "licenses/upstream/objc2/0.6.4/LICENSE-MIT-STANDARD.txt",
           "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
         }
+      ],
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>"
       ]
     },
     {
@@ -66,7 +76,8 @@
           "path": "licenses/upstream/objc2-app-kit/0.3.2/LICENSE-MIT-STANDARD.txt",
           "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
         }
-      ]
+      ],
+      "authors": []
     },
     {
       "ecosystem": "cargo",
@@ -81,7 +92,8 @@
           "path": "licenses/upstream/objc2-core-foundation/0.3.2/LICENSE-MIT-STANDARD.txt",
           "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
         }
-      ]
+      ],
+      "authors": []
     },
     {
       "ecosystem": "cargo",
@@ -96,7 +108,8 @@
           "path": "licenses/upstream/objc2-core-graphics/0.3.2/LICENSE-MIT-STANDARD.txt",
           "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
         }
-      ]
+      ],
+      "authors": []
     },
     {
       "ecosystem": "cargo",
@@ -111,6 +124,9 @@
           "path": "licenses/upstream/objc2-encode/4.1.0/LICENSE-MIT-STANDARD.txt",
           "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
         }
+      ],
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>"
       ]
     },
     {
@@ -126,6 +142,9 @@
           "path": "licenses/upstream/objc2-exception-helper/0.1.1/LICENSE-MIT-STANDARD.txt",
           "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
         }
+      ],
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>"
       ]
     },
     {
@@ -141,7 +160,8 @@
           "path": "licenses/upstream/objc2-io-surface/0.3.2/LICENSE-MIT-STANDARD.txt",
           "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
         }
-      ]
+      ],
+      "authors": []
     },
     {
       "ecosystem": "cargo",
@@ -156,7 +176,8 @@
           "path": "licenses/upstream/objc2-web-kit/0.3.2/LICENSE-MIT-STANDARD.txt",
           "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
         }
-      ]
+      ],
+      "authors": []
     }
   ]
 }

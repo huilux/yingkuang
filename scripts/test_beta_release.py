@@ -3,6 +3,7 @@ import importlib.util
 import json
 from pathlib import Path
 from macos_release_materials import MACOS_TARGETS
+from macos_release_review import verify_review
 import tempfile
 import unittest
 import zipfile
@@ -151,7 +152,7 @@ class MacReleaseAssemblyTests(ReleaseAssemblyTests):
         notice = 'licenses/upstream/test-objc/1.0.0/LICENSE.md'
         path = self.root / notice; path.parent.mkdir(parents=True); path.write_text('Original upstream SDK/author notice')
         record = {'schemaVersion': 1, 'notesFile': 'licenses/MACOS-REVIEW.md', 'packages': [
-            {'ecosystem': 'cargo', 'name': 'test-objc', 'version': '1.0.0', 'notices': [{'path': notice, 'sha256': assembly.digest(path)}]}]}
+            {'ecosystem': 'cargo', 'name': 'test-objc', 'version': '1.0.0', 'authors': ['Original Author'], 'notices': [{'path': notice, 'sha256': assembly.digest(path)}]}]}
         (self.root / 'licenses/macos-review.json').write_text(json.dumps(record))
         (self.root / 'licenses/MACOS-REVIEW.md').write_text('Scoped review; ad-hoc; manual acceptance pending')
         with (self.root / 'src-tauri/Cargo.lock').open('a') as lock:
@@ -269,6 +270,24 @@ class MacReleaseAssemblyTests(ReleaseAssemblyTests):
         self.change_mac(change)
         with self.assertRaisesRegex(ValueError, 'Incomplete macOS dependency review inventory'):
             self.build()
+
+    def test_mac_changed_author_metadata_is_rejected(self):
+        def change(files):
+            name = 'licenses/dependencies/aarch64-apple-darwin/inventory.json'
+            inventory = json.loads(files[name]); inventory['packages'][1]['authors'] = ['Invented author']
+            files[name] = json.dumps(inventory).encode()
+        self.change_mac(change)
+        with self.assertRaisesRegex(ValueError, 'Unresolved macOS dependency review'):
+            self.build()
+
+    def test_mac_preserves_explicitly_undeclared_upstream_authors(self):
+        record = self.root / 'licenses/macos-review.json'
+        data = json.loads(record.read_text()); data['packages'][0]['authors'] = []
+        record.write_text(json.dumps(data))
+        with zipfile.ZipFile(self.inputs / f'yingkuang_{self.version}_macos-arm64-test.zip') as bundle:
+            inventory = json.loads(bundle.read('licenses/dependencies/aarch64-apple-darwin/inventory.json'))
+        inventory['packages'][1]['authors'] = []
+        self.assertEqual(verify_review(self.root, inventory)[0], record)
 
 
 if __name__ == '__main__':
