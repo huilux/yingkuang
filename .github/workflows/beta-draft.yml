@@ -107,7 +107,7 @@ jobs:
             curl --fail --silent http://127.0.0.1:1422 > /dev/null && break
             sleep 1
           done
-          WATERMARK_TEST_WIDTH=1100 WATERMARK_TEST_HEIGHT=720 xvfb-run -a -s "-screen 0 1920x1080x24" /usr/bin/python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 interface-controls-regression.js font-library-regression.js native-font-import-regression.js crop-loading-regression.js theme-layout-regression.js template-layout-persistence-regression.js template-orientation-regression.js distribution-range-regression.js distribution-direction-regression.js mixed-font-alignment-regression.js mixed-font-layout-regression.js line-alignment-regression.js result-preview-regression.js
+          WATERMARK_TEST_WIDTH=1100 WATERMARK_TEST_HEIGHT=720 xvfb-run -a -s "-screen 0 1920x1080x24" /usr/bin/python3 scripts/run-webkit-regressions.py http://127.0.0.1:1422 interface-controls-regression.js font-library-regression.js native-font-import-regression.js crop-loading-regression.js theme-layout-regression.js template-layout-persistence-regression.js template-orientation-regression.js distribution-range-regression.js distribution-direction-regression.js mixed-font-alignment-regression.js font-metrics-precision-regression.js mixed-font-layout-regression.js line-alignment-regression.js result-preview-regression.js
           /usr/bin/python3 scripts/render-parity.py http://127.0.0.1:1422
       - name: Install deb, observe native window, verify notices and uninstall
         if: runner.os == 'Linux'

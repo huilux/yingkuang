@@ -2,22 +2,22 @@ import { fontMetricsRevision, previewFontFamily, previewFontRuns } from "./font-
 import type { WatermarkLayer } from "./types";
 import type Konva from "konva";
 
-export type WatermarkTextRun = { text: string; font: string; x: number; baseline: number };
+export type WatermarkTextRun = { text: string; font: string; scale: number; x: number; baseline: number };
 export type WatermarkTextLayout = { width: number; height: number; runs: WatermarkTextRun[] };
 let context: CanvasRenderingContext2D | null;
 let probe: HTMLCanvasElement | undefined;
 let probeContext: CanvasRenderingContext2D | null;
 const inkCenters = new Map<string, number>();
 
-function inkBaseline(font: string, text: string, metrics: TextMetrics) {
-  const key = JSON.stringify([fontMetricsRevision(), font, text]);
+function inkBaseline(font: string, text: string, metrics: TextMetrics, scale: number) {
+  const key = JSON.stringify([fontMetricsRevision(), font, text, scale]);
   const cached = inkCenters.get(key);
   if (cached !== undefined) return cached;
-  let middle = (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2;
-  const left = Math.ceil(Math.max(0, metrics.actualBoundingBoxLeft)) + 2;
-  const baseline = Math.ceil(metrics.actualBoundingBoxAscent) + 2;
-  const width = Math.ceil(Math.max(metrics.width, metrics.actualBoundingBoxRight)) + left + 2;
-  const height = Math.ceil(metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent) + 4;
+  let middle = (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / (2 * scale);
+  const left = Math.ceil(Math.max(0, metrics.actualBoundingBoxLeft) / scale) + 2;
+  const baseline = Math.ceil(metrics.actualBoundingBoxAscent / scale) + 2;
+  const width = Math.ceil(Math.max(metrics.width, metrics.actualBoundingBoxRight) / scale) + left + 2;
+  const height = Math.ceil((metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent) / scale) + 4;
   // Probe full runs in tiles: preserve shaping and pixel precision even for
   // long captions, while keeping each scratch allocation below two million pixels.
   if (text.trim() && Number.isFinite(width * height) && width > 0 && height > 4) {
@@ -33,7 +33,8 @@ function inkBaseline(font: string, text: string, metrics: TextMetrics) {
         probeContext.textBaseline = "alphabetic";
         probeContext.textAlign = "left";
         probeContext.fillStyle = "#fff";
-        probeContext.fillText(text, left - start, baseline - top);
+        probeContext.scale(1 / scale, 1 / scale);
+        probeContext.fillText(text, (left - start) * scale, (baseline - top) * scale);
         const pixels = probeContext.getImageData(0, 0, probe.width, probe.height).data;
         for (let y = 0; y < probe.height; y++) for (let x = 0; x < probe.width; x++) {
           const alpha = pixels[(y * probe.width + x) * 4 + 3];
@@ -57,16 +58,20 @@ export function layoutWatermarkText(layer: Pick<WatermarkLayer, "fontFamily" | "
   context.textBaseline = "alphabetic";
   context.textAlign = "left";
   const runs: WatermarkTextRun[] = [];
+  // WebKit/Pango rounds small-font advances to pixels. Shape at a size above
+  // its hinting range, then transform back in both measurement and painting.
+  // Scratch canvases still use the real output dimensions, not enlarged ones.
+  const scale = Math.max(1, 1024 / layer.fontSize);
   let width = 0;
   const lines = text.split("\n");
   lines.forEach((line, index) => {
     let x = 0;
     for (const run of previewFontRuns(layer.fontFamily, line)) {
-      const font = `${layer.fontWeight} ${layer.fontSize}px ${previewFontFamily(run.family)}`;
+      const font = `${layer.fontWeight} ${layer.fontSize * scale}px ${previewFontFamily(run.family)}`;
       context!.font = font;
       const metrics = context!.measureText(run.text);
-      runs.push({ text: run.text, font, x, baseline: (index + .5) * layer.fontSize + inkBaseline(font, run.text, metrics) });
-      x += metrics.width;
+      runs.push({ text: run.text, font, scale, x, baseline: (index + .5) * layer.fontSize + inkBaseline(font, run.text, metrics, scale) });
+      x += metrics.width / scale;
     }
     width = Math.max(width, x);
   });
@@ -84,8 +89,12 @@ export function paintWatermarkText(context: Konva.Context | CanvasRenderingConte
     context.fillStyle = color;
   }
   for (const run of layout.runs) {
+    context.save();
+    context.translate(run.x, run.baseline);
+    context.scale(1 / run.scale, 1 / run.scale);
     if ("setAttr" in context) context.setAttr("font", run.font);
     else context.font = run.font;
-    context.fillText(run.text, run.x, run.baseline);
+    context.fillText(run.text, 0, 0);
+    context.restore();
   }
 }

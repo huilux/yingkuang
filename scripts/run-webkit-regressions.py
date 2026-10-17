@@ -20,6 +20,7 @@ checks = ["konva-canvas-regression.js", "multi-selection-regression.js", "precis
 if len(sys.argv) > 2:
     checks = sys.argv[2:]
 else:
+    checks.append("font-metrics-precision-regression.js")
     checks.append("mixed-font-layout-regression.js")
     checks.append("line-alignment-regression.js")
     checks.append("result-preview-regression.js")

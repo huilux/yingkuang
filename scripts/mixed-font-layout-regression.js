@@ -7,7 +7,7 @@
   const { default: React } = await import(resource('/node_modules/.vite/deps/react.js'));
   const { default: { createRoot } } = await import(resource('/node_modules/.vite/deps/react-dom_client.js'));
   const library = await import(resource('/src/font-library.ts'));
-  const { layoutWatermarkText } = await import('/src/watermark-text.ts');
+  const { layoutWatermarkText, paintWatermarkText } = await import('/src/watermark-text.ts');
   const { TemplatePreview } = await import('/src/TemplatePreview.tsx');
   const { EditorCanvas } = await import('/src/EditorCanvas.tsx');
   const { createDefaultDocument, calculateGeometry } = await import('/src/editor-model.ts');
@@ -29,7 +29,7 @@
     const layout = layoutWatermarkText({ fontFamily: 'Long Cang', fontSize, fontWeight: 400 }, text);
     const canvas = document.createElement('canvas'); canvas.width = Math.ceil(layout.width + 10); canvas.height = fontSize + 40;
     const ctx = canvas.getContext('2d'); ctx.fillStyle = '#fff'; ctx.textBaseline = 'alphabetic';
-    for (const run of layout.runs) { ctx.font = run.font; ctx.fillText(run.text, run.x + 5, run.baseline + 10); }
+    ctx.translate(5, 10); paintWatermarkText(ctx, layout, '#fff');
     const edge = layout.runs[1].x + 5;
     const centers = [bounds(canvas, 5, edge).centerY, bounds(canvas, edge, canvas.width).centerY];
     t.assert(Math.abs(centers[0] - centers[1]) <= 1, `Long mixed text misaligned: ${JSON.stringify({ textLength: text.length, centers })}`);
