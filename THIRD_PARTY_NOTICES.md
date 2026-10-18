@@ -11,6 +11,6 @@
 
 `public/demo.jpg` 为 Ming 原创摄影，按项目 MIT 提供；已移除 EXIF/GPS、XMP、IPTC 等附加元数据。更换演示图时需重新核对来源与元数据。
 
-项目图标按 MIT 提供，来源和转换方法见 [图标说明](assets/branding/README.md)。
+[项目图标源图](assets/branding/app-icon.png) 于 2026-10-14 使用 OpenAI 图像生成工具生成，未使用旧图标或第三方标志作为参考，按项目 MIT 提供。来源说明不代表商标注册或独占性保证。桌面派生文件的生成方法见 [贡献指南](CONTRIBUTING.md#图片与图标)。
 
 运行 `npm run licenses:collect` 收集锁定依赖的许可声明与正文。此文件是来源索引，实际分发核对见 [发布指南](docs/release.md#许可证与源码)。第三方许可原文不得因文档精简而删除。

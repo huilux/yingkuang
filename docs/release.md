@@ -1,110 +1,119 @@
 # 构建与发布
 
-安装包通过 [GitHub Releases](https://github.com/huilux/yingkuang/releases) 分发。支持 Linux x64、Windows x64，以及 macOS Apple 芯片和 Intel 的实验性 DMG；可下载的平台和限制以 README、发布说明为准。
+本页供维护者使用。用户安装见 [使用指南](user-guide.md#安装)，开发环境和检查命令见 [贡献指南](../CONTRIBUTING.md)。
 
-## 构建
+## 构建安装包
 
-先按 [贡献指南](../CONTRIBUTING.md) 安装工具链与系统依赖，在对应系统运行：
+在对应系统运行项目包装脚本，它会收集锁定依赖的许可证并放入安装包：
 
 ```sh
 # Debian/Ubuntu
 npm run tauri build -- --bundles deb
-# Linux AppImage 预备包；完整交付继续使用下方发布流程
-npm run build:appimage
 # Windows
 npm run tauri build -- --bundles nsis
-# macOS 测试包：仅在对应架构的 Apple 硬件构建，ad-hoc 签名
+# macOS：在对应架构的 Apple 硬件构建，使用 ad-hoc 测试签名
 APPLE_SIGNING_IDENTITY=- npm run tauri build -- --bundles dmg --ci
 ```
 
-产物位于 `src-tauri/target/release/bundle/`。Linux 发布构建使用 Ubuntu 22.04，不能用更新发行版构建后直接宣称兼容旧系统。AppImage 构建成功不代表运行、许可和对应源码交付均已验收。最终受控包使用 zstd 压缩文件系统，保持照片处理的速度优先编译设置。
+产物在 `src-tauri/target/release/bundle/`。Linux 交付使用 Ubuntu 22.04 构建；其他发行版需单独验证兼容性。
 
-使用项目脚本打包，不绕过 `npm run tauri`：脚本会从锁文件收集当前平台的依赖许可，拒绝缺少必要正文的构建，并把项目 MIT、第三方声明、字体 OFL 与依赖材料放入安装包。
+`npm run build:appimage` 只生成预备包。公开 AppImage 还需完成运行时封装、系统库来源与对应源码核对，以及原生验收，应通过发布工作流生成。
 
-## 发布流程
+## 发布软件测试版
 
-1. 使用 `npm run version:set -- <版本>` 同步版本，完成 [开发验证](development.md)，更新 CHANGELOG。
-2. 提交并推送源码，创建指向该完整提交 SHA 的 `v<版本>` 标签及 Pre-release 草稿。
-3. 运行受控测试包流程：
+1. 使用 `npm run version:set -- <版本>` 同步版本，完成贡献指南中的相关检查，更新 [CHANGELOG](../CHANGELOG.md)，提交 PR 并合入 main。
+2. 切换到已同步的 main，创建与该完整提交 SHA 一致的标签和 Pre-release 草稿。下面使用 Bash；版本号需替换为 `package.json` 中尚未发布的版本，发布说明文件需预先准备。
 
    ```sh
-   gh workflow run beta-draft.yml --ref main -f release_tag=v<版本> -f include_macos=true
+   release_version=0.5.9-beta.4
+   release_commit=$(git rev-parse HEAD)
+   git tag -a "v$release_version" "$release_commit" -m "Yingkuang $release_version"
+   git push origin "v$release_version"
+   gh release create "v$release_version" --target "$release_commit" \
+     --verify-tag --draft --prerelease --title "映框 $release_version" \
+     --notes-file /path/to/release-notes.md
    ```
 
-   `include_macos=true` 同时构建 Apple 芯片和 Intel DMG；省略时仅构建 Linux/Windows。macOS 构建复用 `macos-test.yml`，两个架构全部验收通过才汇总。
+3. 在同一终端启动 [测试版发布工作流](../.github/workflows/beta-draft.yml)：
 
-4. 下载草稿附件，核对 SHA-256、检查报告、依赖材料和实际运行结果，再发布草稿。
+   ```sh
+   gh workflow run beta-draft.yml --ref main \
+     -f release_tag="v$release_version" -f include_macos=true
+   ```
 
-标签、草稿与本轮源码必须一致。工作流只写入已有未发布草稿；已经公开的安装包与标签保持原样，修复使用新版本。日常 PR、main 提交和标签 CI 只做检查，不构建安装包。需要内部检查安装包时，可手动运行 `Desktop checks and packages` 并勾选 `build_packages`；公开测试包仍使用 `Prepare beta release draft`。临时文件通过草稿中转，汇总后只保留最终下载文件。
+   默认构建 Linux 和 Windows；`include_macos=true` 加入 Apple 芯片和 Intel DMG。工作流校验草稿、版本和完整源码 SHA，只上传至未公开草稿。
 
-只修复验证或汇总流程时，可用工作流的 `assemble_only` 与 `build_commit` 重新汇总已验证草稿；流程只允许验证与汇总脚本、相关测试和该工作流中明确列出的文件有差异，拒绝程序、资源或依赖变更。材料分别记录程序源码提交与汇总提交。
+4. 等待全部构建、验收和汇总成功，核对最终附件、`SHA256SUMS.txt`、技术材料和实机测试结果。发布说明应列出通过范围与待验证事项，再公开草稿。
 
-包含 macOS 时最终保留七个附件：五个安装包、`SHA256SUMS.txt` 和一个 `release-materials.zip`；仅 Linux/Windows 时仍为五个附件。macOS 临时测试 ZIP 在汇总成功后从未发布草稿移除，其材料与原始源码保存在统一技术材料内。
+已公开的标签和安装包不覆盖，修复使用新版本。日常 PR、main 和标签 CI 只做检查；手动 `Desktop checks and packages` 的 `build_packages` 用于构建检查，公开交付仍走上述发布流程。
 
-普通用户只需对应系统的安装包。校验文件与技术材料单独提供；许可证仍随安装包保留。技术材料包含依赖清单、许可正文、检查记录及需要提供的对应源码。GitHub 自动附加的两份 `Source code` 是项目源码，不是安装包。
+包含 macOS 时，最终为五个安装包、统一校验文件和一个 `*_release-materials.zip`，共七个附件；仅 Linux/Windows 时为五个。中间清单和测试 ZIP 在汇总后从草稿移除，记录保留在技术材料中。
+
+汇总失败时，仅在应用源码未变化且差异属于工作流允许的验证文件时，才可使用 `assemble_only` 和 `build_commit` 恢复；程序、资源或依赖变化应重新构建。
 
 ## 验收范围
 
-- Linux DEB：元数据、中文桌面入口、APT 实际安装、原生窗口、安装后的许可文件及卸载。
-- Windows EXE：NSIS 安装、原生窗口、实际主题切换与颜色、设置保留、系统主题响应及卸载。
-- AppImage：运行时与打包来源、载荷和对应源码核对，实际解压、窗口与 WebKit 进程，以及真实 PNG/JPEG 导入、旋转、默认模板和字体渲染、原生导出；首次导入 24 MP 照片后的全部模板像素、4096px 编辑图、原生 Wayland 2 倍画布、最大化还原与窗口尺寸操作。
-- macOS 两架构：只读挂载 DMG、二进制架构、ad-hoc 签名、系统动态库链接、安装包内许可与原生窗口启动；首次安装、Gatekeeper 和照片处理仍待实机验证。
-- 实机回归：JPEG/PNG 导入、中文与空格路径、字体、裁切旋转、当前与批量导出、取消重试、升级后的模板和会话恢复。
+| 产物 | 自动检查 |
+| --- | --- |
+| Linux DEB | 元数据、桌面入口、实际安装、原生窗口、安装后许可及卸载 |
+| Windows EXE | 安装、原生窗口、主题切换与设置保留、系统主题响应及卸载 |
+| Linux AppImage | 载荷与源码来源、解压和启动、真实 PNG/JPEG 导入、模板与字体、旋转和原生导出、Wayland 高清画布与窗口操作 |
+| macOS 两种 DMG | 挂载、架构、ad-hoc 签名、系统动态库、安装包内许可与原生窗口 |
 
-CI 记录操作系统、架构、文件摘要和通过范围。构建机保留开发依赖，不能等同于干净用户环境；模拟 IPC 的界面测试也不能代替真实文件处理。未验收的系统与最低版本不作兼容承诺。
+CI 不等同于干净用户环境。还需实测照片导入、裁切旋转、字体、当前与批量导出、取消重试、升级和会话恢复。
 
-Windows 测试包暂未做可信代码签名；缺少 WebView2 时安装程序需要联网获取运行时。测试说明应准确列出这些安装限制。macOS 实验性包不要求 App Store 或开发者账号，但未做 Developer ID 签名和 Apple 公证，首次启动可能被系统拦截；引导测试者参考 Apple 官方的「隐私与安全性」操作，不关闭全局安全保护。正式签名、公证需另行配置凭据。
+Windows 测试包未做可信代码签名，缺少 WebView2 时需联网安装运行时。macOS 实验性包未做 Developer ID 签名和 Apple 公证，Gatekeeper、首次安装及照片处理仍需实机验证；正式签名和公证需另外配置凭据。
 
 ## 许可证与源码
 
-`npm run licenses:collect` 生成本机 Rust 目标的 `inventory.json` 与 `LICENSE-TEXTS.txt`；指定目标时使用 `npm run licenses:collect -- <目标三元组>`。升级依赖后重新收集，不能沿用旧版本材料。
+`npm run licenses:collect` 生成当前 Rust 目标的依赖清单和许可正文；指定目标可使用 `npm run licenses:collect -- <目标三元组>`。依赖升级后需重新核对材料。
 
-- `missingTexts`：缺少必要许可正文，打包必须失败。
-- `reviewRequired`：上游署名或 SDK 等待核对事项，材料齐全不等于核对完成。
-- macOS：用 [`macos-review.json`](../licenses/macos-review.json) 匹配明确版本和原始声明摘要，保留上游审查项、作者及原始源码；未知版本或材料变化阻止汇总。范围和限制见 [macOS 审查记录](../licenses/MACOS-REVIEW.md)。
-- AppImage：另外核对实际携带的系统库、启动脚本、生成缓存和外层运行时；随分发提供适用的原始声明与对应源码。
+- `missingTexts` 表示缺少必要正文，阻止打包。
+- `reviewRequired` 保留上游署名或 SDK 等核对事项，正文齐全不代表核对完成。
+- macOS 通过 [版本化记录](../licenses/macos-review.json) 和 [核对说明](../licenses/MACOS-REVIEW.md) 匹配依赖、作者元数据与声明摘要；未知或变更事项阻止汇总。
+- AppImage 额外核对实际携带的系统库和运行时，提供适用的原始声明与对应源码。
 
-来源索引见 [`licenses/`](../licenses/README.md) 和 [第三方许可说明](../THIRD_PARTY_NOTICES.md)。许可正文保持原样；生成清单与构建日志放在交付材料中，不提交到源码仓库。
+安装包内保留必要许可；技术材料提供依赖清单、检查记录和所需源码，不要求普通用户下载。原始许可与来源索引见 [licenses](../licenses/README.md) 和 [第三方许可](../THIRD_PARTY_NOTICES.md)，不得作为冗余文档删除。
 
 ## 发布内置模板
 
-官方模板静态文件存放在 `template-feed/`，通过独立的 `Official template feed` 工作流发布到 GitHub Pages。更新不创建软件 Release，也不重新构建安装包。公开索引为 `https://huilux.github.io/yingkuang/index.json`，离线模板包从站点首页下载。
+模板放在 `template-feed/`，通过 [Official template feed](../.github/workflows/templates.yml) 工作流独立发布到 [GitHub Pages](https://huilux.github.io/yingkuang/)。更新模板不需要创建软件 Release 或重打安装包。
 
-维护者在应用中调整模板后，可以导出内置文件；发布全部模板（包括新增自定义模板）时使用完整备份作为发布工具的输入。不要直接将完整备份提交到仓库，它可能包含私人照片封面。发布工具只保留已知排版字段、将封面替换为项目演示图，并映射旧字体名称。发布前检查模板名称、描述和固定文字是否适合公开。
+### 准备与验证
 
-当前线上和内置模板为 `2026.10.3`（revision 3），最低需要映框 `0.5.9-beta.3`；旧版本继续使用原有模板并提示升级。
+在应用内验证不同照片、横竖构图和参数文字后，导出「内置文件」；包含自定义模板时可使用完整备份作为输入。完整备份可能含私人照片封面，不要直接提交。准备工具只保留已知排版字段并替换封面，但名称、描述和固定文字仍需人工检查。
 
-以后发布模板按以下步骤操作：
-
-1. 在应用中完成横图、竖图和不同照片的验证，从模板库导出「内置文件」；如需包含自定义模板，则导出完整备份。
-2. 查看 `template-feed/index.json` 的当前版本和 revision，选择未使用的版本号和更大的 revision。下面以下一次更新为例：
+查看 `template-feed/index.json`，选择未使用的版本和更大的 revision。下面以 Bash 为例；私钥路径使用维护者自行保管的位置，不写入仓库：
 
 ```sh
+template_version=2026.10.4
+template_revision=4
 node scripts/template-feed.mjs prepare \
   --source /path/to/builtin-templates.json \
-  --version 2026.10.4 --revision 4 \
+  --version "$template_version" --revision "$template_revision" \
   --notes "说明新增或修改的模板" \
   --min-app-version 0.5.9-beta.3 \
-  --key /private/path/to/official-ed25519.pem
+  --key /secure/path/official-ed25519.pem
 npm run templates:check
+npm test
 ```
 
-含 `alignments` 对齐规则或 `distributions[].range` 固定范围的模板需要支持这些功能的软件版本，最低版本应设置为 `0.5.9-beta.3` 或后续版本；`beta.1`、`beta.2` 不支持这些规则。发布工具要求明确传入 `--min-app-version`，避免误标兼容性。模板更新不必改变软件版本；仅引入新的渲染能力时才需要提高最低版本。
+最低应用版本必须与所用渲染能力一致。`alignments` 和 `distributions[].range` 需要 `0.5.9-beta.3` 或更新版本；普通模板内容更新不必提高软件版本。
 
-3. 检查新增版本内的名称、描述和固定文字，确认模板数量、默认模板和布局正确，运行 `npm test`。私钥在本机的 `.local-dev/template-signing/official-ed25519.pem`，也可通过 `--key` 指向自己的安全存放位置。
-4. 只更新线上模板时，提交 `template-feed/index.json`、`template-feed/index.sig` 和新增的 `template-feed/releases/<版本>/`，推送分支并合入 main。等待 Actions 中的 `Official template feed` 成功，再打开 [模板站点](https://huilux.github.io/yingkuang/) 核对版本。无需创建标签、软件 Release，也无需运行打包工作流。
-5. 用户在应用的模板库中点击「检查更新」，或从站点下载对应的官方模板包后离线导入。用户自己的模板和修改会保留；模板名称相同也不强制替换个人版本。
+### 部署与离线快照
 
-提交新增的版本目录、`index.json` 和 `index.sig`，合入 main 后自动部署。工作流验证全部版本的签名和内容，禁止修改或删除已有版本目录；构建站点时使用仓库 Secret `TEMPLATE_SIGNING_PRIVATE_KEY` 签名。私钥不进入仓库、安装包或公开站点，公钥保存在 `src/data/template-update.json`。维护者需自行安全备份私钥；更换公钥需要发布支持新公钥的软件。
+提交新的 `template-feed/releases/<版本>/`、`template-feed/index.json` 和 `template-feed/index.sig`，通过 PR 合入 main。工作流拒绝修改或删除历史模板版本，并使用仓库 Secret `TEMPLATE_SIGNING_PRIVATE_KEY` 部署签名站点。部署后核对站点版本、签名和模板内容。
 
-每个版本包括原始模板配置 `templates.json` 和包含签名索引的离线包 `official-templates.json`。索引包含格式版本、内容版本、单调 revision、最低应用版本、模板数量、字体、大小及 SHA-256。普通模板包只使用软件自带字体，引用项目演示图，不包含照片、外部图像地址、脚本或字体下载。
+用户在应用内「检查更新」，或下载官方模板包离线导入。更新保留个人模板、本机修改、默认选择和已编辑照片；断网或校验失败时继续使用本地版本。
 
-如果还要让下一次安装包自带这批模板，在软件源码版本不低于模板最低版本时，同步离线基础版本：
+若还需让后续安装包自带这批模板，先确认软件版本不低于模板最低版本，再在同一终端同步离线快照：
 
 ```sh
-node scripts/template-feed.mjs sync-bundled --version 2026.10.3
+node scripts/template-feed.mjs sync-bundled --version "$template_version"
 npm test
 npm run build
 ```
 
-该命令同步 `src/data/builtin-templates.json`、`src/data/bundled-template-package.json` 和 `src/data/template-update.json`，将这三个文件一并提交即可；不会生成安装包。应用内修改只保存在用户本机；官方更新、离线导入及回退均保留个人模板和修改。
+一并提交 `src/data/builtin-templates.json`、`src/data/bundled-template-package.json` 和 `src/data/template-update.json`。只同步快照不会生成安装包。
+
+私钥应安全备份，不能进入仓库、日志、安装包或站点。部署私钥需与 `src/data/template-update.json` 的公钥匹配；更换公钥需发布支持新公钥的软件。

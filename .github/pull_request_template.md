@@ -1,10 +1,10 @@
 ## 问题与改动
 
+说明改动原因、复现步骤或关联 Issue。
+
 ## 验证
 
-- [ ] `npm test` 与 `npm run build`
-- [ ] 涉及 Rust 时执行 `cargo test --manifest-path src-tauri/Cargo.toml --lib --locked`
-- [ ] 涉及界面或导出时说明实际验收的平台与结果
+列出按 `CONTRIBUTING.md` 完成的相关检查及结果。纯文档改动可只检查链接、路径和命令；涉及界面或导出时说明实际验收的平台。
 
 ## 兼容性
 
